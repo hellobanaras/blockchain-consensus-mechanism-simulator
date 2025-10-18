@@ -1,0 +1,365 @@
+﻿@page "/weather"
+@using Consensus.Core.Entities
+@using Consensus.Core.Enums
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Network Health - Consensus Simulator</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="bi bi-heart-pulse"></i> Network Health Monitor</h1>
+                    <p class="lead">Real-time monitoring of consensus network health and performance</p>
+                </div>
+                <div>
+                    <button class="btn btn-outline-success" @onclick="RefreshData">
+                        <i class="bi bi-arrow-clockwise"></i> Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Network Health Overview -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card @(networkHealth >= 90 ? "border-success" : networkHealth >= 70 ? "border-warning" : "border-danger")">
+                <div class="card-body text-center">
+                    <div class="circle-progress mx-auto mb-2" style="width: 80px; height: 80px; background: conic-gradient(#28a745 0deg @(networkHealth * 3.6)deg, #e9ecef @(networkHealth * 3.6)deg 360deg); border-radius: 50%; display: flex; align-items: center; justify-content: center;">
+                        <div class="bg-white rounded-circle d-flex align-items-center justify-content-center" style="width: 65px; height: 65px;">
+                            <h4 class="mb-0">@networkHealth%</h4>
+                        </div>
+                    </div>
+                    <h6>Overall Network Health</h6>
+                    <small class="text-muted">@GetHealthStatus(networkHealth)</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="bi bi-speedometer2 fs-1 @(consensusLatency <= 100 ? "text-success" : consensusLatency <= 500 ? "text-warning" : "text-danger")"></i>
+                    <h4>@consensusLatency ms</h4>
+                    <h6>Consensus Latency</h6>
+                    <small class="text-muted">Average response time</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="bi bi-diagram-3 fs-1 @(networkConnectivity >= 95 ? "text-success" : networkConnectivity >= 85 ? "text-warning" : "text-danger")"></i>
+                    <h4>@networkConnectivity%</h4>
+                    <h6>Network Connectivity</h6>
+                    <small class="text-muted">Node connection rate</small>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body text-center">
+                    <i class="bi bi-shield-check fs-1 @(securityScore >= 90 ? "text-success" : securityScore >= 70 ? "text-warning" : "text-danger")"></i>
+                    <h4>@securityScore</h4>
+                    <h6>Security Score</h6>
+                    <small class="text-muted">Byzantine resistance</small>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Live Network Activity -->
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-activity"></i> Live Network Activity</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="d-flex justify-content-between">
+                                <span>Active Nodes:</span>
+                                <strong class="text-success">@activeNodes</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Consensus Rounds:</span>
+                                <strong>@consensusRounds</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Transactions/sec:</span>
+                                <strong>@transactionsPerSecond</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="d-flex justify-content-between">
+                                <span>Block Height:</span>
+                                <strong>@blockHeight</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Pending Transactions:</span>
+                                <strong>@pendingTransactions</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span>Network Load:</span>
+                                <strong class="@(networkLoad >= 80 ? "text-danger" : networkLoad >= 60 ? "text-warning" : "text-success")">@networkLoad%</strong>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Performance Graph Placeholder -->
+                    <div class="border rounded p-3 text-center bg-light">
+                        <i class="bi bi-graph-up fs-1 text-muted"></i>
+                        <p class="text-muted mb-0">Real-time Performance Graph</p>
+                        <small class="text-muted">(Chart integration coming soon)</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Node Status Summary -->
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-hdd-network"></i> Node Status</h5>
+                </div>
+                <div class="card-body">
+                    @foreach (var status in nodeStatusSummary)
+                    {
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <span class="@GetNodeStatusClass(status.Status)">
+                                <i class="@GetNodeStatusIcon(status.Status) me-1"></i>
+                                @status.Status
+                            </span>
+                            <span class="badge @GetNodeStatusBadgeClass(status.Status)">@status.Count</span>
+                        </div>
+                    }
+                    
+                    <hr class="my-3">
+                    
+                    <!-- Geographic Distribution -->
+                    <h6 class="mb-2">Geographic Distribution</h6>
+                    @foreach (var region in geographicDistribution)
+                    {
+                        <div class="d-flex justify-content-between mb-1">
+                            <small>@region.Region:</small>
+                            <small>@region.NodeCount nodes</small>
+                        </div>
+                        <div class="progress mb-2" style="height: 6px;">
+                            <div class="progress-bar bg-primary" 
+                                 role="progressbar" 
+                                 style="width: @(region.Percentage)%" 
+                                 aria-valuenow="@region.Percentage" 
+                                 aria-valuemin="0" 
+                                 aria-valuemax="100">
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- System Alerts -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-bell"></i> System Alerts & Status</h5>
+                </div>
+                <div class="card-body">
+                    @if (systemAlerts.Any())
+                    {
+                        @foreach (var alert in systemAlerts.Take(3))
+                        {
+                            <div class="alert @GetAlertClass(alert.Severity) d-flex align-items-center" role="alert">
+                                <i class="@GetAlertIcon(alert.Severity) me-2"></i>
+                                <div class="flex-grow-1">
+                                    <strong>@alert.Title</strong>
+                                    <p class="mb-0">@alert.Message</p>
+                                </div>
+                                <small class="text-muted">@alert.Timestamp.ToString("HH:mm:ss")</small>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-3">
+                            <i class="bi bi-check-circle fs-1"></i>
+                            <p class="mb-0">All systems operating normally</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    // Network health metrics
+    private int networkHealth = 94;
+    private int consensusLatency = 78;
+    private int networkConnectivity = 98;
+    private int securityScore = 87;
+
+    // Live network activity
+    private int activeNodes = 142;
+    private int consensusRounds = 1847;
+    private int transactionsPerSecond = 287;
+    private int blockHeight = 15623;
+    private int pendingTransactions = 45;
+    private int networkLoad = 34;
+
+    // Data collections
+    private List<NodeStatusSummary> nodeStatusSummary = new();
+    private List<GeographicRegion> geographicDistribution = new();
+    private List<SystemAlert> systemAlerts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNetworkData();
+    }
+
+    private async Task LoadNetworkData()
+    {
+        // Load node status summary
+        nodeStatusSummary = new List<NodeStatusSummary>
+        {
+            new NodeStatusSummary { Status = "Online", Count = 142 },
+            new NodeStatusSummary { Status = "Synchronizing", Count = 8 },
+            new NodeStatusSummary { Status = "Offline", Count = 3 },
+            new NodeStatusSummary { Status = "Failed", Count = 1 }
+        };
+
+        // Load geographic distribution
+        geographicDistribution = new List<GeographicRegion>
+        {
+            new GeographicRegion { Region = "North America", NodeCount = 58, Percentage = 38 },
+            new GeographicRegion { Region = "Europe", NodeCount = 47, Percentage = 31 },
+            new GeographicRegion { Region = "Asia-Pacific", NodeCount = 35, Percentage = 23 },
+            new GeographicRegion { Region = "Others", NodeCount = 14, Percentage = 8 }
+        };
+
+        // Load system alerts
+        systemAlerts = new List<SystemAlert>
+        {
+            new SystemAlert 
+            { 
+                Severity = "WARNING", 
+                Title = "High Latency Detected", 
+                Message = "Network latency above threshold in EU region", 
+                Timestamp = DateTime.UtcNow.AddMinutes(-5) 
+            },
+            new SystemAlert 
+            { 
+                Severity = "INFO", 
+                Title = "Node Recovery", 
+                Message = "Node NA-047 successfully reconnected after maintenance", 
+                Timestamp = DateTime.UtcNow.AddMinutes(-12) 
+            }
+        };
+
+        await Task.Delay(100); // Simulate loading
+        StateHasChanged();
+    }
+
+    private async Task RefreshData()
+    {
+        await JSRuntime.InvokeVoidAsync("alert", "Refreshing network health data... (Feature coming soon!)");
+        await LoadNetworkData();
+    }
+
+    // Helper methods
+    private string GetHealthStatus(int health)
+    {
+        return health switch
+        {
+            >= 90 => "Excellent",
+            >= 80 => "Good", 
+            >= 70 => "Fair",
+            >= 60 => "Poor",
+            _ => "Critical"
+        };
+    }
+
+    private string GetNodeStatusClass(string status)
+    {
+        return status switch
+        {
+            "Online" => "text-success",
+            "Synchronizing" => "text-info", 
+            "Offline" => "text-warning",
+            "Failed" => "text-danger",
+            _ => "text-muted"
+        };
+    }
+
+    private string GetNodeStatusIcon(string status)
+    {
+        return status switch
+        {
+            "Online" => "bi bi-circle-fill",
+            "Synchronizing" => "bi bi-arrow-clockwise",
+            "Offline" => "bi bi-circle", 
+            "Failed" => "bi bi-x-circle-fill",
+            _ => "bi bi-question-circle"
+        };
+    }
+
+    private string GetNodeStatusBadgeClass(string status)
+    {
+        return status switch
+        {
+            "Online" => "bg-success",
+            "Synchronizing" => "bg-info",
+            "Offline" => "bg-warning text-dark",
+            "Failed" => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetAlertClass(string severity)
+    {
+        return severity switch
+        {
+            "ERROR" => "alert-danger",
+            "WARNING" => "alert-warning",
+            "INFO" => "alert-info", 
+            _ => "alert-secondary"
+        };
+    }
+
+    private string GetAlertIcon(string severity)
+    {
+        return severity switch
+        {
+            "ERROR" => "bi bi-exclamation-triangle-fill",
+            "WARNING" => "bi bi-exclamation-circle-fill",
+            "INFO" => "bi bi-info-circle-fill",
+            _ => "bi bi-question-circle-fill"
+        };
+    }
+
+    // Data models
+    public class NodeStatusSummary
+    {
+        public string Status { get; set; } = "";
+        public int Count { get; set; }
+    }
+
+    public class GeographicRegion
+    {
+        public string Region { get; set; } = "";
+        public int NodeCount { get; set; }
+        public int Percentage { get; set; }
+    }
+
+    public class SystemAlert
+    {
+        public string Severity { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Message { get; set; } = "";
+        public DateTime Timestamp { get; set; }
+    }
+}
