@@ -1,0 +1,276 @@
+﻿@page "/"
+@using Consensus.Core.Entities
+@using Consensus.Core.Enums
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Dashboard - Consensus Simulator</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1><i class="bi bi-speedometer2"></i> Consensus Simulator Dashboard</h1>
+            <p class="lead">Simulate and analyze blockchain consensus mechanisms</p>
+        </div>
+    </div>
+
+    <!-- Quick Stats Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card bg-primary text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title">@activeSimulations</h4>
+                            <p class="card-text">Active Simulations</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-play-circle fs-2"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-success text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title">@totalNodes</h4>
+                            <p class="card-text">Total Nodes</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-diagram-3 fs-2"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-info text-white">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title">@blocksCreated</h4>
+                            <p class="card-text">Blocks Created</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-grid-3x3-gap fs-2"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card bg-warning text-dark">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between">
+                        <div>
+                            <h4 class="card-title">@consensusRounds</h4>
+                            <p class="card-text">Consensus Rounds</p>
+                        </div>
+                        <div class="align-self-center">
+                            <i class="bi bi-arrow-repeat fs-2"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Actions -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-lightning-charge"></i> Quick Actions</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <button class="btn btn-primary btn-lg w-100" @onclick="StartNewSimulation">
+                                <i class="bi bi-play-fill"></i><br>
+                                Start New Simulation
+                            </button>
+                        </div>
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <button class="btn btn-success btn-lg w-100" @onclick="ManageNodes">
+                                <i class="bi bi-plus-circle"></i><br>
+                                Add Nodes
+                            </button>
+                        </div>
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <button class="btn btn-info btn-lg w-100" @onclick="ViewBlocks">
+                                <i class="bi bi-search"></i><br>
+                                Explore Blocks
+                            </button>
+                        </div>
+                        <div class="col-md-6 col-lg-3 mb-3">
+                            <button class="btn btn-warning btn-lg w-100" @onclick="ViewAnalytics">
+                                <i class="bi bi-graph-up"></i><br>
+                                View Analytics
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Activity and Live Simulations -->
+    <div class="row">
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5><i class="bi bi-clock-history"></i> Recent Activity</h5>
+                </div>
+                <div class="card-body">
+                    <div class="list-group list-group-flush">
+                        @if (recentEvents.Any())
+                        {
+                            @foreach (var eventItem in recentEvents.Take(5))
+                            {
+                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <strong>@eventItem.EventType</strong>
+                                        <br><small class="text-muted">@eventItem.Message</small>
+                                    </div>
+                                    <small class="text-muted">@eventItem.Timestamp.ToString("HH:mm:ss")</small>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-3">
+                                <i class="bi bi-info-circle"></i> No recent activity
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5><i class="bi bi-broadcast"></i> Live Simulations</h5>
+                </div>
+                <div class="card-body">
+                    @if (activeSimulationsList.Any())
+                    {
+                        @foreach (var sim in activeSimulationsList)
+                        {
+                            <div class="card mb-3 border-success">
+                                <div class="card-body">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 class="card-title">@sim.Name</h6>
+                                            <p class="card-text small">
+                                                <span class="badge bg-primary">@sim.ConsensusAlgorithm</span>
+                                                Status: @sim.Status
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewSimulation(sim.Id)">
+                                                View
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="progress mt-2" style="height: 5px;">
+                                        <div class="progress-bar bg-success" role="progressbar" 
+                                             style="width: @(GetSimulationProgress(sim))%" 
+                                             aria-valuenow="@(GetSimulationProgress(sim))" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-3">
+                            <i class="bi bi-pause-circle"></i><br>
+                            No active simulations<br>
+                            <button class="btn btn-primary mt-2" @onclick="StartNewSimulation">
+                                Start Your First Simulation
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int activeSimulations = 0;
+    private int totalNodes = 0;
+    private int blocksCreated = 0;
+    private int consensusRounds = 0;
+
+    private List<EventLog> recentEvents = new();
+    private List<SimulationRun> activeSimulationsList = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        // TODO: Replace with actual data service calls
+        await LoadDashboardData();
+    }
+
+    private async Task LoadDashboardData()
+    {
+        // Simulate loading dashboard data
+        await Task.Delay(100);
+
+        // Mock data for now - will be replaced with actual service calls
+        activeSimulations = 0;
+        totalNodes = 0;
+        blocksCreated = 0;
+        consensusRounds = 0;
+
+        // Mock recent events
+        recentEvents = new List<EventLog>
+        {
+            EventLog.Info(Guid.NewGuid(), "System", "Application started successfully"),
+            EventLog.Info(Guid.NewGuid(), "Database", "Database schema updated"),
+            EventLog.Info(Guid.NewGuid(), "Docker", "All services running")
+        };
+
+        StateHasChanged();
+    }
+
+    private async Task StartNewSimulation()
+    {
+        await JSRuntime.InvokeVoidAsync("alert", "Starting new simulation... (Feature coming soon!)");
+        // TODO: Navigate to simulation setup page
+    }
+
+    private async Task ManageNodes()
+    {
+        // TODO: Navigate to nodes page
+        await JSRuntime.InvokeVoidAsync("window.location.href", "/nodes");
+    }
+
+    private async Task ViewBlocks()
+    {
+        // TODO: Navigate to blocks page
+        await JSRuntime.InvokeVoidAsync("window.location.href", "/blocks");
+    }
+
+    private async Task ViewAnalytics()
+    {
+        // TODO: Navigate to analytics page
+        await JSRuntime.InvokeVoidAsync("window.location.href", "/analytics");
+    }
+
+    private async Task ViewSimulation(Guid simulationId)
+    {
+        // TODO: Navigate to specific simulation view
+        await JSRuntime.InvokeVoidAsync("alert", $"Viewing simulation {simulationId}... (Feature coming soon!)");
+    }
+
+    private int GetSimulationProgress(SimulationRun simulation)
+    {
+        // TODO: Calculate actual progress based on simulation data
+        return 0;
+    }
+}

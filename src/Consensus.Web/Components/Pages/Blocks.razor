@@ -1,0 +1,461 @@
+@page "/blocks"
+@using Consensus.Core.Entities
+@using Consensus.Core.Enums
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Block Explorer - Consensus Simulator</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1><i class="bi bi-grid-3x3-gap"></i> Block Explorer</h1>
+            <p class="lead">Explore blockchain blocks and transactions</p>
+        </div>
+    </div>
+
+    <!-- Blockchain Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-primary">
+                <div class="card-body text-center">
+                    <h3>@totalBlocks</h3>
+                    <p>Total Blocks</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body text-center">
+                    <h3>@totalTransactions</h3>
+                    <p>Total Transactions</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body text-center">
+                    <h3>@(blocks.FirstOrDefault()?.BlockNumber ?? 0)</h3>
+                    <p>Latest Block</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body text-center">
+                    <h3>@averageBlockTime</h3>
+                    <p>Avg Block Time (s)</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Search and Filters -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="input-group">
+                                <input type="text" class="form-control" placeholder="Search by block hash, number, or transaction ID" @bind="searchQuery">
+                                <button class="btn btn-outline-secondary" type="button" @onclick="SearchBlocks">
+                                    <i class="bi bi-search"></i> Search
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select" @onchange="FilterBySimulation">
+                                <option value="">All Simulations</option>
+                                @foreach (var sim in availableSimulations)
+                                {
+                                    <option value="@sim.Id">@sim.Name</option>
+                                }
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <select class="form-select" @onchange="SortBlocks">
+                                <option value="newest">Newest First</option>
+                                <option value="oldest">Oldest First</option>
+                                <option value="number-desc">Block Number (High to Low)</option>
+                                <option value="number-asc">Block Number (Low to High)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Blocks List -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5><i class="bi bi-collection"></i> Recent Blocks</h5>
+                </div>
+                <div class="card-body">
+                    @if (filteredBlocks.Any())
+                    {
+                        @foreach (var block in filteredBlocks.Take(20))
+                        {
+                            <div class="card mb-3 @(selectedBlockId == block.Id ? "border-primary" : "")">
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-8">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div>
+                                                    <h6 class="card-title">
+                                                        <i class="bi bi-box"></i> Block #@block.BlockNumber
+                                                        @if (block.IsValid)
+                                                        {
+                                                            <span class="badge bg-success ms-2">Valid</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="badge bg-danger ms-2">Invalid</span>
+                                                        }
+                                                    </h6>
+                                                    <p class="card-text">
+                                                        <small class="text-muted">
+                                                            <strong>Hash:</strong> <code>@(block.Hash?.Substring(0, Math.Min(16, block.Hash?.Length ?? 0)))...</code><br>
+                                                            @if (!string.IsNullOrEmpty(block.PreviousHash))
+                                                            {
+                                                                <strong>Previous:</strong> <code>@(block.PreviousHash.Substring(0, Math.Min(16, block.PreviousHash.Length)))...</code><br>
+                                                            }
+                                                            <strong>Created:</strong> @block.CreatedAt.ToString("MMM dd, yyyy HH:mm:ss UTC")
+                                                        </small>
+                                                    </p>
+                                                </div>
+                                                <div class="text-end">
+                                                    <div class="btn-group btn-group-sm" role="group">
+                                                        <button class="btn btn-outline-primary" @onclick="() => ViewBlockDetails(block.Id)">
+                                                            <i class="bi bi-eye"></i> Details
+                                                        </button>
+                                                        <button class="btn btn-outline-info" @onclick="() => ViewTransactions(block.Id)">
+                                                            <i class="bi bi-list-ul"></i> Transactions
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-4">
+                                            <div class="text-end">
+                                                <p class="mb-1">
+                                                    <strong>Transactions:</strong> @(GetTransactionCount(block.Id))
+                                                </p>
+                                                <p class="mb-1">
+                                                    <strong>Size:</strong> @(GetBlockSize(block)) KB
+                                                </p>
+                                                @if (!string.IsNullOrEmpty(block.MerkleRoot))
+                                                {
+                                                    <p class="mb-1">
+                                                        <strong>Merkle Root:</strong><br>
+                                                        <small><code>@(block.MerkleRoot.Substring(0, Math.Min(20, block.MerkleRoot.Length)))...</code></small>
+                                                    </p>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+
+                        @if (filteredBlocks.Count > 20)
+                        {
+                            <div class="text-center">
+                                <button class="btn btn-outline-primary" @onclick="LoadMoreBlocks">
+                                    <i class="bi bi-arrow-down-circle"></i> Load More Blocks
+                                </button>
+                            </div>
+                        }
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-4">
+                            <i class="bi bi-grid-3x3-gap fs-1"></i>
+                            <h4>No Blocks Found</h4>
+                            <p>Start a simulation to begin creating blocks on the blockchain.</p>
+                            <button class="btn btn-primary" @onclick="StartSimulation">
+                                <i class="bi bi-play-circle"></i> Start Simulation
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Block Details Modal -->
+@if (showDetailsModal && selectedBlock != null)
+{
+    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-box"></i> Block #@selectedBlock.BlockNumber Details
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseDetailsModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6>Block Information</h6>
+                            <table class="table table-sm">
+                                <tr>
+                                    <td><strong>Block Number:</strong></td>
+                                    <td>@selectedBlock.BlockNumber</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Hash:</strong></td>
+                                    <td><code class="small">@selectedBlock.Hash</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Previous Hash:</strong></td>
+                                    <td><code class="small">@(selectedBlock.PreviousHash ?? "N/A")</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Merkle Root:</strong></td>
+                                    <td><code class="small">@(selectedBlock.MerkleRoot ?? "N/A")</code></td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Created:</strong></td>
+                                    <td>@selectedBlock.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss UTC")</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Status:</strong></td>
+                                    <td>
+                                        @if (selectedBlock.IsValid)
+                                        {
+                                            <span class="badge bg-success">Valid</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="badge bg-danger">Invalid</span>
+                                        }
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6>Additional Data</h6>
+                            @if (selectedBlock.Data != null && selectedBlock.Data.Any())
+                            {
+                                <pre class="bg-light p-2 small" style="max-height: 200px; overflow-y: auto;">@System.Text.Json.JsonSerializer.Serialize(selectedBlock.Data, new System.Text.Json.JsonSerializerOptions { WriteIndented = true })</pre>
+                            }
+                            else
+                            {
+                                <p class="text-muted">No additional data</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDetailsModal">Close</button>
+                    <button type="button" class="btn btn-primary" @onclick="() => ViewTransactions(selectedBlock.Id)">
+                        View Transactions
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Block> blocks = new();
+    private List<Block> filteredBlocks = new();
+    private List<SimulationRun> availableSimulations = new();
+    private List<Transaction> transactions = new();
+
+    // Search and filter state
+    private string searchQuery = "";
+    private Guid? selectedSimulationId = null;
+    private string sortOrder = "newest";
+
+    // Modal state
+    private bool showDetailsModal = false;
+    private Block? selectedBlock = null;
+    private Guid? selectedBlockId = null;
+
+    // Statistics
+    private int totalBlocks => blocks.Count;
+    private int totalTransactions => transactions.Count;
+    private double averageBlockTime = 15.0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBlockchainData();
+    }
+
+    private async Task LoadBlockchainData()
+    {
+        // TODO: Replace with actual service calls
+        await Task.Delay(100);
+
+        // Mock simulations
+        availableSimulations = new List<SimulationRun>
+        {
+            new SimulationRun 
+            { 
+                Id = Guid.NewGuid(), 
+                Name = "PoW Test Simulation",
+                ConsensusAlgorithm = ConsensusAlgorithm.ProofOfWork,
+                Status = SimulationStatus.Completed
+            },
+            new SimulationRun 
+            { 
+                Id = Guid.NewGuid(), 
+                Name = "PBFT Network Test",
+                ConsensusAlgorithm = ConsensusAlgorithm.PracticalByzantineFaultTolerance,
+                Status = SimulationStatus.Running
+            }
+        };
+
+        // Mock blocks
+        var sim1Id = availableSimulations[0].Id;
+        blocks = new List<Block>
+        {
+            new Block
+            {
+                Id = Guid.NewGuid(),
+                BlockNumber = 3,
+                Hash = "0xa1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
+                PreviousHash = "0x123456789012345678901234567890123456789012345678901234567890abcd",
+                MerkleRoot = "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-5),
+                IsValid = true,
+                SimulationRunId = sim1Id,
+                Data = new Dictionary<string, object> { { "difficulty", 4 }, { "nonce", 12345 } }
+            },
+            new Block
+            {
+                Id = Guid.NewGuid(),
+                BlockNumber = 2,
+                Hash = "0x123456789012345678901234567890123456789012345678901234567890abcd",
+                PreviousHash = "0x987654321098765432109876543210987654321098765432109876543210abcd",
+                MerkleRoot = "0x1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-20),
+                IsValid = true,
+                SimulationRunId = sim1Id,
+                Data = new Dictionary<string, object> { { "difficulty", 4 }, { "nonce", 67890 } }
+            },
+            new Block
+            {
+                Id = Guid.NewGuid(),
+                BlockNumber = 1,
+                Hash = "0x987654321098765432109876543210987654321098765432109876543210abcd",
+                PreviousHash = null, // Genesis block
+                MerkleRoot = "0x2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c",
+                CreatedAt = DateTime.UtcNow.AddMinutes(-35),
+                IsValid = true,
+                SimulationRunId = sim1Id,
+                Data = new Dictionary<string, object> { { "difficulty", 3 }, { "nonce", 54321 } }
+            }
+        };
+
+        // Mock transactions
+        transactions = new List<Transaction>
+        {
+            new Transaction { Id = Guid.NewGuid(), BlockId = blocks[0].Id, Amount = 10.5m },
+            new Transaction { Id = Guid.NewGuid(), BlockId = blocks[0].Id, Amount = 5.2m },
+            new Transaction { Id = Guid.NewGuid(), BlockId = blocks[1].Id, Amount = 15.7m },
+            new Transaction { Id = Guid.NewGuid(), BlockId = blocks[2].Id, Amount = 100.0m }
+        };
+
+        filteredBlocks = blocks.OrderByDescending(b => b.BlockNumber).ToList();
+        StateHasChanged();
+    }
+
+    private void FilterBySimulation(ChangeEventArgs e)
+    {
+        var simId = e.Value?.ToString();
+        selectedSimulationId = string.IsNullOrEmpty(simId) ? null : Guid.Parse(simId);
+        ApplyFiltersAndSort();
+    }
+
+    private void SortBlocks(ChangeEventArgs e)
+    {
+        sortOrder = e.Value?.ToString() ?? "newest";
+        ApplyFiltersAndSort();
+    }
+
+    private void ApplyFiltersAndSort()
+    {
+        var filtered = blocks.AsEnumerable();
+
+        // Apply simulation filter
+        if (selectedSimulationId.HasValue)
+        {
+            filtered = filtered.Where(b => b.SimulationRunId == selectedSimulationId.Value);
+        }
+
+        // Apply search filter
+        if (!string.IsNullOrEmpty(searchQuery))
+        {
+            filtered = filtered.Where(b =>
+                (b.Hash?.Contains(searchQuery, StringComparison.OrdinalIgnoreCase) == true) ||
+                b.BlockNumber.ToString().Contains(searchQuery)
+            );
+        }
+
+        // Apply sorting
+        filtered = sortOrder switch
+        {
+            "oldest" => filtered.OrderBy(b => b.CreatedAt),
+            "number-desc" => filtered.OrderByDescending(b => b.BlockNumber),
+            "number-asc" => filtered.OrderBy(b => b.BlockNumber),
+            _ => filtered.OrderByDescending(b => b.CreatedAt)
+        };
+
+        filteredBlocks = filtered.ToList();
+        StateHasChanged();
+    }
+
+    private async Task SearchBlocks()
+    {
+        ApplyFiltersAndSort();
+        await Task.CompletedTask;
+    }
+
+    private async Task ViewBlockDetails(Guid blockId)
+    {
+        selectedBlock = blocks.FirstOrDefault(b => b.Id == blockId);
+        selectedBlockId = blockId;
+        showDetailsModal = true;
+        await Task.CompletedTask;
+    }
+
+    private void CloseDetailsModal()
+    {
+        showDetailsModal = false;
+        selectedBlock = null;
+        selectedBlockId = null;
+    }
+
+    private async Task ViewTransactions(Guid blockId)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", $"Viewing transactions for block {blockId}... (Feature coming soon!)");
+    }
+
+    private async Task LoadMoreBlocks()
+    {
+        await JSRuntime.InvokeVoidAsync("alert", "Loading more blocks... (Feature coming soon!)");
+    }
+
+    private async Task StartSimulation()
+    {
+        await JSRuntime.InvokeVoidAsync("window.location.href", "/");
+    }
+
+    private int GetTransactionCount(Guid blockId)
+    {
+        return transactions.Count(t => t.BlockId == blockId);
+    }
+
+    private double GetBlockSize(Block block)
+    {
+        // Mock block size calculation
+        return Math.Round(1.2 + (block.BlockNumber * 0.1), 1);
+    }
+}

@@ -1,0 +1,361 @@
+@page "/nodes"
+@using Consensus.Core.Entities
+@using Consensus.Core.Enums
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Node Management - Consensus Simulator</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="bi bi-diagram-3"></i> Node Management</h1>
+                    <p class="lead">Manage and monitor consensus network nodes</p>
+                </div>
+                <div>
+                    <button class="btn btn-primary" @onclick="ShowAddNodeModal">
+                        <i class="bi bi-plus-circle"></i> Add New Node
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Node Statistics -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card text-white bg-success">
+                <div class="card-body text-center">
+                    <h3>@onlineNodes</h3>
+                    <p>Online Nodes</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-warning">
+                <div class="card-body text-center">
+                    <h3>@offlineNodes</h3>
+                    <p>Offline Nodes</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-info">
+                <div class="card-body text-center">
+                    <h3>@synchronizingNodes</h3>
+                    <p>Synchronizing</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card text-white bg-danger">
+                <div class="card-body text-center">
+                    <h3>@faultyNodes</h3>
+                    <p>Faulty Nodes</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Nodes Table -->
+    <div class="row">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5><i class="bi bi-table"></i> Network Nodes</h5>
+                        <div class="d-flex gap-2">
+                            <select class="form-select form-select-sm" @onchange="FilterByStatus">
+                                <option value="">All Status</option>
+                                <option value="Online">Online</option>
+                                <option value="Offline">Offline</option>
+                                <option value="Failed">Failed</option>
+                                <option value="Synchronizing">Synchronizing</option>
+                            </select>
+                            <select class="form-select form-select-sm" @onchange="FilterByAlgorithm">
+                                <option value="">All Algorithms</option>
+                                <option value="ProofOfWork">Proof of Work</option>
+                                <option value="ProofOfStake">Proof of Stake</option>
+                                <option value="PracticalByzantineFaultTolerance">PBFT</option>
+                                <option value="Raft">Raft</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    @if (filteredNodes.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-striped table-hover">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Status</th>
+                                        <th>Algorithm</th>
+                                        <th>Connection</th>
+                                        <th>Last Seen</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var node in filteredNodes)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <strong>@node.Name</strong>
+                                                @if (node.IsActive)
+                                                {
+                                                    <span class="badge bg-success ms-2">Active</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary ms-2">Inactive</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="badge @GetStatusBadgeClass(node.Status)">
+                                                    @node.Status
+                                                </span>
+                                            </td>
+                                            <td>@node.ConsensusAlgorithm</td>
+                                            <td>
+                                                <small class="text-muted">@(node.ConnectionInfo ?? "Not specified")</small>
+                                            </td>
+                                            <td>
+                                                <small>@node.LastSeen.ToString("MMM dd, HH:mm:ss")</small>
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm" role="group">
+                                                    <button class="btn btn-outline-primary" @onclick="() => ViewNodeDetails(node.Id)">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    <button class="btn btn-outline-warning" @onclick="() => EditNode(node.Id)">
+                                                        <i class="bi bi-pencil"></i>
+                                                    </button>
+                                                    @if (node.Status == NodeStatus.Online)
+                                                    {
+                                                        <button class="btn btn-outline-danger" @onclick="() => StopNode(node.Id)">
+                                                            <i class="bi bi-stop"></i>
+                                                        </button>
+                                                    }
+                                                    else
+                                                    {
+                                                        <button class="btn btn-outline-success" @onclick="() => StartNode(node.Id)">
+                                                            <i class="bi bi-play"></i>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="text-center text-muted py-4">
+                            <i class="bi bi-diagram-3 fs-1"></i>
+                            <h4>No Nodes Found</h4>
+                            <p>Add your first node to get started with consensus simulation.</p>
+                            <button class="btn btn-primary" @onclick="ShowAddNodeModal">
+                                <i class="bi bi-plus-circle"></i> Add First Node
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Node Modal (would be replaced with proper modal component) -->
+<div class="modal fade @(showAddModal ? "show d-block" : "")" tabindex="-1" style="@(showAddModal ? "background-color: rgba(0,0,0,0.5);" : "")">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add New Node</h5>
+                <button type="button" class="btn-close" @onclick="HideAddNodeModal"></button>
+            </div>
+            <div class="modal-body">
+                <form>
+                    <div class="mb-3">
+                        <label class="form-label">Node Name</label>
+                        <input type="text" class="form-control" @bind="newNodeName" placeholder="Enter node name">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Consensus Algorithm</label>
+                        <select class="form-select" @bind="newNodeAlgorithm">
+                            <option value="">Select Algorithm</option>
+                            <option value="@ConsensusAlgorithm.ProofOfWork">Proof of Work</option>
+                            <option value="@ConsensusAlgorithm.ProofOfStake">Proof of Stake</option>
+                            <option value="@ConsensusAlgorithm.PracticalByzantineFaultTolerance">PBFT</option>
+                            <option value="@ConsensusAlgorithm.Raft">Raft</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Connection Info</label>
+                        <input type="text" class="form-control" @bind="newNodeConnection" placeholder="e.g., localhost:8080">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="HideAddNodeModal">Cancel</button>
+                <button type="button" class="btn btn-primary" @onclick="CreateNode">Create Node</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<Node> nodes = new();
+    private List<Node> filteredNodes = new();
+
+    // Node statistics
+    private int onlineNodes => nodes.Count(n => n.Status == NodeStatus.Online);
+    private int offlineNodes => nodes.Count(n => n.Status == NodeStatus.Offline);
+    private int synchronizingNodes => nodes.Count(n => n.Status == NodeStatus.Synchronizing);
+    private int faultyNodes => nodes.Count(n => n.Status == NodeStatus.Failed);
+
+    // Modal and form state
+    private bool showAddModal = false;
+    private string newNodeName = "";
+    private ConsensusAlgorithm newNodeAlgorithm;
+    private string newNodeConnection = "";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadNodes();
+    }
+
+    private async Task LoadNodes()
+    {
+        // TODO: Replace with actual service call
+        await Task.Delay(100);
+
+        // Mock data for demonstration
+        nodes = new List<Node>
+        {
+            new Node 
+            { 
+                Id = Guid.NewGuid(), 
+                Name = "Genesis Node", 
+                Status = NodeStatus.Online, 
+                ConsensusAlgorithm = ConsensusAlgorithm.ProofOfWork,
+                ConnectionInfo = "localhost:8001",
+                IsActive = true,
+                LastSeen = DateTime.UtcNow.AddMinutes(-2),
+                SimulationRunId = Guid.NewGuid()
+            },
+            new Node 
+            { 
+                Id = Guid.NewGuid(), 
+                Name = "Validator-01", 
+                Status = NodeStatus.Synchronizing, 
+                ConsensusAlgorithm = ConsensusAlgorithm.ProofOfStake,
+                ConnectionInfo = "localhost:8002",
+                IsActive = true,
+                LastSeen = DateTime.UtcNow.AddMinutes(-1),
+                SimulationRunId = Guid.NewGuid()
+            },
+            new Node 
+            { 
+                Id = Guid.NewGuid(), 
+                Name = "PBFT Node", 
+                Status = NodeStatus.Failed, 
+                ConsensusAlgorithm = ConsensusAlgorithm.PracticalByzantineFaultTolerance,
+                ConnectionInfo = "localhost:8003",
+                IsActive = false,
+                LastSeen = DateTime.UtcNow.AddHours(-1),
+                SimulationRunId = Guid.NewGuid()
+            }
+        };
+
+        filteredNodes = nodes;
+        StateHasChanged();
+    }
+
+    private void FilterByStatus(ChangeEventArgs e)
+    {
+        var status = e.Value?.ToString();
+        ApplyFilters(status, null);
+    }
+
+    private void FilterByAlgorithm(ChangeEventArgs e)
+    {
+        var algorithm = e.Value?.ToString();
+        ApplyFilters(null, algorithm);
+    }
+
+    private void ApplyFilters(string? status, string? algorithm)
+    {
+        filteredNodes = nodes.Where(n =>
+            (string.IsNullOrEmpty(status) || n.Status.ToString() == status) &&
+            (string.IsNullOrEmpty(algorithm) || n.ConsensusAlgorithm.ToString() == algorithm)
+        ).ToList();
+        StateHasChanged();
+    }
+
+    private void ShowAddNodeModal()
+    {
+        showAddModal = true;
+        newNodeName = "";
+        newNodeAlgorithm = ConsensusAlgorithm.ProofOfWork;
+        newNodeConnection = "";
+    }
+
+    private void HideAddNodeModal()
+    {
+        showAddModal = false;
+    }
+
+    private async Task CreateNode()
+    {
+        if (string.IsNullOrWhiteSpace(newNodeName))
+        {
+            await JSRuntime.InvokeVoidAsync("alert", "Please enter a node name.");
+            return;
+        }
+
+        // TODO: Replace with actual service call
+        await JSRuntime.InvokeVoidAsync("alert", $"Creating node '{newNodeName}' with {newNodeAlgorithm}... (Feature coming soon!)");
+        HideAddNodeModal();
+    }
+
+    private async Task ViewNodeDetails(Guid nodeId)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", $"Viewing details for node {nodeId}... (Feature coming soon!)");
+    }
+
+    private async Task EditNode(Guid nodeId)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", $"Editing node {nodeId}... (Feature coming soon!)");
+    }
+
+    private async Task StartNode(Guid nodeId)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", $"Starting node {nodeId}... (Feature coming soon!)");
+    }
+
+    private async Task StopNode(Guid nodeId)
+    {
+        await JSRuntime.InvokeVoidAsync("alert", $"Stopping node {nodeId}... (Feature coming soon!)");
+    }
+
+    private string GetStatusBadgeClass(NodeStatus status)
+    {
+        return status switch
+        {
+            NodeStatus.Online => "bg-success",
+            NodeStatus.Offline => "bg-secondary",
+            NodeStatus.Starting => "bg-primary",
+            NodeStatus.Stopping => "bg-warning",
+            NodeStatus.Failed => "bg-danger",
+            NodeStatus.Disconnected => "bg-warning",
+            NodeStatus.Synchronizing => "bg-info",
+            NodeStatus.Maintenance => "bg-dark",
+            _ => "bg-secondary"
+        };
+    }
+}
