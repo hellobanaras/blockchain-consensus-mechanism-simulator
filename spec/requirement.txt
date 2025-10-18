@@ -1,0 +1,355 @@
+## 0) Elevator Pitch
+
+“**Consensus Lab**” is a Blazor web app that lets users **spin up virtual nodes**, **choose a consensus protocol**, **run rounds**, and **watch the chain grow** in real time. It provides **analytics, block explorer, and protocol playground** plus optional **Supply-Chain** and **Federated-Learning** payload modes.
+
+---
+
+## 1) User Stories (acceptance criteria)
+
+### US-01: Choose Protocol & Run
+
+* As an Operator, I can select **PoW/PoS/DPoS/PoA/PBFT/PoET/PoB**, set node count, rounds, and latency.
+* When I click **Run**, I see **per-round winners, block hashes, validations**, and **final height**.
+* AC:
+
+  * At least 5 nodes; 1–100 rounds.
+  * Live log stream via SignalR.
+  * Simulation stops/pauses/resumes.
+
+### US-02: Block Explorer
+
+* I can browse blocks with fields: `height, hash, prev_hash, proposer, protocol, payload meta, timestamp`.
+* AC:
+
+  * Click a block → detail page.
+  * Chain tip badge; orphan rate (if mode simulates forks).
+
+### US-03: Analytics
+
+* I can see **winner distribution**, **stake/burn trends**, **vote/quorum stats** (PBFT), **wait times** (PoET).
+* AC:
+
+  * Export CSV/PNG.
+  * At least 3 charts per protocol.
+
+### US-04: Protocol Playground (config)
+
+* I can edit **per-protocol parameters** (e.g., PoW hash-power, PoS initial stakes, DPoS delegates, PBFT faulty nodes, PoB burn strategy, PoET wait bounds).
+* AC:
+
+  * Changes are persisted per experiment.
+  * Validation & sensible defaults.
+
+### US-05: Payload Modes
+
+* I can toggle payloads:
+
+  * **Supply-Chain**: product events (manufactured→shipped→delivered).
+  * **Federated-Learning**: toy model updates and FedAvg.
+* AC:
+
+  * Block payload card renders mode-specific details.
+  * Simple accuracy chart for FL.
+
+### US-06: Roles & Auth
+
+* Viewer: read-only.
+* Operator: run sims, manage configs.
+* Admin: manage users, feature flags.
+* AC:
+
+  * Unauthorized requests → 401/403.
+  * Audit log for admin actions.
+
+---
+
+## 2) System Architecture (high level)
+
+* **Blazor Server** UI (`Consensus.Web`)
+* **Consensus Engine** (`Consensus.Core` class library)
+* **API** (`Consensus.Api` minimal API or integrated endpoints)
+* **Background Hosted Services** for simulation loops
+* **Data**: EF Core → PostgreSQL (prod) / SQLite (dev)
+* **Real-time**: SignalR hub for round events
+* **Docs & Swagger**: Swashbuckle on `/swagger`
+
+```
+[Blazor UI] <--> [API Controllers/Minimal API] <--> [Consensus.Core]
+                                     |                 |
+                                   EF Core          HostedService
+                                     |                 |
+                                   DB (Postgres/SQLite)   SignalR
+```
+
+---
+
+## 3) Domain Model (Core)
+
+**Entities**
+
+* `Node { Id, DisplayName, Role, Power, Stake, Burned, Votes, Honest }`
+* `Round { Id, Index, Protocol, StartedAt, EndedAt, ParamsJson }`
+* `Block { Id, Height, Hash, PrevHash, ProposerNodeId, Protocol, PayloadJson, MetaJson, Timestamp }`
+* `Experiment { Id, Name, Protocol, NodeCount, Rounds, ParamsJson, CreatedBy, CreatedAt }`
+* `EventLog { Id, RoundId, Type, Message, DataJson, Ts }`
+
+**DTOs**
+
+* `StartSimulationRequest { protocol, nodeCount, rounds, params }`
+* `RoundUpdate { round, winnerNodeId, blockHash, stats }`
+* `AnalyticsSummary { height, winners, distributions, metrics }`
+
+---
+
+## 4) Consensus Engine Design
+
+### Interfaces
+
+```csharp
+public interface IConsensusProtocol
+{
+    string Name { get; }
+    Task InitializeAsync(SimContext ctx, ProtocolParams p, CancellationToken ct);
+    Task<RoundResult> RunRoundAsync(int round, CancellationToken ct);
+}
+
+public interface IBlockValidator
+{
+    bool ValidateLink(BlockHeader header, string prevHash);
+    bool ValidateProtocolMetadata(string protocol, IReadOnlyDictionary<string,object> meta);
+}
+
+public sealed class SimContext
+{
+    public IList<Node> Nodes { get; }
+    public ILedgerService Ledger { get; }
+    public IEventBus Events { get; } // emits RoundUpdate for SignalR
+    public Random Rng { get; }
+}
+```
+
+### Pluggable Protocols
+
+* `PowProtocol` (expovariate time to find block; power-weighted)
+* `PosProtocol` (stake-weighted choice; compounding reward)
+* `DposProtocol` (vote → top-K delegates → round-robin)
+* `PoaProtocol` (authority set → round-robin)
+* `PbftProtocol` (leader proposes; 2/3 quorum on votes; fault injection supported)
+* `PoetProtocol` (Registrar mock assigns verifiable waits; HMAC proof)
+* `PobProtocol` (burn strategy → weighted selection → reward)
+
+All protocols emit `RoundUpdate` with fields minimal for charts:
+`{ winner, wait_ms?, votes?, total_burn?, stake_after?, orphaned? }`
+
+---
+
+## 5) Data Access & Migrations
+
+* EF Core DbContext: `ConsensusDb`.
+* Providers: **SQLite** (Dev), **PostgreSQL** (Prod).
+* Migrations in `Consensus.Data/Migrations`.
+* Seed: `Seed.Experiments.cs` (sample experiments per protocol).
+
+---
+
+## 6) REST/Minimal API (v1)
+
+### Start Simulation
+
+```
+POST /api/v1/simulations/start
+Content-Type: application/json
+{
+  "protocol": "poet",
+  "nodeCount": 6,
+  "rounds": 20,
+  "params": { "waitLowMs": 50, "waitHighMs": 300, "seed": 7 }
+}
+→ 202 Accepted
+{ "simulationId": "guid", "hubUrl": "/hubs/sim/..." }
+```
+
+### Get Analytics
+
+```
+GET /api/v1/simulations/{id}/analytics
+→ 200
+{
+  "height": 20,
+  "winnerDistribution": { "N0":3, "N1":4, ... },
+  "protocolMetrics": { "avgWaitMs": 124, "quorum": 5, "forks": 0 }
+}
+```
+
+### List Blocks / Get Block
+
+```
+GET /api/v1/blocks?simId={id}&page=1&pageSize=50
+GET /api/v1/blocks/{blockId}
+```
+
+### Admin: Manage Protocol Configs
+
+```
+PUT /api/v1/settings/protocols/poa
+{ "authorities": ["N0","N1","N2"] }
+```
+
+---
+
+## 7) SignalR Hub Contracts
+
+Hub: `/hubs/sim`
+
+* `RoundStarted { round, params }`
+* `RoundUpdate { round, winner, meta, blockHash }`
+* `RoundCompleted { round, height }`
+* `SimulationCompleted { height, durationMs }`
+* `Error { round, message }`
+
+---
+
+## 8) UI (Blazor) — Pages & Components
+
+* `/` **Dashboard**: quick start card (choose protocol, node count, rounds), recent experiments.
+* `/playground` **Protocol Playground**:
+
+  * left: config panel per protocol,
+  * right: live chart + round log.
+* `/explorer` **Block Explorer**: table + filters; link to `/explorer/{id}`.
+* `/nodes` **Node Topology**: list & mini-graph, edit power/stake/votes/honest.
+* `/analytics` **Reports**: charts (distribution, latency, burn/stake curves, PBFT quorum).
+* `/admin` **Settings**: users, roles, feature flags.
+* Components:
+
+  * `ProtocolSelector`, `NodeEditor`, `RoundTimeline`, `WinnersBarChart`, `StakeBurnChart`, `QuorumGauge`, `WaitHistogram`, `BlockCard`.
+
+Charts: ChartJs/ChartJs.Blazor (or Plotly via JS interop).
+
+---
+
+## 9) Background Jobs
+
+* `SimulationHostedService`
+
+  * Creates a **cancellation token** per run.
+  * Ticks rounds; persists blocks; pushes SignalR updates.
+  * Supports **Pause/Resume** via memory state.
+
+---
+
+## 10) Security
+
+* ASP.NET Core Identity + cookie auth.
+* Roles: Admin / Operator / Viewer.
+* Anti-CSRF, input validation (FluentValidation).
+* Rate limit: `/api/v1/simulations/start` (5/min per user).
+* Audit log table for admin actions.
+
+---
+
+## 11) Testing
+
+* **Unit**: `Consensus.Core` (≥80% coverage): protocol math, proof verification, quorum thresholds.
+* **Integration**: WebApplicationFactory for API start/stop; EF Core InMemory.
+* **UI**: Playwright scripts: start run, see RoundUpdate, verify final height.
+* **Load smoke**: run 1000 rounds headless; assert no deadlocks; height==rounds unless fork mode enabled.
+
+---
+
+## 12) Performance Targets
+
+* Start → first RoundUpdate < 1.0 s.
+* 100 rounds, 10 nodes, PoET: end < 8 s on dev laptop.
+* SignalR broadcast < 50 ms to 50 clients (dev).
+
+---
+
+## 13) Deployment
+
+* **Docker**: `docker-compose.yml` for Web + Postgres.
+* Envs: `Development`, `Staging`, `Production`.
+* Cloud: Azure App Service + Azure Postgres.
+* Secrets: Azure Key Vault or `dotnet user-secrets` (dev).
+
+---
+
+## 14) Observability
+
+* Serilog → console + file.
+* OpenTelemetry traces (optional).
+* Health checks: `/health` (liveness/readiness).
+* Metrics endpoint (Prometheus) for rounds/sec, SignalR clients, errors.
+
+---
+
+## 15) Feature Flags
+
+* `Features.Payload.SupplyChain`
+* `Features.Payload.FederatedLearning`
+* `Features.Protocols.DPoS`
+* `Features.ForkSim` (PoW fork race demo)
+
+Use `Microsoft.FeatureManagement`.
+
+---
+
+## 16) Seed Scenarios
+
+* **PoET Demo**: 6 nodes, 20 rounds, wait 50–300 ms, seed 7.
+* **PBFT Quorum**: 7 nodes, faulty=2, threshold 5.
+* **PoB Economy**: 6 nodes, 30 rounds, 5% burn strategy, reward 5.
+* **PoA Supply-Chain**: 5 authorities (Manufacturer, Distributor, Transporter, Retailer, Auditor), 12 rounds payload events.
+
+---
+
+## 17) Threat Model (short)
+
+* **Replay/Lie about wait** → PoET HMAC proof check.
+* **Vote manipulation (PBFT)** → require 2/3 quorum; visualize faulty nodes.
+* **Stake/burn grinding** → persistent state & randomness seed; cap per-round changes.
+* **DoS** → rate limits and max concurrent runs (1 per user).
+
+---
+
+## 18) Milestones
+
+1. **M1 Core Engine & PoET (2 wks)**
+
+   * Core abstractions, SignalR stream, PoET implementation, Block Explorer.
+
+2. **M2 PoW, PoS, PoB (2 wks)**
+
+   * Analytics for distribution, stake/burn curves.
+
+3. **M3 PBFT & PoA (2 wks)**
+
+   * Quorum gauge, authority editor.
+
+4. **M4 DPoS + Payload Modes (2 wks)**
+
+   * Delegate management, Supply-Chain + FL payloads.
+
+5. **M5 Hardening & Docs (1 wk)**
+
+   * Tests ≥80%, Playwright suite, Docker, ADRs, demo script.
+
+---
+
+## 19) Demo Script
+
+* Start **PoET** run, watch winners & waits.
+* Switch to **PBFT**, toggle 2 faulty nodes, watch quorum.
+* Turn on **PoB**, observe burn-vs-reward chart.
+* Open **Block Explorer** and show a payload block (Supply-Chain “shipped” event).
+
+---
+
+## 20) Glossary
+
+* **Round**: one consensus iteration that can produce one block.
+* **Winner**: node selected to propose/commit block in a round.
+* **Payload Modes**: domain data stored in block (Supply-Chain / FL).
+* **Quorum**: minimum “yes” votes to finalize (PBFT).
+* **Attestation**: PoET proof a node waited its assigned time.
+
