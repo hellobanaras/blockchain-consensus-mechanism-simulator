@@ -59,6 +59,31 @@ public class SimulationRun
     public int? DurationSeconds { get; set; }
 
     /// <summary>
+    /// Network topology type used in the simulation
+    /// </summary>
+    public NetworkTopologyType NetworkTopology { get; set; } = NetworkTopologyType.FullMesh;
+
+    /// <summary>
+    /// Target block time in milliseconds
+    /// </summary>
+    public int BlockTimeMs { get; set; } = 5000;
+
+    /// <summary>
+    /// Number of transactions per block
+    /// </summary>
+    public int TransactionsPerBlock { get; set; } = 10;
+
+    /// <summary>
+    /// Network latency in milliseconds
+    /// </summary>
+    public int NetworkLatencyMs { get; set; } = 100;
+
+    /// <summary>
+    /// Total number of transactions processed
+    /// </summary>
+    public int TotalTransactions { get; set; } = 0;
+
+    /// <summary>
     /// Network latency simulation settings and other configuration
     /// </summary>
     public Dictionary<string, object>? Configuration { get; set; }

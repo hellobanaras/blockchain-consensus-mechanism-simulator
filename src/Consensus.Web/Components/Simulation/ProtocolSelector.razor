@@ -1,0 +1,550 @@
+@using Consensus.Core.Enums
+@using Consensus.Api.Models
+@using Consensus.Web.Models.Forms
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Components.Forms
+@inject IJSRuntime JSRuntime
+@inject ILogger<ProtocolSelector> Logger
+
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-transparent border-0 pt-3">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-gear text-primary me-2"></i>
+            Consensus Protocol Configuration
+        </h5>
+    </div>
+    <div class="card-body">
+        <EditForm Model="@formModel" OnValidSubmit="@HandleValidSubmit">
+            <DataAnnotationsValidator />
+            
+            <!-- Basic Configuration -->
+            <div class="row mb-4">
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Simulation Name</label>
+                    <InputText @bind-Value="formModel.Name" class="form-control" 
+                               placeholder="Enter simulation name" />
+                    <ValidationMessage For="@(() => formModel.Name)" class="text-danger small" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-medium">Consensus Algorithm</label>
+                    <InputSelect @bind-Value="formModel.Algorithm" class="form-select" 
+                                 @onchange="OnAlgorithmChanged">
+                        <option value="">Select Algorithm</option>
+                        @foreach (var algorithm in Enum.GetValues<ConsensusAlgorithm>())
+                        {
+                            <option value="@algorithm">@GetAlgorithmDisplayName(algorithm)</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => formModel.Algorithm)" class="text-danger small" />
+                    
+                    @if (formModel.Algorithm != null)
+                    {
+                        <div class="mt-2 p-3 bg-light rounded">
+                            <small class="text-muted">
+                                <strong>@GetAlgorithmDisplayName(formModel.Algorithm.Value):</strong>
+                                @GetAlgorithmDescription(formModel.Algorithm.Value)
+                            </small>
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <!-- Network Configuration -->
+            <div class="row mb-4">
+                <div class="col-md-4">
+                    <label class="form-label fw-medium">
+                        Number of Nodes
+                        <i class="bi bi-info-circle text-muted ms-1" data-bs-toggle="tooltip" 
+                           title="Total number of nodes in the consensus network"></i>
+                    </label>
+                    <InputNumber @bind-Value="formModel.NodeCount" class="form-control" 
+                                 min="3" max="100" />
+                    <ValidationMessage For="@(() => formModel.NodeCount)" class="text-danger small" />
+                    <small class="form-text text-muted">Minimum 3 nodes required</small>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-medium">
+                        Byzantine Nodes
+                        <i class="bi bi-exclamation-triangle text-warning ms-1" data-bs-toggle="tooltip" 
+                           title="Number of faulty/malicious nodes that may behave arbitrarily"></i>
+                    </label>
+                    <InputNumber @bind-Value="formModel.ByzantineNodeCount" class="form-control" 
+                                 min="0" max="@formModel.GetMaxByzantineNodes()" />
+                    <ValidationMessage For="@(() => formModel.ByzantineNodeCount)" class="text-danger small" />
+                    <small class="form-text text-muted">
+                        Max: @formModel.GetMaxByzantineNodes() (@formModel.GetByzantineTolerance() tolerance)
+                    </small>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-medium">
+                        Network Topology
+                        <i class="bi bi-diagram-3 text-muted ms-1" data-bs-toggle="tooltip" 
+                           title="How nodes are connected in the network"></i>
+                    </label>
+                    <InputSelect @bind-Value="formModel.NetworkTopology" class="form-select">
+                        @foreach (var topology in Enum.GetValues<NetworkTopologyType>())
+                        {
+                            <option value="@topology">@GetTopologyDisplayName(topology)</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="@(() => formModel.NetworkTopology)" class="text-danger small" />
+                </div>
+            </div>
+
+            <!-- Performance Configuration -->
+            <div class="row mb-4">
+                <div class="col-md-3">
+                    <label class="form-label fw-medium">
+                        Duration (seconds)
+                        <i class="bi bi-clock text-muted ms-1" data-bs-toggle="tooltip" 
+                           title="How long the simulation should run"></i>
+                    </label>
+                    <InputNumber @bind-Value="formModel.DurationSeconds" class="form-control" 
+                                 min="10" max="3600" />
+                    <ValidationMessage For="@(() => formModel.DurationSeconds)" class="text-danger small" />
+                    <small class="form-text text-muted">10 seconds to 1 hour</small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-medium">
+                        Block Time (ms)
+                        <i class="bi bi-stopwatch text-muted ms-1" data-bs-toggle="tooltip" 
+                           title="Target time between blocks"></i>
+                    </label>
+                    <InputNumber @bind-Value="formModel.BlockTimeMs" class="form-control" 
+                                 min="100" max="30000" />
+                    <ValidationMessage For="@(() => formModel.BlockTimeMs)" class="text-danger small" />
+                    <small class="form-text text-muted">100ms to 30s</small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-medium">
+                        Transactions per Block
+                        <i class="bi bi-arrow-left-right text-muted ms-1" data-bs-toggle="tooltip" 
+                           title="Number of transactions included in each block"></i>
+                    </label>
+                    <InputNumber @bind-Value="formModel.TransactionsPerBlock" class="form-control" 
+                                 min="1" max="1000" />
+                    <ValidationMessage For="@(() => formModel.TransactionsPerBlock)" class="text-danger small" />
+                    <small class="form-text text-muted">1 to 1000 transactions</small>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label fw-medium">
+                        Network Latency (ms)
+                        <i class="bi bi-wifi text-muted ms-1" data-bs-toggle="tooltip" 
+                           title="Simulated network delay between nodes"></i>
+                    </label>
+                    <InputNumber @bind-Value="formModel.NetworkLatencyMs" class="form-control" 
+                                 min="0" max="2000" />
+                    <ValidationMessage For="@(() => formModel.NetworkLatencyMs)" class="text-danger small" />
+                    <small class="form-text text-muted">0ms to 2s</small>
+                </div>
+            </div>
+
+            <!-- Algorithm-Specific Configuration -->
+            @if (formModel.Algorithm != null)
+            {
+                <div class="card bg-light border-0 mb-4">
+                    <div class="card-header bg-transparent border-0">
+                        <h6 class="card-title mb-0 text-primary">
+                            <i class="bi bi-sliders text-primary me-2"></i>
+                            @GetAlgorithmDisplayName(formModel.Algorithm.Value) Specific Settings
+                        </h6>
+                    </div>
+                    <div class="card-body">
+                        @switch (formModel.Algorithm.Value)
+                        {
+                            case ConsensusAlgorithm.ProofOfElapsedTime:
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Minimum Wait Time (ms)</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="poetMinWaitTime" min="100" max="5000" />
+                                        <small class="form-text text-muted">Minimum time nodes must wait before proposing</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Maximum Wait Time (ms)</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="poetMaxWaitTime" min="1000" max="30000" />
+                                        <small class="form-text text-muted">Maximum time nodes will wait</small>
+                                    </div>
+                                </div>
+                                break;
+
+                            case ConsensusAlgorithm.ProofOfStake:
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Initial Stake Distribution</label>
+                                        <select class="form-select" @bind="posStakeDistribution">
+                                            <option value="equal">Equal Distribution</option>
+                                            <option value="random">Random Distribution</option>
+                                            <option value="weighted">Weighted Distribution</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Minimum Stake</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="posMinStake" min="1" max="1000" />
+                                        <small class="form-text text-muted">Minimum stake required to participate</small>
+                                    </div>
+                                </div>
+                                break;
+
+                            case ConsensusAlgorithm.ProofOfWork:
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Mining Difficulty</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="powDifficulty" min="1" max="10" />
+                                        <small class="form-text text-muted">Number of leading zeros required</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Hash Rate Variation (%)</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="powHashRateVariation" min="0" max="50" />
+                                        <small class="form-text text-muted">Random variation in node hash rates</small>
+                                    </div>
+                                </div>
+                                break;
+
+                            case ConsensusAlgorithm.PracticalByzantineFaultTolerance:
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label">View Change Timeout (ms)</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="pbftViewChangeTimeout" min="1000" max="30000" />
+                                        <small class="form-text text-muted">Timeout before initiating view change</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Message Authentication</label>
+                                        <select class="form-select" @bind="pbftAuthentication">
+                                            <option value="true">Enabled</option>
+                                            <option value="false">Disabled</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                break;
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Advanced Options -->
+            <div class="card bg-light border-0 mb-4">
+                <div class="card-header bg-transparent border-0">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-gear-wide-connected text-muted me-2"></i>
+                            Advanced Options
+                        </h6>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" 
+                                @onclick="ToggleAdvancedOptions">
+                            @(showAdvancedOptions ? "Hide" : "Show")
+                        </button>
+                    </div>
+                </div>
+                @if (showAdvancedOptions)
+                {
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input type="checkbox" @bind="formModel.AutoStart" class="form-check-input" id="autoStart" />
+                                    <label class="form-check-label" for="autoStart">
+                                        Auto-start simulation
+                                    </label>
+                                    <small class="form-text text-muted d-block">
+                                        Start the simulation immediately after creation
+                                    </small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Logging Level</label>
+                                <select class="form-select" @bind="loggingLevel">
+                                    <option value="Information">Information</option>
+                                    <option value="Debug">Debug</option>
+                                    <option value="Warning">Warning</option>
+                                    <option value="Error">Error</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <!-- Estimated Metrics -->
+            <div class="alert alert-info">
+                <h6 class="alert-heading">
+                    <i class="bi bi-calculator me-2"></i>
+                    Estimated Simulation Metrics
+                </h6>
+                <div class="row">
+                    <div class="col-md-3">
+                        <strong>Expected Rounds:</strong>
+                        <span class="d-block">@GetEstimatedRounds()</span>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Total Transactions:</strong>
+                        <span class="d-block">@GetEstimatedTransactions()</span>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Network Messages:</strong>
+                        <span class="d-block">@GetEstimatedMessages()</span>
+                    </div>
+                    <div class="col-md-3">
+                        <strong>Fault Tolerance:</strong>
+                        <span class="d-block">@GetByzantineTolerance()</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="d-flex justify-content-between">
+                <div>
+                    <button type="button" class="btn btn-outline-secondary me-2" @onclick="ResetForm">
+                        <i class="bi bi-arrow-clockwise me-1"></i>
+                        Reset
+                    </button>
+                    <button type="button" class="btn btn-outline-info" @onclick="LoadPreset">
+                        <i class="bi bi-bookmark me-1"></i>
+                        Load Preset
+                    </button>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-outline-primary me-2" @onclick="SaveAsPreset">
+                        <i class="bi bi-save me-1"></i>
+                        Save Preset
+                    </button>
+                    <button type="submit" class="btn btn-primary" disabled="@isSubmitting">
+                        @if (isSubmitting)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                            <span>Creating...</span>
+                        }
+                        else
+                        {
+                            <i class="bi bi-play-circle me-1"></i>
+                            <span>@(formModel.AutoStart ? "Create & Start" : "Create Simulation")</span>
+                        }
+                    </button>
+                </div>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<StartSimulationRequest> OnSimulationCreate { get; set; }
+
+    private SimulationFormModel formModel = new();
+    private bool isSubmitting = false;
+    private bool showAdvancedOptions = false;
+
+    // Algorithm-specific parameters
+    private int poetMinWaitTime = 1000;
+    private int poetMaxWaitTime = 5000;
+    private string posStakeDistribution = "equal";
+    private int posMinStake = 100;
+    private int powDifficulty = 4;
+    private int powHashRateVariation = 10;
+    private int pbftViewChangeTimeout = 5000;
+    private string pbftAuthentication = "true";
+    private string loggingLevel = "Information";
+
+    protected override void OnInitialized()
+    {
+        // Set default values
+        formModel.Name = $"Simulation {DateTime.Now:yyyy-MM-dd HH:mm}";
+        formModel.NodeCount = 7;
+        formModel.ByzantineNodeCount = 1;
+        formModel.DurationSeconds = 60;
+        formModel.NetworkTopology = NetworkTopologyType.FullMesh;
+        formModel.BlockTimeMs = 2000;
+        formModel.TransactionsPerBlock = 10;
+        formModel.NetworkLatencyMs = 100;
+        formModel.AutoStart = true;
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            isSubmitting = true;
+            StateHasChanged();
+
+            // Build algorithm-specific configuration
+            formModel.AlgorithmConfiguration = BuildAlgorithmConfiguration();
+
+            // Convert to API request and invoke callback
+            var apiRequest = formModel.ToApiRequest();
+            await OnSimulationCreate.InvokeAsync(apiRequest);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating simulation");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to create simulation: " + ex.Message);
+        }
+        finally
+        {
+            isSubmitting = false;
+            StateHasChanged();
+        }
+    }
+
+    private Dictionary<string, object> BuildAlgorithmConfiguration()
+    {
+        if (!formModel.Algorithm.HasValue) return new Dictionary<string, object>();
+
+        return formModel.Algorithm.Value switch
+        {
+            ConsensusAlgorithm.ProofOfElapsedTime => new Dictionary<string, object>
+            {
+                ["MinWaitTimeMs"] = poetMinWaitTime,
+                ["MaxWaitTimeMs"] = poetMaxWaitTime
+            },
+            ConsensusAlgorithm.ProofOfStake => new Dictionary<string, object>
+            {
+                ["StakeDistribution"] = posStakeDistribution,
+                ["MinStake"] = posMinStake
+            },
+            ConsensusAlgorithm.ProofOfWork => new Dictionary<string, object>
+            {
+                ["Difficulty"] = powDifficulty,
+                ["HashRateVariation"] = powHashRateVariation
+            },
+            ConsensusAlgorithm.PracticalByzantineFaultTolerance => new Dictionary<string, object>
+            {
+                ["ViewChangeTimeoutMs"] = pbftViewChangeTimeout,
+                ["MessageAuthentication"] = bool.Parse(pbftAuthentication)
+            },
+            _ => new Dictionary<string, object>()
+        };
+    }
+
+    private void OnAlgorithmChanged(ChangeEventArgs e)
+    {
+        if (Enum.TryParse<ConsensusAlgorithm>(e.Value?.ToString(), out var algorithm))
+        {
+            formModel.Algorithm = algorithm;
+            
+            // Update suggested configuration based on algorithm
+            switch (algorithm)
+            {
+                case ConsensusAlgorithm.ProofOfElapsedTime:
+                    formModel.BlockTimeMs = 2000;
+                    formModel.NetworkLatencyMs = 100;
+                    break;
+                case ConsensusAlgorithm.ProofOfStake:
+                    formModel.BlockTimeMs = 1000;
+                    formModel.NetworkLatencyMs = 50;
+                    break;
+                case ConsensusAlgorithm.ProofOfWork:
+                    formModel.BlockTimeMs = 10000;
+                    formModel.NetworkLatencyMs = 200;
+                    break;
+                case ConsensusAlgorithm.PracticalByzantineFaultTolerance:
+                    formModel.BlockTimeMs = 500;
+                    formModel.NetworkLatencyMs = 50;
+                    break;
+            }
+            
+            StateHasChanged();
+        }
+    }
+
+    private void ToggleAdvancedOptions()
+    {
+        showAdvancedOptions = !showAdvancedOptions;
+    }
+
+    private void ResetForm()
+    {
+        formModel = new SimulationFormModel();
+        OnInitialized();
+    }
+
+    private async Task LoadPreset()
+    {
+        // TODO: Implement preset loading from local storage or service
+        await JSRuntime.InvokeVoidAsync("alert", "Preset loading not yet implemented");
+    }
+
+    private async Task SaveAsPreset()
+    {
+        // TODO: Implement preset saving to local storage or service
+        await JSRuntime.InvokeVoidAsync("alert", "Preset saving not yet implemented");
+    }
+
+    private int GetEstimatedRounds()
+    {
+        if (formModel.DurationSeconds > 0 && formModel.BlockTimeMs > 0)
+        {
+            return (int)Math.Ceiling((double)(formModel.DurationSeconds * 1000) / formModel.BlockTimeMs);
+        }
+        return 0;
+    }
+
+    private int GetEstimatedTransactions()
+    {
+        return GetEstimatedRounds() * formModel.TransactionsPerBlock;
+    }
+
+    private string GetEstimatedMessages()
+    {
+        var rounds = GetEstimatedRounds();
+        var nodes = formModel.NodeCount;
+        
+        var estimate = formModel.Algorithm switch
+        {
+            ConsensusAlgorithm.PracticalByzantineFaultTolerance => rounds * nodes * (nodes - 1) * 3, // 3 phases
+            ConsensusAlgorithm.ProofOfStake => rounds * nodes * 2, // Proposal + vote
+            _ => rounds * nodes
+        };
+        
+        return estimate > 1000 ? $"{estimate / 1000:F1}k" : estimate.ToString();
+    }
+
+    private static string GetAlgorithmDisplayName(ConsensusAlgorithm algorithm)
+    {
+        return algorithm switch
+        {
+            ConsensusAlgorithm.ProofOfElapsedTime => "Proof of Elapsed Time (PoET)",
+            ConsensusAlgorithm.ProofOfStake => "Proof of Stake (PoS)",
+            ConsensusAlgorithm.ProofOfWork => "Proof of Work (PoW)",
+            ConsensusAlgorithm.PracticalByzantineFaultTolerance => "Practical Byzantine Fault Tolerance (pBFT)",
+            _ => algorithm.ToString()
+        };
+    }
+
+    private static string GetAlgorithmDescription(ConsensusAlgorithm algorithm)
+    {
+        return algorithm switch
+        {
+            ConsensusAlgorithm.ProofOfElapsedTime => "Energy-efficient consensus using trusted execution environments and randomized wait times.",
+            ConsensusAlgorithm.ProofOfStake => "Validators are chosen to create blocks based on their stake in the network.",
+            ConsensusAlgorithm.ProofOfWork => "Miners compete to solve computational puzzles to validate transactions and create blocks.",
+            ConsensusAlgorithm.PracticalByzantineFaultTolerance => "Byzantine fault tolerant algorithm requiring 2/3+ honest nodes through multi-phase voting.",
+            _ => "Select an algorithm to see its description."
+        };
+    }
+
+    private static string GetTopologyDisplayName(NetworkTopologyType topology)
+    {
+        return topology switch
+        {
+            NetworkTopologyType.FullMesh => "Fully Connected",
+            NetworkTopologyType.Ring => "Ring Topology",
+            NetworkTopologyType.Star => "Star Topology",
+            NetworkTopologyType.Tree => "Tree Topology",
+            NetworkTopologyType.Random => "Random Network",
+            NetworkTopologyType.SmallWorld => "Small World",
+            NetworkTopologyType.ScaleFree => "Scale-Free",
+            NetworkTopologyType.Grid => "Grid Topology",
+            NetworkTopologyType.Custom => "Custom",
+            _ => topology.ToString()
+        };
+    }
+
+    private string GetByzantineTolerance()
+    {
+        return formModel.GetByzantineTolerance();
+    }
+}
