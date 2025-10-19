@@ -34,12 +34,12 @@ public class BlockExplorerService : IBlockExplorerService
         {
             var queryString = BuildQueryString(request);
             var response = await _httpClient.GetFromJsonAsync<ListBlocksResponse>($"api/blocks{queryString}", cancellationToken);
-            return response ?? new ListBlocksResponse();
+            return response ?? CreateEmptyListBlocksResponse();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting blocks");
-            return new ListBlocksResponse();
+            return CreateEmptyListBlocksResponse();
         }
     }
 
@@ -75,12 +75,12 @@ public class BlockExplorerService : IBlockExplorerService
         {
             var queryString = $"?query={Uri.EscapeDataString(query)}&page={page}&pageSize={pageSize}";
             var response = await _httpClient.GetFromJsonAsync<ListBlocksResponse>($"api/blocks/search{queryString}", cancellationToken);
-            return response ?? new ListBlocksResponse();
+            return response ?? CreateEmptyListBlocksResponse();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error searching blocks with query {Query}", query);
-            return new ListBlocksResponse();
+            return CreateEmptyListBlocksResponse();
         }
     }
 
@@ -90,12 +90,12 @@ public class BlockExplorerService : IBlockExplorerService
         {
             var queryString = simulationId.HasValue ? $"?simulationId={simulationId}" : "";
             var response = await _httpClient.GetFromJsonAsync<BlockStatistics>($"api/blocks/statistics{queryString}", cancellationToken);
-            return response ?? new BlockStatistics();
+            return response ?? CreateEmptyBlockStatistics();
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting block statistics");
-            return new BlockStatistics();
+            return CreateEmptyBlockStatistics();
         }
     }
 
@@ -112,12 +112,49 @@ public class BlockExplorerService : IBlockExplorerService
         if (request.SimulationId.HasValue)
             parameters.Add($"simulationId={request.SimulationId}");
         
-        if (!string.IsNullOrEmpty(request.SortBy))
-            parameters.Add($"sortBy={Uri.EscapeDataString(request.SortBy)}");
+        if (request.SortBy != BlockSortField.BlockNumber)
+            parameters.Add($"sortBy={Uri.EscapeDataString(request.SortBy.ToString())}");
         
-        if (request.SortDescending)
-            parameters.Add("sortDescending=true");
+        if (request.SortDirection == SortDirection.Ascending)
+            parameters.Add("sortDirection=Ascending");
 
         return parameters.Count > 0 ? "?" + string.Join("&", parameters) : "";
+    }
+
+    private static ListBlocksResponse CreateEmptyListBlocksResponse()
+    {
+        return new ListBlocksResponse
+        {
+            Blocks = Array.Empty<BlockSummary>(),
+            Pagination = new PaginationInfo
+            {
+                CurrentPage = 1,
+                PageSize = 20,
+                TotalItems = 0,
+                TotalPages = 0,
+                HasPreviousPage = false,
+                HasNextPage = false
+            },
+            Filters = new BlockFiltersApplied
+            {
+                TotalBlocksInSystem = 0,
+                FilteredBlockCount = 0
+            }
+        };
+    }
+
+    private static BlockStatistics CreateEmptyBlockStatistics()
+    {
+        return new BlockStatistics
+        {
+            TotalBlocks = 0,
+            ValidBlocks = 0,
+            InvalidBlocks = 0,
+            TotalTransactions = 0,
+            AverageBlockSize = 0,
+            AverageTransactionsPerBlock = 0,
+            AverageBlockTime = TimeSpan.Zero,
+            ChainHeight = 0
+        };
     }
 }

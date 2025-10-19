@@ -5,8 +5,53 @@
 @using Consensus.Web.Services
 @inject IJSRuntime JSRuntime
 @inject IBlockExplorerService BlockExplorerService
+@inject NavigationManager Navigation
+@implements IDisposable
 
 <PageTitle>Block Explorer - Consensus Simulator</PageTitle>
+
+<style>
+    .suggestion-item {
+        cursor: pointer;
+        transition: background-color 0.15s ease-in-out;
+    }
+    
+    .suggestion-item:hover {
+        background-color: var(--bs-light) !important;
+    }
+    
+    .suggestion-item:last-child {
+        border-bottom: none !important;
+    }
+
+    .search-suggestions {
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        border-top: none;
+    }
+
+    .filter-badge {
+        font-size: 0.8em;
+    }
+
+    .btn-close-white {
+        filter: brightness(0) invert(1);
+        opacity: 0.7;
+    }
+
+    .btn-close-white:hover {
+        opacity: 1;
+    }
+
+    @@media (max-width: 768px) {
+        .search-suggestions {
+            max-height: 200px;
+        }
+        
+        .advanced-search .row > div {
+            margin-bottom: 0.75rem;
+        }
+    }
+</style>
 
 <div class="container-fluid">
     <div class="row mb-4">
@@ -37,8 +82,8 @@
         <div class="col-md-3">
             <div class="card text-white bg-info">
                 <div class="card-body text-center">
-                    <h3>@statistics.LatestBlockNumber</h3>
-                    <p>Latest Block</p>
+                    <h3>@statistics.ChainHeight</h3>
+                    <p>Chain Height</p>
                 </div>
             </div>
         </div>
@@ -52,21 +97,79 @@
         </div>
     </div>
 
-    <!-- Search and Filters -->
+    <!-- Enhanced Search and Filters -->
     <div class="row mb-4">
         <div class="col-12">
             <div class="card">
+                <div class="card-header">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h6 class="card-title mb-0">
+                            <i class="bi bi-search"></i> Search & Filter Blocks
+                        </h6>
+                        <button class="btn btn-sm btn-outline-primary" @onclick="ToggleAdvancedSearch">
+                            <i class="bi bi-gear"></i> @(showAdvancedSearch ? "Simple" : "Advanced")
+                        </button>
+                    </div>
+                </div>
                 <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="input-group">
-                                <input type="text" class="form-control" placeholder="Search by block hash, number, or transaction ID" @bind="searchQuery">
-                                <button class="btn btn-outline-secondary" type="button" @onclick="SearchBlocks">
-                                    <i class="bi bi-search"></i> Search
-                                </button>
+                    <!-- Quick Search -->
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <div class="input-group position-relative">
+                                <input type="text" 
+                                       class="form-control" 
+                                       placeholder="Search by block hash, number, proposer name, or transaction ID..." 
+                                       @bind="searchQuery" 
+                                       @oninput="OnSearchInput"
+                                       @onkeypress="OnSearchKeyPress"
+                                       autocomplete="off">
+                                
+                                @if (isSearching)
+                                {
+                                    <span class="input-group-text">
+                                        <div class="spinner-border spinner-border-sm" role="status">
+                                            <span class="visually-hidden">Searching...</span>
+                                        </div>
+                                    </span>
+                                }
+                                else
+                                {
+                                    <button class="btn btn-primary" type="button" @onclick="SearchBlocks">
+                                        <i class="bi bi-search"></i> Search
+                                    </button>
+                                }
+                                
+                                @if (!string.IsNullOrEmpty(searchQuery))
+                                {
+                                    <button class="btn btn-outline-secondary" type="button" @onclick="async () => await ClearSearch()">
+                                        <i class="bi bi-x"></i>
+                                    </button>
+                                }
+
+                                <!-- Search Suggestions Dropdown -->
+                                @if (searchSuggestions.Any() && showSuggestions)
+                                {
+                                    <div class="position-absolute top-100 start-0 w-100 bg-white border rounded-bottom shadow-sm" style="z-index: 1050; max-height: 300px; overflow-y: auto;">
+                                        @foreach (var suggestion in searchSuggestions.Take(8))
+                                        {
+                                            <div class="px-3 py-2 border-bottom suggestion-item" @onclick="() => SelectSuggestion(suggestion)">
+                                                <div class="d-flex align-items-center">
+                                                    <i class="bi @GetSuggestionIcon(suggestion.Type) me-2 text-muted"></i>
+                                                    <div>
+                                                        <div class="fw-medium">@suggestion.Title</div>
+                                                        @if (!string.IsNullOrEmpty(suggestion.Subtitle))
+                                                        {
+                                                            <small class="text-muted">@suggestion.Subtitle</small>
+                                                        }
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        }
+                                    </div>
+                                }
                             </div>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <select class="form-select" @onchange="FilterBySimulation">
                                 <option value="">All Simulations</option>
                                 @foreach (var sim in availableSimulations)
@@ -75,15 +178,117 @@
                                 }
                             </select>
                         </div>
-                        <div class="col-md-3">
+                        <div class="col-md-2">
                             <select class="form-select" @onchange="SortBlocks">
                                 <option value="newest">Newest First</option>
                                 <option value="oldest">Oldest First</option>
-                                <option value="number-desc">Block Number (High to Low)</option>
-                                <option value="number-asc">Block Number (Low to High)</option>
+                                <option value="number-desc">Block Number ↓</option>
+                                <option value="number-asc">Block Number ↑</option>
                             </select>
                         </div>
                     </div>
+
+                    <!-- Search History -->
+                    @if (searchHistory.Any())
+                    {
+                        <div class="mb-3">
+                            <small class="text-muted">Recent searches:</small>
+                            <div class="d-flex flex-wrap gap-1 mt-1">
+                                @foreach (var historyItem in searchHistory.Take(5))
+                                {
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="async () => await UseHistorySearch(historyItem)">
+                                        @historyItem
+                                    </button>
+                                }
+                                @if (searchHistory.Count > 5)
+                                {
+                                    <button class="btn btn-sm btn-link p-0" @onclick="ClearSearchHistory">
+                                        <small>Clear all</small>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Advanced Search Filters -->
+                    @if (showAdvancedSearch)
+                    {
+                        <div class="border-top pt-3">
+                            <h6 class="text-muted mb-3">Advanced Filters</h6>
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label class="form-label">Block Number Range</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="number" class="form-control" placeholder="From" @bind="blockNumberFrom">
+                                        <span class="input-group-text">to</span>
+                                        <input type="number" class="form-control" placeholder="To" @bind="blockNumberTo">
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label">Date Range</label>
+                                    <div class="input-group input-group-sm">
+                                        <input type="date" class="form-control" @bind="dateFrom">
+                                        <span class="input-group-text">to</span>
+                                        <input type="date" class="form-control" @bind="dateTo">
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Block Status</label>
+                                    <select class="form-select form-select-sm" @bind="filterBlockStatus">
+                                        <option value="">All</option>
+                                        <option value="valid">Valid Only</option>
+                                        <option value="invalid">Invalid Only</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">Min Transactions</label>
+                                    <input type="number" class="form-control form-control-sm" placeholder="0" @bind="minTransactions" min="0">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label">&nbsp;</label>
+                                    <div>
+                                        <button class="btn btn-sm btn-primary w-100" @onclick="ApplyAdvancedSearch">
+                                            <i class="bi bi-funnel"></i> Apply Filters
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    <!-- Active Filters Display -->
+                    @if (HasActiveFilters())
+                    {
+                        <div class="mt-3 pt-2 border-top">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <small class="text-muted">Active filters:</small>
+                                @if (!string.IsNullOrEmpty(searchQuery))
+                                {
+                                    <span class="badge bg-primary">
+                                        Search: "@searchQuery"
+                                        <button type="button" class="btn-close btn-close-white ms-1" @onclick="ClearSearchFilter"></button>
+                                    </span>
+                                }
+                                @if (selectedSimulationId.HasValue)
+                                {
+                                    <span class="badge bg-info">
+                                        Simulation: @GetSimulationName(selectedSimulationId.Value)
+                                        <button type="button" class="btn-close btn-close-white ms-1" @onclick="ClearSimulationFilter"></button>
+                                    </span>
+                                }
+                                @if (blockNumberFrom.HasValue || blockNumberTo.HasValue)
+                                {
+                                    <span class="badge bg-secondary">
+                                        Block Range: @(blockNumberFrom?.ToString() ?? "Any") - @(blockNumberTo?.ToString() ?? "Any")
+                                        <button type="button" class="btn-close btn-close-white ms-1" @onclick="ClearBlockRangeFilter"></button>
+                                    </span>
+                                }
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="async () => await ClearAllFilters()">
+                                    <i class="bi bi-x-circle"></i> Clear All
+                                </button>
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
         </div>
@@ -168,13 +373,6 @@
                                                 <p class="mb-1">
                                                     <strong>Size:</strong> @(GetBlockSize(block)) KB
                                                 </p>
-                                                @if (!string.IsNullOrEmpty(block.MerkleRoot))
-                                                {
-                                                    <p class="mb-1">
-                                                        <strong>Merkle Root:</strong><br>
-                                                        <small><code>@(block.MerkleRoot.Substring(0, Math.Min(20, block.MerkleRoot.Length)))...</code></small>
-                                                    </p>
-                                                }
                                             </div>
                                         </div>
                                     </div>
@@ -182,7 +380,7 @@
                             </div>
                         }
 
-                        @if (blocksResponse.HasNextPage)
+                        @if (blocksResponse.Pagination.HasNextPage)
                         {
                             <div class="text-center">
                                 <button class="btn btn-outline-primary" @onclick="LoadMoreBlocks">
@@ -208,133 +406,68 @@
     </div>
 </div>
 
-<!-- Block Details Modal -->
-@if (showDetailsModal && selectedBlockDetail != null)
-{
-    <div class="modal fade show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="bi bi-box"></i> Block #@selectedBlockDetail.BlockNumber Details
-                    </h5>
-                    <button type="button" class="btn-close" @onclick="CloseDetailsModal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-md-6">
-                            <h6>Block Information</h6>
-                            <table class="table table-sm">
-                                <tr>
-                                    <td><strong>Block Number:</strong></td>
-                                    <td>@selectedBlockDetail.BlockNumber</td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Hash:</strong></td>
-                                    <td><code class="small">@selectedBlockDetail.Hash</code></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Previous Hash:</strong></td>
-                                    <td><code class="small">@(selectedBlockDetail.PreviousHash ?? "N/A")</code></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Merkle Root:</strong></td>
-                                    <td><code class="small">@(selectedBlockDetail.MerkleRoot ?? "N/A")</code></td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Created:</strong></td>
-                                    <td>@selectedBlockDetail.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss UTC")</td>
-                                </tr>
-                                <tr>
-                                    <td><strong>Status:</strong></td>
-                                    <td>
-                                        @if (selectedBlockDetail.IsValid)
-                                        {
-                                            <span class="badge bg-success">Valid</span>
-                                        }
-                                        else
-                                        {
-                                            <span class="badge bg-danger">Invalid</span>
-                                        }
-                                    </td>
-                                </tr>
-                            </table>
-                        </div>
-                        <div class="col-md-6">
-                            <h6>Proposer Information</h6>
-                            @if (selectedBlockDetail.Proposer != null)
-                            {
-                                <table class="table table-sm">
-                                    <tr>
-                                        <td><strong>Name:</strong></td>
-                                        <td>@selectedBlockDetail.Proposer.Name</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Status:</strong></td>
-                                        <td>@selectedBlockDetail.Proposer.Status</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Power:</strong></td>
-                                        <td>@selectedBlockDetail.Proposer.Power</td>
-                                    </tr>
-                                </table>
-                            }
-                            else
-                            {
-                                <p class="text-muted">No proposer information</p>
-                            }
 
-                            <h6>Simulation Information</h6>
-                            @if (selectedBlockDetail.Simulation != null)
-                            {
-                                <table class="table table-sm">
-                                    <tr>
-                                        <td><strong>Name:</strong></td>
-                                        <td>@selectedBlockDetail.Simulation.Name</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Algorithm:</strong></td>
-                                        <td>@selectedBlockDetail.Simulation.ConsensusAlgorithm</td>
-                                    </tr>
-                                </table>
-                            }
-                            else
-                            {
-                                <p class="text-muted">No simulation information</p>
-                            }
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" @onclick="CloseDetailsModal">Close</button>
-                    <button type="button" class="btn btn-primary" @onclick="() => ViewTransactions(selectedBlockDetail.Id)">
-                        View Transactions
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-}
 
 @code {
-    private ListBlocksResponse blocksResponse = new();
-    private List<BlockSummary> blocks => blocksResponse.Blocks ?? new();
-    private BlockStatistics statistics = new();
+    private ListBlocksResponse blocksResponse = new ListBlocksResponse 
+    { 
+        Blocks = Array.Empty<BlockSummary>(),
+        Pagination = new PaginationInfo
+        {
+            CurrentPage = 1,
+            PageSize = 20,
+            TotalItems = 0,
+            TotalPages = 0,
+            HasPreviousPage = false,
+            HasNextPage = false
+        },
+        Filters = new BlockFiltersApplied
+        {
+            TotalBlocksInSystem = 0,
+            FilteredBlockCount = 0
+        }
+    };
+    private List<BlockSummary> blocks => blocksResponse.Blocks?.ToList() ?? new List<BlockSummary>();
+    private BlockStatistics statistics = new BlockStatistics
+    {
+        TotalBlocks = 0,
+        ValidBlocks = 0,
+        InvalidBlocks = 0,
+        TotalTransactions = 0,
+        AverageBlockSize = 0,
+        AverageTransactionsPerBlock = 0,
+        AverageBlockTime = TimeSpan.Zero,
+        ChainHeight = 0
+    };
     private List<SimulationRun> availableSimulations = new();
 
     // Search and filter state
     private string searchQuery = "";
     private Guid? selectedSimulationId = null;
-    private string sortBy = "CreatedAt";
-    private bool sortDescending = true;
+    private BlockSortField sortBy = BlockSortField.CreatedAt;
+    private SortDirection sortDirection = SortDirection.Descending;
+
+    // Enhanced search functionality
+    private bool showAdvancedSearch = false;
+    private bool isSearching = false;
+    private bool showSuggestions = false;
+    private List<SearchSuggestion> searchSuggestions = new();
+    private List<string> searchHistory = new();
+    private Timer? searchTimer;
+    
+    // Advanced search filters
+    private int? blockNumberFrom;
+    private int? blockNumberTo;
+    private DateTime? dateFrom;
+    private DateTime? dateTo;
+    private string filterBlockStatus = "";
+    private int? minTransactions;
 
     // Pagination
     private int currentPage = 1;
     private int pageSize = 20;
 
-    // Modal state
-    private bool showDetailsModal = false;
-    private BlockDetail? selectedBlockDetail = null;
+    // UI state
     private Guid? selectedBlockId = null;
 
     // Loading state
@@ -344,10 +477,11 @@
     // Statistics properties
     private int totalBlocks => statistics.TotalBlocks;
     private int totalTransactions => statistics.TotalTransactions;
-    private double averageBlockTime => statistics.AverageBlockTime;
+    private double averageBlockTime => statistics.AverageBlockTime.TotalSeconds;
 
     protected override async Task OnInitializedAsync()
     {
+        LoadSearchHistory();
         await LoadBlockchainData();
     }
 
@@ -365,7 +499,7 @@
                 PageSize = pageSize,
                 SimulationId = selectedSimulationId,
                 SortBy = sortBy,
-                SortDescending = sortDescending
+                SortDirection = sortDirection
             };
 
             blocksResponse = await BlockExplorerService.GetBlocksAsync(request);
@@ -414,12 +548,12 @@
     {
         var newSortOrder = e.Value?.ToString() ?? "newest";
         
-        (sortBy, sortDescending) = newSortOrder switch
+        (sortBy, sortDirection) = newSortOrder switch
         {
-            "oldest" => ("CreatedAt", false),
-            "number-desc" => ("BlockNumber", true),
-            "number-asc" => ("BlockNumber", false),
-            _ => ("CreatedAt", true)
+            "oldest" => (BlockSortField.CreatedAt, SortDirection.Ascending),
+            "number-desc" => (BlockSortField.BlockNumber, SortDirection.Descending),
+            "number-asc" => (BlockSortField.BlockNumber, SortDirection.Ascending),
+            _ => (BlockSortField.CreatedAt, SortDirection.Descending)
         };
 
         currentPage = 1; // Reset to first page
@@ -430,6 +564,7 @@
     {
         if (!string.IsNullOrWhiteSpace(searchQuery))
         {
+            AddToSearchHistory(searchQuery);
             currentPage = 1;
             blocksResponse = await BlockExplorerService.SearchBlocksAsync(searchQuery, currentPage, pageSize);
             StateHasChanged();
@@ -438,28 +573,16 @@
         {
             await LoadBlockchainData();
         }
+        
+        showSuggestions = false;
     }
 
-    private async Task ViewBlockDetails(Guid blockId)
+    private void ViewBlockDetails(Guid blockId)
     {
-        try
-        {
-            selectedBlockDetail = await BlockExplorerService.GetBlockDetailAsync(blockId);
-            selectedBlockId = blockId;
-            showDetailsModal = true;
-        }
-        catch (Exception ex)
-        {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error loading block details: {ex.Message}");
-        }
+        Navigation.NavigateTo($"/blocks/{blockId}");
     }
 
-    private void CloseDetailsModal()
-    {
-        showDetailsModal = false;
-        selectedBlockDetail = null;
-        selectedBlockId = null;
-    }
+
 
     private async Task ViewTransactions(Guid blockId)
     {
@@ -478,15 +601,21 @@
                 PageSize = pageSize,
                 SimulationId = selectedSimulationId,
                 SortBy = sortBy,
-                SortDescending = sortDescending
+                SortDirection = sortDirection
             };
 
             var moreBlocks = await BlockExplorerService.GetBlocksAsync(request);
             
             if (moreBlocks.Blocks?.Any() == true)
             {
-                blocksResponse.Blocks ??= new List<BlockSummary>();
-                blocksResponse.Blocks.AddRange(moreBlocks.Blocks);
+                var combinedBlocks = blocksResponse.Blocks.ToList();
+                combinedBlocks.AddRange(moreBlocks.Blocks);
+                
+                blocksResponse = blocksResponse with 
+                { 
+                    Blocks = combinedBlocks,
+                    Pagination = moreBlocks.Pagination
+                };
                 StateHasChanged();
             }
         }
@@ -512,5 +641,285 @@
     {
         // This should be moved to the API and included in BlockSummary
         return Math.Round(1.2 + (block.BlockNumber * 0.1), 1);
+    }
+
+    // Enhanced Search Methods
+    private async Task OnSearchInput(ChangeEventArgs e)
+    {
+        searchQuery = e.Value?.ToString() ?? "";
+        
+        // Reset timer for debounced search
+        searchTimer?.Dispose();
+        
+        if (string.IsNullOrWhiteSpace(searchQuery))
+        {
+            showSuggestions = false;
+            searchSuggestions.Clear();
+            return;
+        }
+
+        // Start new timer for search suggestions
+        searchTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(async () =>
+            {
+                await GenerateSearchSuggestions();
+                StateHasChanged();
+            });
+        }, null, TimeSpan.FromMilliseconds(300), Timeout.InfiniteTimeSpan);
+    }
+
+    private async Task OnSearchKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            showSuggestions = false;
+            await SearchBlocks();
+        }
+        else if (e.Key == "Escape")
+        {
+            showSuggestions = false;
+        }
+    }
+
+    private async Task GenerateSearchSuggestions()
+    {
+        if (string.IsNullOrWhiteSpace(searchQuery) || searchQuery.Length < 2)
+        {
+            searchSuggestions.Clear();
+            showSuggestions = false;
+            return;
+        }
+
+        try
+        {
+            isSearching = true;
+            searchSuggestions.Clear();
+
+            // Generate suggestions based on query type
+            var query = searchQuery.Trim().ToLower();
+
+            // Check if it's a block number
+            if (int.TryParse(query, out int blockNumber))
+            {
+                searchSuggestions.Add(new SearchSuggestion
+                {
+                    Type = "block-number",
+                    Title = $"Block #{blockNumber}",
+                    Subtitle = "Search by block number",
+                    Value = blockNumber.ToString()
+                });
+            }
+
+            // Check if it looks like a hash (hexadecimal)
+            if (query.All(c => char.IsDigit(c) || (c >= 'a' && c <= 'f')) && query.Length >= 8)
+            {
+                searchSuggestions.Add(new SearchSuggestion
+                {
+                    Type = "hash",
+                    Title = $"Hash: {query.ToUpper()}",
+                    Subtitle = "Search by block or transaction hash",
+                    Value = query
+                });
+            }
+
+            // Add simulation name suggestions
+            var matchingSimulations = availableSimulations
+                .Where(s => s.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .Take(3);
+
+            foreach (var sim in matchingSimulations)
+            {
+                searchSuggestions.Add(new SearchSuggestion
+                {
+                    Type = "simulation",
+                    Title = sim.Name,
+                    Subtitle = $"Filter by simulation ({sim.ConsensusAlgorithm})",
+                    Value = sim.Id.ToString()
+                });
+            }
+
+            // Add proposer name suggestions (if we have recent blocks)
+            var recentProposers = blocks
+                .Where(b => !string.IsNullOrEmpty(b.ProposerName) && 
+                           b.ProposerName.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .Select(b => b.ProposerName)
+                .Distinct()
+                .Take(2);
+
+            foreach (var proposer in recentProposers)
+            {
+                searchSuggestions.Add(new SearchSuggestion
+                {
+                    Type = "proposer",
+                    Title = proposer!,
+                    Subtitle = "Search by block proposer",
+                    Value = proposer!
+                });
+            }
+
+            showSuggestions = searchSuggestions.Any();
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private async Task SelectSuggestion(SearchSuggestion suggestion)
+    {
+        showSuggestions = false;
+        
+        switch (suggestion.Type)
+        {
+            case "simulation":
+                if (Guid.TryParse(suggestion.Value, out var simId))
+                {
+                    selectedSimulationId = simId;
+                    searchQuery = "";
+                }
+                break;
+            default:
+                searchQuery = suggestion.Value;
+                break;
+        }
+
+        await SearchBlocks();
+    }
+
+    private string GetSuggestionIcon(string type) => type switch
+    {
+        "block-number" => "bi-hash",
+        "hash" => "bi-fingerprint",
+        "simulation" => "bi-diagram-3",
+        "proposer" => "bi-person",
+        _ => "bi-search"
+    };
+
+    private void AddToSearchHistory(string query)
+    {
+        searchHistory.Remove(query); // Remove if exists
+        searchHistory.Insert(0, query); // Add to beginning
+        
+        if (searchHistory.Count > 10)
+        {
+            searchHistory = searchHistory.Take(10).ToList();
+        }
+
+        SaveSearchHistory();
+    }
+
+    private void LoadSearchHistory()
+    {
+        // In a real app, you'd load from localStorage or user preferences
+        // For now, we'll just initialize empty
+        searchHistory = new List<string>();
+    }
+
+    private void SaveSearchHistory()
+    {
+        // In a real app, you'd save to localStorage or user preferences
+        // For now, this is just a placeholder
+    }
+
+    private async Task UseHistorySearch(string historyQuery)
+    {
+        searchQuery = historyQuery;
+        await SearchBlocks();
+    }
+
+    private void ClearSearchHistory()
+    {
+        searchHistory.Clear();
+        SaveSearchHistory();
+    }
+
+    private async Task ClearSearch()
+    {
+        searchQuery = "";
+        showSuggestions = false;
+        await SearchBlocks();
+    }
+
+    private void ToggleAdvancedSearch()
+    {
+        showAdvancedSearch = !showAdvancedSearch;
+    }
+
+    private async Task ApplyAdvancedSearch()
+    {
+        // TODO: Implement advanced search filters in the API call
+        // For now, just reload with current search query
+        currentPage = 1;
+        await LoadBlockchainData();
+    }
+
+    private bool HasActiveFilters()
+    {
+        return !string.IsNullOrEmpty(searchQuery) ||
+               selectedSimulationId.HasValue ||
+               blockNumberFrom.HasValue ||
+               blockNumberTo.HasValue ||
+               dateFrom.HasValue ||
+               dateTo.HasValue ||
+               !string.IsNullOrEmpty(filterBlockStatus) ||
+               minTransactions.HasValue;
+    }
+
+    private async Task ClearFilter(string filterType)
+    {
+        switch (filterType)
+        {
+            case "search":
+                searchQuery = "";
+                break;
+            case "simulation":
+                selectedSimulationId = null;
+                break;
+            case "blockrange":
+                blockNumberFrom = null;
+                blockNumberTo = null;
+                break;
+        }
+        
+        await SearchBlocks();
+    }
+
+    private async Task ClearAllFilters()
+    {
+        searchQuery = "";
+        selectedSimulationId = null;
+        blockNumberFrom = null;
+        blockNumberTo = null;
+        dateFrom = null;
+        dateTo = null;
+        filterBlockStatus = "";
+        minTransactions = null;
+        
+        await SearchBlocks();
+    }
+
+    private string GetSimulationName(Guid simulationId)
+    {
+        return availableSimulations.FirstOrDefault(s => s.Id == simulationId)?.Name ?? "Unknown";
+    }
+
+    // Search suggestion model
+    private class SearchSuggestion
+    {
+        public string Type { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string Subtitle { get; set; } = "";
+        public string Value { get; set; } = "";
+    }
+
+    // Helper methods for filter clearing
+    private async Task ClearSearchFilter() => await ClearFilter("search");
+    private async Task ClearSimulationFilter() => await ClearFilter("simulation");
+    private async Task ClearBlockRangeFilter() => await ClearFilter("blockrange");
+
+    public void Dispose()
+    {
+        searchTimer?.Dispose();
     }
 }
