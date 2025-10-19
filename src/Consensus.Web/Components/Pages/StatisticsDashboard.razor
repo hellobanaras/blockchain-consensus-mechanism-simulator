@@ -1,0 +1,452 @@
+@page "/statistics"
+@using Consensus.Core.Models
+@using Consensus.Core.Enums
+@using Consensus.Web.Services
+@inject IBlockExplorerService BlockExplorerService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+
+<PageTitle>Statistics Dashboard - Consensus Simulator</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1><i class="bi bi-graph-up"></i> Statistics Dashboard</h1>
+            <p class="text-muted">Comprehensive blockchain analytics and performance metrics</p>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="row">
+            <div class="col-12 text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading blockchain statistics...</p>
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="row">
+            <div class="col-12">
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-triangle"></i> Error loading statistics: @errorMessage
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Summary Cards -->
+        <div class="row mb-4">
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-0">Total Blocks</h5>
+                                <h2 class="mb-0">@statistics.TotalBlocks.ToString("N0")</h2>
+                            </div>
+                            <div class="ms-3">
+                                <i class="bi bi-grid-3x3-gap fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-0">Chain Height</h5>
+                                <h2 class="mb-0">@statistics.ChainHeight.ToString("N0")</h2>
+                            </div>
+                            <div class="ms-3">
+                                <i class="bi bi-layers fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-0">Total Transactions</h5>
+                                <h2 class="mb-0">@statistics.TotalTransactions.ToString("N0")</h2>
+                            </div>
+                            <div class="ms-3">
+                                <i class="bi bi-arrow-left-right fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-warning text-white">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-0">Avg Block Time</h5>
+                                <h2 class="mb-0">@(statistics.AverageBlockTime.TotalSeconds.ToString("F1"))s</h2>
+                            </div>
+                            <div class="ms-3">
+                                <i class="bi bi-clock fs-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Detailed Statistics -->
+        <div class="row mb-4">
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0"><i class="bi bi-pie-chart"></i> Block Validation</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h3 class="text-success">@statistics.ValidBlocks</h3>
+                                    <p class="text-muted mb-0">Valid Blocks</p>
+                                    <small class="text-success">@((statistics.TotalBlocks > 0 ? (double)statistics.ValidBlocks / statistics.TotalBlocks * 100 : 0).ToString("F1"))%</small>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-center">
+                                    <h3 class="text-danger">@statistics.InvalidBlocks</h3>
+                                    <p class="text-muted mb-0">Invalid Blocks</p>
+                                    <small class="text-danger">@((statistics.TotalBlocks > 0 ? (double)statistics.InvalidBlocks / statistics.TotalBlocks * 100 : 0).ToString("F1"))%</small>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        @if (statistics.TotalBlocks > 0)
+                        {
+                            <div class="progress mt-3" style="height: 8px;">
+                                <div class="progress-bar bg-success" 
+                                     style="width: @((double)statistics.ValidBlocks / statistics.TotalBlocks * 100)%"></div>
+                                <div class="progress-bar bg-danger" 
+                                     style="width: @((double)statistics.InvalidBlocks / statistics.TotalBlocks * 100)%"></div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6 mb-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0"><i class="bi bi-bar-chart"></i> Performance Metrics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-3">
+                            <div class="col-sm-8">
+                                <strong>Average Block Size</strong>
+                            </div>
+                            <div class="col-sm-4 text-end">
+                                @(statistics.AverageBlockSize.ToString("F2")) KB
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-sm-8">
+                                <strong>Avg Transactions per Block</strong>
+                            </div>
+                            <div class="col-sm-4 text-end">
+                                @statistics.AverageTransactionsPerBlock.ToString("F1")
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-sm-8">
+                                <strong>Chain Duration</strong>
+                            </div>
+                            <div class="col-sm-4 text-end">
+                                @if (statistics.ChainDuration.HasValue)
+                                {
+                                    @FormatDuration(statistics.ChainDuration.Value)
+                                }
+                                else
+                                {
+                                    <span class="text-muted">N/A</span>
+                                }
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-sm-8">
+                                <strong>Latest Block Time</strong>
+                            </div>
+                            <div class="col-sm-4 text-end">
+                                @if (statistics.LatestBlockTime.HasValue)
+                                {
+                                    @statistics.LatestBlockTime.Value.ToString("HH:mm:ss")
+                                }
+                                else
+                                {
+                                    <span class="text-muted">N/A</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Simulation Health -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="card-title mb-0"><i class="bi bi-heart-pulse"></i> Blockchain Health Overview</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-lg-4 mb-3">
+                                <div class="d-flex align-items-center">
+                                    <div class="me-3">
+                                        @if (GetValidationRate() > 95)
+                                        {
+                                            <i class="bi bi-check-circle-fill text-success fs-3"></i>
+                                        }
+                                        else if (GetValidationRate() > 90)
+                                        {
+                                            <i class="bi bi-exclamation-triangle-fill text-warning fs-3"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-x-circle-fill text-danger fs-3"></i>
+                                        }
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-0">Validation Rate</h6>
+                                        <p class="mb-0 text-muted">@GetValidationRate().ToString("F1")%</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-lg-4 mb-3">
+                                <div class="d-flex align-items-center">
+                                    <div class="me-3">
+                                        @if (statistics.AverageBlockTime.TotalSeconds < 10)
+                                        {
+                                            <i class="bi bi-lightning-fill text-success fs-3"></i>
+                                        }
+                                        else if (statistics.AverageBlockTime.TotalSeconds < 30)
+                                        {
+                                            <i class="bi bi-speedometer2 text-warning fs-3"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-hourglass-split text-danger fs-3"></i>
+                                        }
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-0">Block Speed</h6>
+                                        <p class="mb-0 text-muted">@GetSpeedDescription()</p>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div class="col-lg-4 mb-3">
+                                <div class="d-flex align-items-center">
+                                    <div class="me-3">
+                                        @if (statistics.TotalTransactions > 1000)
+                                        {
+                                            <i class="bi bi-graph-up text-success fs-3"></i>
+                                        }
+                                        else if (statistics.TotalTransactions > 100)
+                                        {
+                                            <i class="bi bi-graph-up text-warning fs-3"></i>
+                                        }
+                                        else
+                                        {
+                                            <i class="bi bi-graph-down text-muted fs-3"></i>
+                                        }
+                                    </div>
+                                    <div>
+                                        <h6 class="mb-0">Transaction Volume</h6>
+                                        <p class="mb-0 text-muted">@GetVolumeDescription()</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-body text-center">
+                        <h6 class="card-title">Quick Actions</h6>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-primary" @onclick="RefreshStatistics">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                            <button type="button" class="btn btn-outline-info" @onclick="ViewBlocks">
+                                <i class="bi bi-grid-3x3-gap"></i> View Blocks
+                            </button>
+                            <button type="button" class="btn btn-outline-success" @onclick="ExportStatistics">
+                                <i class="bi bi-download"></i> Export
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private bool isLoading = true;
+    private string? errorMessage = null;
+    private BlockStatistics statistics = new BlockStatistics
+    {
+        TotalBlocks = 0,
+        ValidBlocks = 0,
+        InvalidBlocks = 0,
+        TotalTransactions = 0,
+        AverageBlockSize = 0,
+        AverageTransactionsPerBlock = 0,
+        AverageBlockTime = TimeSpan.Zero,
+        ChainHeight = 0
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadStatistics();
+    }
+
+    private async Task LoadStatistics()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            
+            statistics = await BlockExplorerService.GetBlockStatisticsAsync();
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshStatistics()
+    {
+        await LoadStatistics();
+    }
+
+    private void ViewBlocks()
+    {
+        Navigation.NavigateTo("/blocks");
+    }
+
+    private async Task ExportStatistics()
+    {
+        try
+        {
+            var exportData = new
+            {
+                exportDate = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss UTC"),
+                statistics = new
+                {
+                    statistics.TotalBlocks,
+                    statistics.ValidBlocks,
+                    statistics.InvalidBlocks,
+                    statistics.TotalTransactions,
+                    statistics.AverageBlockSize,
+                    statistics.AverageTransactionsPerBlock,
+                    AverageBlockTimeSeconds = statistics.AverageBlockTime.TotalSeconds,
+                    statistics.ChainHeight,
+                    ValidationRate = GetValidationRate(),
+                    FirstBlockTime = statistics.FirstBlockTime?.ToString("yyyy-MM-dd HH:mm:ss UTC"),
+                    LatestBlockTime = statistics.LatestBlockTime?.ToString("yyyy-MM-dd HH:mm:ss UTC"),
+                    ChainDurationMinutes = statistics.ChainDuration?.TotalMinutes
+                }
+            };
+
+            var json = System.Text.Json.JsonSerializer.Serialize(exportData, new System.Text.Json.JsonSerializerOptions 
+            { 
+                WriteIndented = true 
+            });
+            
+            var fileName = $"blockchain-statistics-{DateTime.UtcNow:yyyyMMdd-HHmmss}.json";
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, "application/json", json);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error exporting statistics: {ex.Message}");
+        }
+    }
+
+    private double GetValidationRate()
+    {
+        if (statistics.TotalBlocks == 0) return 0;
+        return (double)statistics.ValidBlocks / statistics.TotalBlocks * 100;
+    }
+
+    private string GetSpeedDescription()
+    {
+        var seconds = statistics.AverageBlockTime.TotalSeconds;
+        return seconds switch
+        {
+            var s when s < 5 => "Very Fast",
+            var s when s < 10 => "Fast", 
+            var s when s < 30 => "Normal",
+            var s when s < 60 => "Slow",
+            _ => "Very Slow"
+        };
+    }
+
+    private string GetVolumeDescription()
+    {
+        return statistics.TotalTransactions switch
+        {
+            > 10000 => "Very High",
+            > 1000 => "High",
+            > 100 => "Medium",
+            > 10 => "Low",
+            _ => "Very Low"
+        };
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalDays >= 1)
+            return $"{duration.Days}d {duration.Hours}h";
+        if (duration.TotalHours >= 1)
+            return $"{duration.Hours}h {duration.Minutes}m";
+        if (duration.TotalMinutes >= 1)
+            return $"{duration.Minutes}m {duration.Seconds}s";
+        return $"{duration.Seconds}s";
+    }
+}
+
+<script>
+    window.downloadFile = (filename, contentType, content) => {
+        const a = document.createElement('a');
+        const file = new Blob([content], { type: contentType });
+        a.href = URL.createObjectURL(file);
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    };
+</script>
