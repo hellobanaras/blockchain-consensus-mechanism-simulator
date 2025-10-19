@@ -1,7 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using Consensus.Core.Enums;
 
-namespace Consensus.Data.Models;
+namespace Consensus.Core.Models;
 
 /// <summary>
 /// Summary representation of a block for list views
