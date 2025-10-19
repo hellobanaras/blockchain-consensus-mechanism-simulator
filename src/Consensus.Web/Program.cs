@@ -106,6 +106,13 @@ builder.Services.AddScoped<Consensus.Core.Repositories.IBlockRepository, Consens
 builder.Services.AddScoped<Consensus.Core.Repositories.IConsensusRoundRepository, Consensus.Data.Repositories.ConsensusRoundRepository>();
 builder.Services.AddScoped<Consensus.Core.Repositories.IEventLogRepository, Consensus.Data.Repositories.EventLogRepository>();
 
+// Register HTTP client for Block Explorer API
+builder.Services.AddHttpClient<IBlockExplorerService, BlockExplorerService>(client =>
+{
+    client.BaseAddress = new Uri("http://localhost:5101/");
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
 // Register SimContext as a factory since it's instantiated per simulation
 // SimContext requires simulation-specific parameters, so it will be created manually when needed
 // builder.Services.AddTransient<SimContext>(); // Commented out - created manually per simulation
