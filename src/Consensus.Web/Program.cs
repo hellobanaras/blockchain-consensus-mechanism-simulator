@@ -5,6 +5,7 @@ using Consensus.Web.Middleware;
 using Consensus.Data;
 using Consensus.Core.Interfaces;
 using Consensus.Core.Services;
+using Consensus.Core.Services.Payloads;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Serilog.Events;
@@ -94,8 +95,8 @@ builder.Services.AddAuthorization(options =>
 });
 
 // Register core services and interfaces
-// TODO: Implement actual services in future phases
-// builder.Services.AddScoped<ISimulationService, SimulationService>();
+builder.Services.AddScoped<Consensus.Core.Interfaces.ISimulationService, SimulationService>();
+// TODO: Implement additional services in future phases
 // builder.Services.AddScoped<IBlockValidator, BlockValidator>();
 // builder.Services.AddScoped<IConsensusProtocol, PoetProtocol>();
 
@@ -108,6 +109,11 @@ builder.Services.AddScoped<Consensus.Core.Repositories.IEventLogRepository, Cons
 
 // Register analytics service
 builder.Services.AddScoped<Consensus.Core.Services.IAnalyticsService, Consensus.Core.Services.AnalyticsService>();
+
+// Register payload services
+builder.Services.AddScoped<Consensus.Core.Services.Payloads.ISupplyChainService, Consensus.Core.Services.Payloads.SupplyChainService>();
+builder.Services.AddScoped<Consensus.Core.Services.Payloads.IFederatedLearningService, Consensus.Core.Services.Payloads.FederatedLearningService>();
+builder.Services.AddScoped<Consensus.Core.Services.IPayloadService, Consensus.Core.Services.PayloadService>();
 
 // Register Chart.js service for interactive charts
 builder.Services.AddScoped<ChartJsService>();

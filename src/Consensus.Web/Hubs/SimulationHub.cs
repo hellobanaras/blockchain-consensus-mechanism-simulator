@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.SignalR;
-using Consensus.Core.Services;
+using Consensus.Core.Interfaces;
+using Consensus.Core.Models;
 using Consensus.Web.Models;
 using Consensus.Core.Enums;
 

@@ -2,7 +2,8 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.SignalR;
-using Consensus.Core.Services;
+using Consensus.Core.Interfaces;
+using Consensus.Core.Models;
 using Consensus.Web.Hubs;
 using Consensus.Web.Models;
 using Consensus.Core.Enums;
@@ -209,7 +210,7 @@ public class SimulationHostedService : BackgroundService
         };
     }
 
-    private Models.SimulationMetrics CreateSimulationMetrics(Core.Services.SimulationMetrics? coreMetrics)
+    private Models.SimulationMetrics CreateSimulationMetrics(Core.Models.SimulationMetrics? coreMetrics)
     {
         if (coreMetrics == null)
         {

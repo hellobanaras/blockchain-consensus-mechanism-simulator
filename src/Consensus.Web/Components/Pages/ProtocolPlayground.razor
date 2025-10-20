@@ -1,0 +1,541 @@
+@page "/playground"
+@using Consensus.Core.Enums
+@using Consensus.Core.Models
+@using Consensus.Web.Models
+@inject IJSRuntime JSRuntime
+@inject ILogger<ProtocolPlayground> Logger
+
+<PageTitle>Protocol Playground - Consensus Simulator</PageTitle>
+
+<div class="container-fluid p-4">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="h2 mb-0">
+                        <i class="bi bi-gear-fill text-primary me-2"></i>
+                        Protocol Playground
+                    </h1>
+                    <p class="text-muted mb-0">Configure and test consensus protocol parameters</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-secondary" @onclick="LoadPreset">
+                        <i class="bi bi-folder-open me-1"></i>
+                        Load Preset
+                    </button>
+                    <button class="btn btn-outline-primary" @onclick="SavePreset">
+                        <i class="bi bi-save me-1"></i>
+                        Save Preset
+                    </button>
+                    <button class="btn btn-success" @onclick="TestConfiguration">
+                        <i class="bi bi-play-circle me-1"></i>
+                        Test Configuration
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <!-- Protocol Selection -->
+        <div class="col-lg-3 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-transparent border-0 pt-3">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-list-ul text-primary me-2"></i>
+                        Protocol Selection
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <label for="protocolSelect" class="form-label">Consensus Algorithm</label>
+                        <select id="protocolSelect" class="form-select" @bind="selectedProtocol" @bind:after="OnProtocolChanged">
+                            @foreach (var protocol in Enum.GetValues<ConsensusAlgorithm>())
+                            {
+                                <option value="@protocol">@GetProtocolDisplayName(protocol)</option>
+                            }
+                        </select>
+                    </div>
+                    
+                    <div class="alert alert-info">
+                        <small>
+                            <strong>@GetProtocolDisplayName(selectedProtocol)</strong><br/>
+                            @GetProtocolDescription(selectedProtocol)
+                        </small>
+                    </div>
+
+                    <!-- Quick Presets -->
+                    <div class="mt-4">
+                        <h6>Quick Presets</h6>
+                        <div class="d-grid gap-2">
+                            <button class="btn btn-outline-primary btn-sm" @onclick="@(() => LoadQuickPreset("Default"))">
+                                Default Settings
+                            </button>
+                            <button class="btn btn-outline-success btn-sm" @onclick="@(() => LoadQuickPreset("HighThroughput"))">
+                                High Throughput
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" @onclick="@(() => LoadQuickPreset("FaultTolerant"))">
+                                Fault Tolerant
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Parameter Configuration -->
+        <div class="col-lg-6 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-transparent border-0 pt-3">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-sliders text-primary me-2"></i>
+                        Parameter Configuration
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Common Parameters -->
+                    <div class="mb-4">
+                        <h6 class="text-muted">Common Parameters</h6>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="nodeCount" class="form-label">Node Count</label>
+                                <input type="number" id="nodeCount" class="form-control" @bind="configuration.NodeCount" 
+                                       min="3" max="100" @bind:after="ValidateConfiguration" />
+                                <small class="form-text text-muted">Number of participating nodes (3-100)</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="byzantineNodes" class="form-label">Byzantine Nodes</label>
+                                <input type="number" id="byzantineNodes" class="form-control" @bind="configuration.ByzantineNodeCount" 
+                                       min="0" max="@GetMaxByzantineNodes()" @bind:after="ValidateConfiguration" />
+                                <small class="form-text text-muted">Faulty nodes (max @GetMaxByzantineNodes())</small>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label for="blockTime" class="form-label">Block Time (ms)</label>
+                                <input type="number" id="blockTime" class="form-control" @bind="configuration.BlockTimeMs" 
+                                       min="100" max="10000" step="100" @bind:after="ValidateConfiguration" />
+                                <small class="form-text text-muted">Time between blocks (100-10000ms)</small>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label for="networkLatency" class="form-label">Network Latency (ms)</label>
+                                <input type="number" id="networkLatency" class="form-control" @bind="configuration.NetworkLatencyMs" 
+                                       min="1" max="1000" @bind:after="ValidateConfiguration" />
+                                <small class="form-text text-muted">Network communication delay</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Protocol-Specific Parameters -->
+                    <div class="mb-4">
+                        <h6 class="text-muted">@GetProtocolDisplayName(selectedProtocol) Specific Parameters</h6>
+                        @switch (selectedProtocol)
+                        {
+                            case ConsensusAlgorithm.ProofOfElapsedTime:
+                                @RenderPoETParameters()
+                                break;
+                            case ConsensusAlgorithm.ProofOfWork:
+                                @RenderPoWParameters()
+                                break;
+                            case ConsensusAlgorithm.ProofOfStake:
+                                @RenderPoSParameters()
+                                break;
+                            default:
+                                <div class="alert alert-info">
+                                    <small>No specific parameters for this protocol yet.</small>
+                                </div>
+                                break;
+                        }
+                    </div>
+
+                    <!-- Validation Messages -->
+                    @if (validationErrors.Any())
+                    {
+                        <div class="alert alert-danger">
+                            <h6>Configuration Issues:</h6>
+                            <ul class="mb-0">
+                                @foreach (var error in validationErrors)
+                                {
+                                    <li>@error</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Preview & Testing -->
+        <div class="col-lg-3 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-transparent border-0 pt-3">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-eye text-primary me-2"></i>
+                        Preview & Testing
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Configuration Summary -->
+                    <div class="mb-3">
+                        <h6>Configuration Summary</h6>
+                        <div class="bg-light p-3 rounded">
+                            <small>
+                                <strong>Protocol:</strong> @GetProtocolDisplayName(selectedProtocol)<br/>
+                                <strong>Nodes:</strong> @configuration.NodeCount (@configuration.ByzantineNodeCount faulty)<br/>
+                                <strong>Block Time:</strong> @configuration.BlockTimeMs ms<br/>
+                                <strong>Network Latency:</strong> @configuration.NetworkLatencyMs ms<br/>
+                                <strong>Fault Tolerance:</strong> @GetFaultTolerancePercentage()%
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Performance Estimation -->
+                    <div class="mb-3">
+                        <h6>Performance Estimation</h6>
+                        <div class="bg-light p-3 rounded">
+                            <small>
+                                <strong>Est. TPS:</strong> @GetEstimatedTPS()<br/>
+                                <strong>Est. Finality:</strong> @GetEstimatedFinality() ms<br/>
+                                <strong>Security Level:</strong> @GetSecurityLevel()
+                            </small>
+                        </div>
+                    </div>
+
+                    <!-- Test Button -->
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary" @onclick="TestConfiguration" disabled="@(!IsConfigurationValid())">
+                            <i class="bi bi-play-circle me-1"></i>
+                            Run Test Simulation
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="ResetToDefaults">
+                            <i class="bi bi-arrow-clockwise me-1"></i>
+                            Reset to Defaults
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private ConsensusAlgorithm selectedProtocol = ConsensusAlgorithm.ProofOfElapsedTime;
+    private ProtocolConfiguration configuration = new();
+    private List<string> validationErrors = new();
+
+    protected override void OnInitialized()
+    {
+        ResetToDefaults();
+    }
+
+    private void OnProtocolChanged()
+    {
+        LoadProtocolDefaults();
+        ValidateConfiguration();
+    }
+
+    private void LoadProtocolDefaults()
+    {
+        // Load default parameters for the selected protocol
+        configuration = selectedProtocol switch
+        {
+            ConsensusAlgorithm.ProofOfElapsedTime => new ProtocolConfiguration
+            {
+                NodeCount = 10,
+                ByzantineNodeCount = 2,
+                BlockTimeMs = 2000,
+                NetworkLatencyMs = 50,
+                AlgorithmConfiguration = new Dictionary<string, object>
+                {
+                    ["WaitTimeMultiplier"] = 2.0,
+                    ["MinWaitTime"] = 1000,
+                    ["MaxWaitTime"] = 10000
+                }
+            },
+            ConsensusAlgorithm.ProofOfWork => new ProtocolConfiguration
+            {
+                NodeCount = 10,
+                ByzantineNodeCount = 4,
+                BlockTimeMs = 10000,
+                NetworkLatencyMs = 100,
+                AlgorithmConfiguration = new Dictionary<string, object>
+                {
+                    ["Difficulty"] = 4,
+                    ["TargetBlockTime"] = 10000
+                }
+            },
+            ConsensusAlgorithm.ProofOfStake => new ProtocolConfiguration
+            {
+                NodeCount = 21,
+                ByzantineNodeCount = 6,
+                BlockTimeMs = 3000,
+                NetworkLatencyMs = 75,
+                AlgorithmConfiguration = new Dictionary<string, object>
+                {
+                    ["MinStake"] = 1000,
+                    ["StakingReward"] = 10
+                }
+            },
+            _ => new ProtocolConfiguration { NodeCount = 10, ByzantineNodeCount = 2, BlockTimeMs = 2000, NetworkLatencyMs = 50 }
+        };
+    }
+
+    private RenderFragment RenderPoETParameters() => @<div>
+        <div class="row">
+            <div class="col-12 mb-3">
+                <label for="waitTimeMultiplier" class="form-label">Wait Time Multiplier</label>
+                <input type="number" id="waitTimeMultiplier" class="form-control" 
+                       value="@GetAlgorithmParameter("WaitTimeMultiplier", 2.0)" 
+                       @onchange="@(e => SetAlgorithmParameter("WaitTimeMultiplier", double.Parse(e.Value?.ToString() ?? "2.0")))"
+                       min="1.0" max="5.0" step="0.1" />
+                <small class="form-text text-muted">Multiplier for wait time calculation</small>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="minWaitTime" class="form-label">Min Wait Time (ms)</label>
+                <input type="number" id="minWaitTime" class="form-control" 
+                       value="@GetAlgorithmParameter("MinWaitTime", 1000)" 
+                       @onchange="@(e => SetAlgorithmParameter("MinWaitTime", int.Parse(e.Value?.ToString() ?? "1000")))"
+                       min="100" max="5000" />
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="maxWaitTime" class="form-label">Max Wait Time (ms)</label>
+                <input type="number" id="maxWaitTime" class="form-control" 
+                       value="@GetAlgorithmParameter("MaxWaitTime", 10000)" 
+                       @onchange="@(e => SetAlgorithmParameter("MaxWaitTime", int.Parse(e.Value?.ToString() ?? "10000")))"
+                       min="1000" max="30000" />
+            </div>
+        </div>
+    </div>;
+
+    private RenderFragment RenderPoWParameters() => @<div>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="difficulty" class="form-label">Difficulty</label>
+                <input type="number" id="difficulty" class="form-control" 
+                       value="@GetAlgorithmParameter("Difficulty", 4)" 
+                       @onchange="@(e => SetAlgorithmParameter("Difficulty", int.Parse(e.Value?.ToString() ?? "4")))"
+                       min="1" max="8" />
+                <small class="form-text text-muted">Mining difficulty level</small>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="targetBlockTime" class="form-label">Target Block Time (ms)</label>
+                <input type="number" id="targetBlockTime" class="form-control" 
+                       value="@GetAlgorithmParameter("TargetBlockTime", 10000)" 
+                       @onchange="@(e => SetAlgorithmParameter("TargetBlockTime", int.Parse(e.Value?.ToString() ?? "10000")))"
+                       min="1000" max="60000" />
+            </div>
+        </div>
+    </div>;
+
+    private RenderFragment RenderPoSParameters() => @<div>
+        <div class="row">
+            <div class="col-md-6 mb-3">
+                <label for="minStake" class="form-label">Minimum Stake</label>
+                <input type="number" id="minStake" class="form-control" 
+                       value="@GetAlgorithmParameter("MinStake", 1000)" 
+                       @onchange="@(e => SetAlgorithmParameter("MinStake", int.Parse(e.Value?.ToString() ?? "1000")))"
+                       min="100" max="10000" />
+                <small class="form-text text-muted">Minimum stake to participate</small>
+            </div>
+            <div class="col-md-6 mb-3">
+                <label for="stakingReward" class="form-label">Staking Reward</label>
+                <input type="number" id="stakingReward" class="form-control" 
+                       value="@GetAlgorithmParameter("StakingReward", 10)" 
+                       @onchange="@(e => SetAlgorithmParameter("StakingReward", int.Parse(e.Value?.ToString() ?? "10")))"
+                       min="1" max="100" />
+            </div>
+        </div>
+    </div>;
+
+    private T GetAlgorithmParameter<T>(string key, T defaultValue)
+    {
+        return configuration.AlgorithmConfiguration.TryGetValue(key, out var value) && value is T typedValue 
+            ? typedValue 
+            : defaultValue;
+    }
+
+    private void SetAlgorithmParameter(string key, object value)
+    {
+        configuration.AlgorithmConfiguration[key] = value;
+        ValidateConfiguration();
+    }
+
+    private void ValidateConfiguration()
+    {
+        validationErrors.Clear();
+
+        if (configuration.NodeCount < 3)
+            validationErrors.Add("Node count must be at least 3");
+
+        if (configuration.ByzantineNodeCount > GetMaxByzantineNodes())
+            validationErrors.Add($"Byzantine nodes cannot exceed {GetMaxByzantineNodes()}");
+
+        if (configuration.BlockTimeMs < 100)
+            validationErrors.Add("Block time must be at least 100ms");
+
+        if (configuration.NetworkLatencyMs < 1)
+            validationErrors.Add("Network latency must be at least 1ms");
+
+        // Protocol-specific validation
+        switch (selectedProtocol)
+        {
+            case ConsensusAlgorithm.ProofOfElapsedTime:
+                ValidatePoETParameters();
+                break;
+            case ConsensusAlgorithm.ProofOfWork:
+                ValidatePoWParameters();
+                break;
+        }
+
+        StateHasChanged();
+    }
+
+    private void ValidatePoETParameters()
+    {
+        var minWait = GetAlgorithmParameter("MinWaitTime", 1000);
+        var maxWait = GetAlgorithmParameter("MaxWaitTime", 10000);
+        
+        if (minWait >= maxWait)
+            validationErrors.Add("Min wait time must be less than max wait time");
+    }
+
+    private void ValidatePoWParameters()
+    {
+        var difficulty = GetAlgorithmParameter("Difficulty", 4);
+        if (difficulty < 1 || difficulty > 8)
+            validationErrors.Add("Difficulty must be between 1 and 8");
+    }
+
+    private bool IsConfigurationValid() => !validationErrors.Any();
+
+    private int GetMaxByzantineNodes()
+    {
+        return selectedProtocol switch
+        {
+            ConsensusAlgorithm.ProofOfWork => configuration.NodeCount / 2, // 51% attack
+            ConsensusAlgorithm.ProofOfStake => configuration.NodeCount / 3, // Byzantine fault tolerance
+            ConsensusAlgorithm.ProofOfElapsedTime => configuration.NodeCount / 3, // Byzantine fault tolerance
+            _ => configuration.NodeCount / 3
+        };
+    }
+
+    private string GetProtocolDisplayName(ConsensusAlgorithm protocol)
+    {
+        return protocol switch
+        {
+            ConsensusAlgorithm.ProofOfWork => "Proof of Work",
+            ConsensusAlgorithm.ProofOfStake => "Proof of Stake",
+            ConsensusAlgorithm.ProofOfElapsedTime => "Proof of Elapsed Time",
+            ConsensusAlgorithm.DelegatedProofOfStake => "Delegated Proof of Stake",
+            ConsensusAlgorithm.PracticalByzantineFaultTolerance => "Practical Byzantine Fault Tolerance",
+            ConsensusAlgorithm.Raft => "Raft",
+            ConsensusAlgorithm.HoneyBadgerBFT => "HoneyBadger BFT",
+            ConsensusAlgorithm.Tendermint => "Tendermint",
+            ConsensusAlgorithm.Algorand => "Algorand",
+            ConsensusAlgorithm.StellarConsensusProtocol => "Stellar Consensus Protocol",
+            ConsensusAlgorithm.FedCoin => "FedCoin",
+            _ => protocol.ToString()
+        };
+    }
+
+    private string GetProtocolDescription(ConsensusAlgorithm protocol)
+    {
+        return protocol switch
+        {
+            ConsensusAlgorithm.ProofOfWork => "Energy-intensive mining-based consensus with computational puzzles.",
+            ConsensusAlgorithm.ProofOfStake => "Stake-based selection with economic incentives for honest behavior.",
+            ConsensusAlgorithm.ProofOfElapsedTime => "Intel SGX-based random wait time consensus for efficient operation.",
+            ConsensusAlgorithm.DelegatedProofOfStake => "Delegate-based voting system with representative nodes.",
+            ConsensusAlgorithm.PracticalByzantineFaultTolerance => "Byzantine fault-tolerant consensus for permissioned networks.",
+            ConsensusAlgorithm.Raft => "Leader-based consensus algorithm for distributed systems.",
+            ConsensusAlgorithm.HoneyBadgerBFT => "Asynchronous Byzantine fault tolerance protocol.",
+            ConsensusAlgorithm.Tendermint => "Byzantine fault-tolerant consensus with instant finality.",
+            ConsensusAlgorithm.Algorand => "Pure proof-of-stake with cryptographic sortition.",
+            ConsensusAlgorithm.StellarConsensusProtocol => "Federated Byzantine agreement for decentralized networks.",
+            ConsensusAlgorithm.FedCoin => "Simplified consensus for testing purposes.",
+            _ => "Select a protocol to see its description."
+        };
+    }
+
+    private double GetFaultTolerancePercentage()
+    {
+        return Math.Round((double)configuration.ByzantineNodeCount / configuration.NodeCount * 100, 1);
+    }
+
+    private string GetEstimatedTPS()
+    {
+        var tps = 1000.0 / configuration.BlockTimeMs;
+        return $"{tps:F1}";
+    }
+
+    private string GetEstimatedFinality()
+    {
+        var finality = configuration.BlockTimeMs + configuration.NetworkLatencyMs;
+        return finality.ToString();
+    }
+
+    private string GetSecurityLevel()
+    {
+        var faultTolerance = GetFaultTolerancePercentage();
+        return faultTolerance switch
+        {
+            <= 10 => "High",
+            <= 25 => "Medium",
+            _ => "Low"
+        };
+    }
+
+    private async Task TestConfiguration()
+    {
+        // TODO: Implement test simulation with current configuration
+        await JSRuntime.InvokeVoidAsync("alert", "Test simulation would start with current configuration.");
+    }
+
+    private async Task SavePreset()
+    {
+        // TODO: Implement preset saving
+        await JSRuntime.InvokeVoidAsync("alert", "Preset saving functionality coming soon.");
+    }
+
+    private async Task LoadPreset()
+    {
+        // TODO: Implement preset loading
+        await JSRuntime.InvokeVoidAsync("alert", "Preset loading functionality coming soon.");
+    }
+
+    private void LoadQuickPreset(string presetName)
+    {
+        switch (presetName)
+        {
+            case "Default":
+                LoadProtocolDefaults();
+                break;
+            case "HighThroughput":
+                configuration.BlockTimeMs = 500;
+                configuration.NetworkLatencyMs = 10;
+                break;
+            case "FaultTolerant":
+                configuration.ByzantineNodeCount = Math.Min(GetMaxByzantineNodes(), configuration.ByzantineNodeCount + 2);
+                configuration.NetworkLatencyMs = 200;
+                break;
+        }
+        ValidateConfiguration();
+    }
+
+    private void ResetToDefaults()
+    {
+        LoadProtocolDefaults();
+        ValidateConfiguration();
+    }
+
+    public class ProtocolConfiguration
+    {
+        public int NodeCount { get; set; } = 10;
+        public int ByzantineNodeCount { get; set; } = 2;
+        public int BlockTimeMs { get; set; } = 2000;
+        public int NetworkLatencyMs { get; set; } = 50;
+        public Dictionary<string, object> AlgorithmConfiguration { get; set; } = new();
+    }
+}

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
-using Consensus.Core.Services;
+using Consensus.Core.Interfaces;
+using Consensus.Core.Models;
 using Consensus.Api.Models;
 using Consensus.Core.Enums;
 
