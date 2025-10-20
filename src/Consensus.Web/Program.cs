@@ -106,6 +106,12 @@ builder.Services.AddScoped<Consensus.Core.Repositories.IBlockRepository, Consens
 builder.Services.AddScoped<Consensus.Core.Repositories.IConsensusRoundRepository, Consensus.Data.Repositories.ConsensusRoundRepository>();
 builder.Services.AddScoped<Consensus.Core.Repositories.IEventLogRepository, Consensus.Data.Repositories.EventLogRepository>();
 
+// Register analytics service
+builder.Services.AddScoped<Consensus.Core.Services.IAnalyticsService, Consensus.Core.Services.AnalyticsService>();
+
+// Register Chart.js service for interactive charts
+builder.Services.AddScoped<ChartJsService>();
+
 // Register HTTP client for Block Explorer API
 builder.Services.AddHttpClient<IBlockExplorerService, BlockExplorerService>(client =>
 {

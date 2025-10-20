@@ -1,6 +1,7 @@
 using Consensus.Data;
 using Consensus.Data.Repositories;
 using Consensus.Core.Repositories;
+using Consensus.Core.Services;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -20,7 +21,14 @@ builder.Services.AddDbContext<ConsensusDbContext>(options =>
 });
 
 // Add repositories
-builder.Services.AddScoped<Consensus.Core.Repositories.IBlockRepository, Consensus.Data.Repositories.BlockRepository>();
+builder.Services.AddScoped<IBlockRepository, BlockRepository>();
+builder.Services.AddScoped<ISimulationRunRepository, SimulationRunRepository>();
+builder.Services.AddScoped<INodeRepository, NodeRepository>();
+builder.Services.AddScoped<IConsensusRoundRepository, ConsensusRoundRepository>();
+builder.Services.AddScoped<IEventLogRepository, EventLogRepository>();
+
+// Add services
+builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 
 // Add logging
 builder.Services.AddLogging();

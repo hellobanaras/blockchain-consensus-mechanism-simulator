@@ -52,6 +52,9 @@ public class NodeConfiguration : IEntityTypeConfiguration<Node>
         builder.Property(n => n.IsByzantine)
             .HasDefaultValue(false);
             
+        // Ignore the Configuration property for now to resolve the navigation issue
+        builder.Ignore(n => n.Configuration);
+            
         // Timestamps
         builder.Property(n => n.CreatedAt)
             .IsRequired()

@@ -102,7 +102,7 @@ namespace Consensus.Data.Migrations
 
                     b.HasIndex("SimulationRunId", "ProposerId", "CreatedAt");
 
-                    b.ToTable("Blocks", t =>
+                    b.ToTable("Blocks", null, t =>
                         {
                             t.HasCheckConstraint("CK_Block_BlockNumber", "\"BlockNumber\" >= 0");
                         });
@@ -186,7 +186,7 @@ namespace Consensus.Data.Migrations
                     b.HasIndex("SimulationRunId", "RoundNumber")
                         .IsUnique();
 
-                    b.ToTable("ConsensusRounds");
+                    b.ToTable("ConsensusRounds", (string)null);
                 });
 
             modelBuilder.Entity("Consensus.Core.Entities.EventLog", b =>
@@ -276,7 +276,7 @@ namespace Consensus.Data.Migrations
 
                     b.HasIndex("SimulationRunId", "Timestamp");
 
-                    b.ToTable("EventLogs");
+                    b.ToTable("EventLogs", (string)null);
                 });
 
             modelBuilder.Entity("Consensus.Core.Entities.NetworkTopology", b =>
@@ -348,7 +348,7 @@ namespace Consensus.Data.Migrations
 
                     b.HasIndex("TopologyType");
 
-                    b.ToTable("NetworkTopologies");
+                    b.ToTable("NetworkTopologies", (string)null);
                 });
 
             modelBuilder.Entity("Consensus.Core.Entities.Node", b =>
@@ -426,7 +426,7 @@ namespace Consensus.Data.Migrations
 
                     b.HasIndex("SimulationRunId", "ConsensusAlgorithm", "Status");
 
-                    b.ToTable("Nodes");
+                    b.ToTable("Nodes", (string)null);
                 });
 
             modelBuilder.Entity("Consensus.Core.Entities.SimulationRun", b =>
@@ -494,7 +494,7 @@ namespace Consensus.Data.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("SimulationRuns");
+                    b.ToTable("SimulationRuns", (string)null);
                 });
 
             modelBuilder.Entity("Consensus.Core.Entities.Transaction", b =>
@@ -591,7 +591,7 @@ namespace Consensus.Data.Migrations
 
                     b.HasIndex("SimulationRunId", "BlockId", "Status");
 
-                    b.ToTable("Transactions", t =>
+                    b.ToTable("Transactions", null, t =>
                         {
                             t.HasCheckConstraint("CK_Transaction_Amount", "\"Amount\" >= 0");
 
@@ -668,7 +668,7 @@ namespace Consensus.Data.Migrations
 
                     b.HasIndex("ConsensusRoundId", "VoteType", "CastedAt");
 
-                    b.ToTable("Votes");
+                    b.ToTable("Votes", (string)null);
                 });
 
             modelBuilder.Entity("Consensus.Core.Entities.Block", b =>

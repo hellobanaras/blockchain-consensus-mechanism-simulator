@@ -229,3 +229,34 @@ public interface IEventLogRepository : IRepository<EventLog>
     /// </summary>
     Task<IEnumerable<EventLog>> GetRecentAsync(int count = 100);
 }
+
+/// <summary>
+/// Repository interface for Transaction entities
+/// </summary>
+public interface ITransactionRepository : IRepository<Transaction>
+{
+    /// <summary>
+    /// Get transactions by simulation run ID
+    /// </summary>
+    Task<IEnumerable<Transaction>> GetBySimulationRunAsync(Guid simulationRunId);
+
+    /// <summary>
+    /// Get transactions by block ID
+    /// </summary>
+    Task<IEnumerable<Transaction>> GetByBlockAsync(Guid blockId);
+
+    /// <summary>
+    /// Get transactions by status
+    /// </summary>
+    Task<IEnumerable<Transaction>> GetByStatusAsync(string status);
+
+    /// <summary>
+    /// Get transaction by hash
+    /// </summary>
+    Task<Transaction?> GetByHashAsync(string hash);
+
+    /// <summary>
+    /// Get recent transactions
+    /// </summary>
+    Task<IEnumerable<Transaction>> GetRecentAsync(int count = 100);
+}
