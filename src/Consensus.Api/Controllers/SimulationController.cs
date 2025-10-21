@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Consensus.Core.Interfaces;
 using Consensus.Core.Models;
 using Consensus.Api.Models;
@@ -12,6 +13,7 @@ namespace Consensus.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
+[Authorize]
 public class SimulationController : ControllerBase
 {
     private readonly ISimulationService _simulationService;
@@ -29,6 +31,7 @@ public class SimulationController : ControllerBase
     /// <param name="request">Simulation configuration parameters</param>
     /// <returns>Simulation details and status</returns>
     [HttpPost("start")]
+    [Authorize(Roles = "Admin,Operator")]
     [ProducesResponseType(typeof(StartSimulationResponse), StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status500InternalServerError)]
@@ -156,6 +159,7 @@ public class SimulationController : ControllerBase
     /// <param name="simulationId">ID of the simulation to start</param>
     /// <returns>Success status</returns>
     [HttpPost("{simulationId:guid}/start")]
+    [Authorize(Roles = "Admin,Operator")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status400BadRequest)]
@@ -206,6 +210,7 @@ public class SimulationController : ControllerBase
     /// <param name="simulationId">ID of the simulation to stop</param>
     /// <returns>Success status</returns>
     [HttpPost("{simulationId:guid}/stop")]
+    [Authorize(Roles = "Admin,Operator")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> StopSimulation(Guid simulationId)
@@ -373,6 +378,7 @@ public class SimulationController : ControllerBase
     /// <param name="simulationId">ID of the simulation to delete</param>
     /// <returns>Success status</returns>
     [HttpDelete("{simulationId:guid}")]
+    [Authorize(Roles = "Admin")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
     public async Task<IActionResult> DeleteSimulation(Guid simulationId)

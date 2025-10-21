@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Consensus.Core.Entities;
 using Consensus.Data.Context.EntityConfigurations;
 
@@ -7,7 +8,7 @@ namespace Consensus.Data;
 /// <summary>
 /// Entity Framework DbContext for the Consensus Mechanism Simulator
 /// </summary>
-public class ConsensusDbContext : DbContext
+public class ConsensusDbContext : IdentityDbContext<ApplicationUser, ApplicationRole, string>
 {
     public ConsensusDbContext(DbContextOptions<ConsensusDbContext> options) : base(options)
     {
@@ -22,6 +23,7 @@ public class ConsensusDbContext : DbContext
     public DbSet<SimulationRun> SimulationRuns { get; set; } = null!;
     public DbSet<NetworkTopology> NetworkTopologies { get; set; } = null!;
     public DbSet<EventLog> EventLogs { get; set; } = null!;
+    public DbSet<AuditLog> AuditLogs { get; set; } = null!;
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -1,6 +1,7 @@
 using Consensus.Core.Models;
 using Consensus.Core.Repositories;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using System.ComponentModel.DataAnnotations;
 
 namespace Consensus.Api.Controllers;
@@ -11,6 +12,7 @@ namespace Consensus.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
+[Authorize(Roles = "Admin,Operator,Viewer")]
 public class BlocksController : ControllerBase
 {
     private readonly IBlockRepository _blockRepository;

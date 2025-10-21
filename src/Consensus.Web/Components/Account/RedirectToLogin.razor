@@ -1,0 +1,10 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@code {
+    protected override void OnInitialized()
+    {
+        var returnUrl = Navigation.Uri;
+        Navigation.NavigateTo($"/Account/Login?returnUrl={Uri.EscapeDataString(returnUrl)}", true);
+    }
+}

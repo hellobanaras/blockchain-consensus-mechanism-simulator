@@ -6,7 +6,10 @@ using Consensus.Data;
 using Consensus.Core.Interfaces;
 using Consensus.Core.Services;
 using Consensus.Core.Services.Payloads;
+using Consensus.Core.Entities;
+using Consensus.Data.Seed;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 using Serilog;
 using Serilog.Events;
 using Serilog.Sinks.File;
@@ -77,21 +80,51 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Configure authentication and authorization (placeholder for future implementation)
-builder.Services.AddAuthentication()
-    .AddCookie("Cookies", options =>
-    {
-        options.LoginPath = "/login";
-        options.LogoutPath = "/logout";
-        options.AccessDeniedPath = "/access-denied";
-    });
+// Configure ASP.NET Core Identity
+builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
+{
+    // Password settings
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireNonAlphanumeric = false;
+    options.Password.RequireUppercase = true;
+    options.Password.RequiredLength = 8;
+    options.Password.RequiredUniqueChars = 1;
 
+    // Lockout settings
+    options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(5);
+    options.Lockout.MaxFailedAccessAttempts = 5;
+    options.Lockout.AllowedForNewUsers = true;
+
+    // User settings
+    options.User.AllowedUserNameCharacters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@+";
+    options.User.RequireUniqueEmail = true;
+})
+.AddEntityFrameworkStores<ConsensusDbContext>()
+.AddDefaultTokenProviders();
+
+// Configure authentication cookies
+builder.Services.ConfigureApplicationCookie(options =>
+{
+    options.LoginPath = "/Account/Login";
+    options.LogoutPath = "/Account/Logout";
+    options.AccessDeniedPath = "/Account/AccessDenied";
+    options.ExpireTimeSpan = TimeSpan.FromHours(24);
+    options.SlidingExpiration = true;
+});
+
+// Configure authorization policies
 builder.Services.AddAuthorization(options =>
 {
-    // Define authorization policies
+    // Define role-based policies
     options.AddPolicy("ViewerOrHigher", policy => policy.RequireRole("Viewer", "Operator", "Admin"));
     options.AddPolicy("OperatorOrHigher", policy => policy.RequireRole("Operator", "Admin"));
     options.AddPolicy("AdminOnly", policy => policy.RequireRole("Admin"));
+    
+    // Define permission-based policies
+    options.AddPolicy("CanViewSimulations", policy => policy.RequireClaim("permission", "view_simulations"));
+    options.AddPolicy("CanRunSimulations", policy => policy.RequireClaim("permission", "run_simulations"));
+    options.AddPolicy("CanManageUsers", policy => policy.RequireClaim("permission", "manage_users"));
 });
 
 // Register core services and interfaces
@@ -109,6 +142,9 @@ builder.Services.AddScoped<Consensus.Core.Repositories.IEventLogRepository, Cons
 
 // Register analytics service
 builder.Services.AddScoped<Consensus.Core.Services.IAnalyticsService, Consensus.Core.Services.AnalyticsService>();
+
+// Register user management service
+builder.Services.AddScoped<Consensus.Core.Interfaces.IUserService, Consensus.Data.Services.UserService>();
 
 // Register payload services
 builder.Services.AddScoped<Consensus.Core.Services.Payloads.ISupplyChainService, Consensus.Core.Services.Payloads.SupplyChainService>();
@@ -249,6 +285,23 @@ app.MapControllers();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
+
+// Initialize database and seed data
+using (var scope = app.Services.CreateScope())
+{
+    try
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<IdentitySeeder>>();
+        var seeder = new IdentitySeeder(scope.ServiceProvider, logger);
+        await seeder.SeedAsync();
+    }
+    catch (Exception ex)
+    {
+        var logger = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while seeding the database");
+        throw;
+    }
+}
 
 app.Run();
 

@@ -3,6 +3,7 @@ using System;
 using Consensus.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace Consensus.Data.Migrations
 {
     [DbContext(typeof(ConsensusDbContext))]
-    partial class ConsensusDbContextModelSnapshot : ModelSnapshot
+    [Migration("20251020213559_InitialCreateWithIdentity")]
+    partial class InitialCreateWithIdentity
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

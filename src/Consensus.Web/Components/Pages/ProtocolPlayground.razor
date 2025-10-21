@@ -2,8 +2,10 @@
 @using Consensus.Core.Enums
 @using Consensus.Core.Models
 @using Consensus.Web.Models
+@using Microsoft.AspNetCore.Authorization
 @inject IJSRuntime JSRuntime
 @inject ILogger<ProtocolPlayground> Logger
+@attribute [Authorize(Roles = "Admin,Operator")]
 
 <PageTitle>Protocol Playground - Consensus Simulator</PageTitle>
 

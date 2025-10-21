@@ -3,10 +3,12 @@
 @using Consensus.Core.Enums
 @using Consensus.Core.Models
 @using Consensus.Web.Services
+@using Microsoft.AspNetCore.Authorization
 @inject IJSRuntime JSRuntime
 @inject IBlockExplorerService BlockExplorerService
 @inject NavigationManager Navigation
 @implements IDisposable
+@attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
 <PageTitle>Block Explorer - Consensus Simulator</PageTitle>
 

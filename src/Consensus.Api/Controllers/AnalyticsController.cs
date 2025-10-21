@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Authorization;
 using Consensus.Core.Services;
 using Consensus.Core.Models;
 using System.ComponentModel.DataAnnotations;
@@ -11,6 +12,7 @@ namespace Consensus.Api.Controllers;
 [ApiController]
 [Route("api/[controller]")]
 [Produces("application/json")]
+[Authorize(Roles = "Admin,Operator,Viewer")]
 public class AnalyticsController : ControllerBase
 {
     private readonly IAnalyticsService _analyticsService;

@@ -1,7 +1,10 @@
 @page "/simulations"
 @using Consensus.Core.Entities
 @using Consensus.Core.Enums
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
 @inject IJSRuntime JSRuntime
+@attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
 <PageTitle>Simulations - Consensus Simulator</PageTitle>
 
@@ -14,9 +17,18 @@
                     <p class="lead">Create, manage, and analyze consensus protocol simulations</p>
                 </div>
                 <div>
-                    <button class="btn btn-primary btn-lg" @onclick="ShowCreateSimulationModal">
-                        <i class="bi bi-plus-circle"></i> New Simulation
-                    </button>
+                    <AuthorizeView Roles="Admin,Operator">
+                        <Authorized>
+                            <button class="btn btn-primary btn-lg" @onclick="ShowCreateSimulationModal">
+                                <i class="bi bi-plus-circle"></i> New Simulation
+                            </button>
+                        </Authorized>
+                        <NotAuthorized>
+                            <button class="btn btn-secondary btn-lg" disabled title="Insufficient permissions">
+                                <i class="bi bi-lock"></i> New Simulation (Admin/Operator Only)
+                            </button>
+                        </NotAuthorized>
+                    </AuthorizeView>
                 </div>
             </div>
         </div>
@@ -146,18 +158,26 @@
                                                     
                                                     @if (simulation.Status == SimulationStatus.Running)
                                                     {
-                                                        <button class="btn btn-outline-warning btn-sm" @onclick="() => PauseSimulation(simulation.Id)">
-                                                            <i class="bi bi-pause"></i> Pause
-                                                        </button>
-                                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => StopSimulation(simulation.Id)">
-                                                            <i class="bi bi-stop"></i> Stop
-                                                        </button>
+                                                        <AuthorizeView Roles="Admin,Operator">
+                                                            <Authorized>
+                                                                <button class="btn btn-outline-warning btn-sm" @onclick="() => PauseSimulation(simulation.Id)">
+                                                                    <i class="bi bi-pause"></i> Pause
+                                                                </button>
+                                                                <button class="btn btn-outline-danger btn-sm" @onclick="() => StopSimulation(simulation.Id)">
+                                                                    <i class="bi bi-stop"></i> Stop
+                                                                </button>
+                                                            </Authorized>
+                                                        </AuthorizeView>
                                                     }
                                                     else if (simulation.Status == SimulationStatus.Paused)
                                                     {
-                                                        <button class="btn btn-outline-success btn-sm" @onclick="() => ResumeSimulation(simulation.Id)">
-                                                            <i class="bi bi-play"></i> Resume
-                                                        </button>
+                                                        <AuthorizeView Roles="Admin,Operator">
+                                                            <Authorized>
+                                                                <button class="btn btn-outline-success btn-sm" @onclick="() => ResumeSimulation(simulation.Id)">
+                                                                    <i class="bi bi-play"></i> Resume
+                                                                </button>
+                                                            </Authorized>
+                                                        </AuthorizeView>
                                                     }
                                                     else if (simulation.Status == SimulationStatus.Completed || simulation.Status == SimulationStatus.Failed)
                                                     {

@@ -113,7 +113,16 @@ public class SimulationRun
     /// </summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// ID of the user who created this simulation
+    /// </summary>
+    public string? CreatedById { get; set; }
+
     // Navigation properties
+    /// <summary>
+    /// User who created this simulation
+    /// </summary>
+    public virtual ApplicationUser? CreatedBy { get; set; }
     public virtual ICollection<Node> Nodes { get; set; } = new List<Node>();
     public virtual ICollection<Block> Blocks { get; set; } = new List<Block>();
     public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();

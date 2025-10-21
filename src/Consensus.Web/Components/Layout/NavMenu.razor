@@ -1,6 +1,39 @@
 ﻿<div class="top-row ps-3 navbar navbar-dark">
     <div class="container-fluid">
         <a class="navbar-brand" href="">🔗 Consensus Simulator</a>
+        
+        <!-- Authentication status -->
+        <div class="navbar-nav ms-auto">
+            <AuthorizeView>
+                <Authorized>
+                    <div class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-white" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user-circle me-1"></i>
+                            Hello, @context.User.Identity!.Name
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                            <AuthorizeView Roles="Admin" Context="adminContext">
+                                <li><a class="dropdown-item" href="/Account/UserManagement"><i class="fas fa-users me-2"></i>User Management</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                            </AuthorizeView>
+                            <li><a class="dropdown-item" href="/Account/Profile"><i class="fas fa-user-cog me-2"></i>Profile</a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/Account/Logout"><i class="fas fa-sign-out-alt me-2"></i>Sign Out</a></li>
+                        </ul>
+                    </div>
+                </Authorized>
+                <NotAuthorized>
+                    <a class="btn btn-outline-light btn-sm me-2" href="/Account/Login">
+                        <i class="fas fa-sign-in-alt me-1"></i>
+                        Sign In
+                    </a>
+                    <a class="btn btn-light btn-sm" href="/Account/Register">
+                        <i class="fas fa-user-plus me-1"></i>
+                        Register
+                    </a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
     </div>
 </div>
 
@@ -26,11 +59,13 @@
             </NavLink>
         </div>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="playground">
-                <span class="bi bi-gear-nav-menu" aria-hidden="true"></span> Protocol Playground
-            </NavLink>
-        </div>
+        <AuthorizeView Roles="Admin,Operator">
+            <div class="nav-item px-3">
+                <NavLink class="nav-link" href="playground">
+                    <span class="bi bi-gear-nav-menu" aria-hidden="true"></span> Protocol Playground
+                </NavLink>
+            </div>
+        </AuthorizeView>
 
         <div class="nav-item px-3">
             <NavLink class="nav-link" href="statistics">
