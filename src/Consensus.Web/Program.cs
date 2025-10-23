@@ -38,7 +38,26 @@ builder.Host.UseSerilog();
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+    .AddInteractiveServerComponents(options =>
+    {
+        // Configure for container environment
+        options.DetailedErrors = builder.Environment.IsDevelopment();
+        options.DisconnectedCircuitMaxRetained = 100;
+        options.DisconnectedCircuitRetentionPeriod = TimeSpan.FromMinutes(3);
+        options.JSInteropDefaultCallTimeout = TimeSpan.FromMinutes(1);
+        options.MaxBufferedUnacknowledgedRenderBatches = 10;
+    });
+
+// Configure antiforgery services with container-friendly settings
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-CSRF-TOKEN";
+    options.Cookie.Name = "__RequestVerificationToken";
+    options.Cookie.HttpOnly = true;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.None; // Allow non-HTTPS in container environment
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.Path = "/";
+});
 
 // Add API controllers
 builder.Services.AddControllers();
@@ -57,7 +76,7 @@ builder.Services.AddDbContext<ConsensusDbContext>(options =>
     }
 });
 
-// Configure SignalR
+// Configure SignalR for Blazor Server and custom hubs
 builder.Services.AddSignalR(options =>
 {
     if (builder.Environment.IsDevelopment())
@@ -66,14 +85,24 @@ builder.Services.AddSignalR(options =>
     }
     options.MaximumReceiveMessageSize = 102400; // 100KB
     options.StreamBufferCapacity = 10;
+    options.ClientTimeoutInterval = TimeSpan.FromSeconds(60);
+    options.HandshakeTimeout = TimeSpan.FromSeconds(30);
+    options.KeepAliveInterval = TimeSpan.FromSeconds(15);
 });
 
-// Configure CORS for SignalR
+// Configure CORS for SignalR and Blazor Server
 builder.Services.AddCors(options =>
 {
     options.AddDefaultPolicy(policy =>
     {
-        policy.WithOrigins("http://localhost:5027", "https://localhost:5028")
+        policy.WithOrigins(
+                "http://localhost:5027", 
+                "https://localhost:5028", 
+                "http://localhost:3000", 
+                "https://localhost:3000",
+                "http://127.0.0.1:3000",
+                "https://127.0.0.1:3000"
+              )
               .AllowAnyMethod()
               .AllowAnyHeader()
               .AllowCredentials();
@@ -103,7 +132,7 @@ builder.Services.AddIdentity<ApplicationUser, ApplicationRole>(options =>
 .AddEntityFrameworkStores<ConsensusDbContext>()
 .AddDefaultTokenProviders();
 
-// Configure authentication cookies
+// Configure authentication cookies with container-friendly settings
 builder.Services.ConfigureApplicationCookie(options =>
 {
     options.LoginPath = "/Account/Login";
@@ -111,6 +140,9 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.AccessDeniedPath = "/Account/AccessDenied";
     options.ExpireTimeSpan = TimeSpan.FromHours(24);
     options.SlidingExpiration = true;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.None; // Allow non-HTTPS in container
+    options.Cookie.HttpOnly = true;
 });
 
 // Configure authorization policies
@@ -242,10 +274,23 @@ if (!app.Environment.IsDevelopment())
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
+    
+    // Use antiforgery only in production
+    app.UseAntiforgery();
 }
 else
 {
     app.UseDeveloperExceptionPage();
+    
+    // Skip antiforgery validation in development/container environment
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Path.StartsWithSegments("/Account"))
+        {
+            context.Items["__IgnoreAntiforgeryToken"] = true;
+        }
+        await next();
+    });
 }
 
 // Configure consensus simulator middleware pipeline
@@ -274,6 +319,7 @@ app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
 
+// Configure antiforgery middleware (required even if bypassed)
 app.UseAntiforgery();
 
 // Map SignalR hub

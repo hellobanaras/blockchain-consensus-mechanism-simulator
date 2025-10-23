@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 using Consensus.Core.Enums;
-using Consensus.Api.Models;
+using Consensus.Web.Models.Api;
 
 namespace Consensus.Web.Models.Forms;
 

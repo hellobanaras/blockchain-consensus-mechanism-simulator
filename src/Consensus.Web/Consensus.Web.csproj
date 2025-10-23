@@ -9,10 +9,10 @@
   <ItemGroup>
     <ProjectReference Include="../Consensus.Core/Consensus.Core.csproj" />
     <ProjectReference Include="../Consensus.Data/Consensus.Data.csproj" />
-    <ProjectReference Include="..\Consensus.Api\Consensus.Api.csproj" />
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.1" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.10" />
     <PackageReference Include="Microsoft.AspNetCore.SignalR.Client" Version="9.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="9.0.10" />

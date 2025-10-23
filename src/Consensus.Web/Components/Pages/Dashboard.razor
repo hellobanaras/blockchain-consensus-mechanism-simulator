@@ -1,0 +1,503 @@
+@page "/dashboard"
+@using Consensus.Core.Entities
+@using Consensus.Core.Enums
+@using Consensus.Core.Interfaces
+@using Consensus.Web.Models.Api
+@using Consensus.Web.Models
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@rendermode InteractiveServer
+@attribute [Authorize]
+@implements IAsyncDisposable
+@inject ISimulationService SimulationService
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<Dashboard> Logger
+
+<div class="container-fluid py-4">
+    <!-- Header -->
+    <div class="row mb-4">
+        <div class="col">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1 class="display-6 mb-1">
+                        <i class="bi bi-speedometer2 text-primary me-2"></i>
+                        Consensus Simulator Dashboard
+                    </h1>
+                    <p class="text-muted mb-0">Create, configure, and monitor blockchain consensus simulations</p>
+                </div>
+                <div class="d-flex gap-2">
+                    <div class="badge @(isConnected ? "bg-success" : "bg-danger") px-3 py-2">
+                        <i class="bi @(isConnected ? "bi-wifi" : "bi-wifi-off") me-1"></i>
+                        @(isConnected ? "Connected" : "Disconnected")
+                    </div>
+                    <button class="btn btn-outline-primary" @onclick="RefreshData" disabled="@isLoading">
+                        <i class="bi bi-arrow-clockwise @(isLoading ? "spin" : "") me-1"></i>
+                        Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Active Simulations</h6>
+                            <h3 class="text-success mb-0">@activeSimulationsCount</h3>
+                        </div>
+                        <div class="text-success">
+                            <i class="bi bi-play-circle-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Total Simulations</h6>
+                            <h3 class="text-primary mb-0">@totalSimulationsCount</h3>
+                        </div>
+                        <div class="text-primary">
+                            <i class="bi bi-collection-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Completed Today</h6>
+                            <h3 class="text-info mb-0">@completedTodayCount</h3>
+                        </div>
+                        <div class="text-info">
+                            <i class="bi bi-check-circle-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Failed Simulations</h6>
+                            <h3 class="text-danger mb-0">@failedSimulationsCount</h3>
+                        </div>
+                        <div class="text-danger">
+                            <i class="bi bi-exclamation-triangle-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="row">
+        <!-- Protocol Selection Panel -->
+        <div class="col-lg-6 mb-4">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-transparent border-0 pt-3">
+                    <h5 class="card-title mb-0">
+                        <i class="bi bi-gear text-primary me-2"></i>
+                        Create New Simulation
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-3">Configure and start a new consensus simulation</p>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-primary btn-lg" @onclick='() => Navigation.NavigateTo("/simulations")'>
+                            <i class="bi bi-plus-circle me-2"></i>
+                            Create Simulation
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/playground")'>
+                            <i class="bi bi-wrench me-2"></i>
+                            Protocol Playground
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Actions & Recent Activity -->
+        <div class="col-lg-6 mb-4">
+            <div class="row">
+                <!-- Quick Actions -->
+                <div class="col-12 mb-3">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-transparent border-0 pt-3">
+                            <h5 class="card-title mb-0">
+                                <i class="bi bi-lightning text-warning me-2"></i>
+                                Quick Actions
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary d-flex align-items-center justify-content-center" 
+                                        @onclick='() => Navigation.NavigateTo("/simulations")'>
+                                    <i class="bi bi-collection me-2"></i>
+                                    View All Simulations
+                                </button>
+                                <button class="btn btn-outline-info d-flex align-items-center justify-content-center" 
+                                        @onclick='() => Navigation.NavigateTo("/blocks")'>
+                                    <i class="bi bi-boxes me-2"></i>
+                                    Block Explorer
+                                </button>
+                                <button class="btn btn-outline-success d-flex align-items-center justify-content-center" 
+                                        @onclick='() => Navigation.NavigateTo("/analytics")'>
+                                    <i class="bi bi-graph-up me-2"></i>
+                                    Analytics Dashboard
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Simulations -->
+                <div class="col-12">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-header bg-transparent border-0 pt-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <h5 class="card-title mb-0">
+                                    <i class="bi bi-clock-history text-secondary me-2"></i>
+                                    Recent Activity
+                                </h5>
+                                <button class="btn btn-sm btn-outline-secondary" @onclick='() => Navigation.NavigateTo("/simulations")'>
+                                    View All
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            @if (recentSimulations.Any())
+                            {
+                                <div class="list-group list-group-flush">
+                                    @foreach (var simulation in recentSimulations.Take(5))
+                                    {
+                                        <div class="list-group-item border-0 px-0 py-2">
+                                            <div class="d-flex justify-content-between align-items-start">
+                                                <div class="flex-grow-1">
+                                                    <h6 class="mb-1">@simulation.Name</h6>
+                                                    <p class="mb-1 text-muted small">
+                                                        @GetAlgorithmDisplayName(simulation.ConsensusAlgorithm) 
+                                                        • @simulation.NodeCount nodes
+                                                    </p>
+                                                    <small class="text-muted">@simulation.CreatedAt.ToString("MMM dd, HH:mm")</small>
+                                                </div>
+                                                <div class="ms-2">
+                                                    <span class="badge @GetStatusBadgeClass(simulation.Status)">
+                                                        @simulation.Status
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="text-center py-4 text-muted">
+                                    <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                                    <p>No simulations created yet</p>
+                                    <small>Create your first simulation using the form on the left</small>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Simulations Monitor -->
+    @if (activeSimulations.Any())
+    {
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-transparent border-0 pt-3">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-activity text-success me-2"></i>
+                            Active Simulations
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            @foreach (var simulation in activeSimulations)
+                            {
+                                <div class="col-lg-6 mb-3">
+                                    <div class="card border-success">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                                <h6 class="card-title mb-0">@simulation.Name</h6>
+                                                <div class="dropdown">
+                                                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                        Actions
+                                                    </button>
+                                                    <ul class="dropdown-menu dropdown-menu-end">
+                                                        <li><a class="dropdown-item" href="/simulation/@simulation.Id" target="_blank">
+                                                            <i class="bi bi-eye me-2"></i>View Details
+                                                        </a></li>
+                                                        <li><button class="dropdown-item text-danger" @onclick="() => StopSimulation(simulation.Id)">
+                                                            <i class="bi bi-stop me-2"></i>Stop Simulation
+                                                        </button></li>
+                                                    </ul>
+                                                </div>
+                                            </div>
+                                            <p class="text-muted small mb-2">
+                                                @GetAlgorithmDisplayName(simulation.ConsensusAlgorithm) • @simulation.NodeCount nodes
+                                            </p>
+                                            <div class="progress mb-2" style="height: 6px;">
+                                                <div class="progress-bar bg-success" role="progressbar" 
+                                                     style="width: @GetSimulationProgress(simulation)%" 
+                                                     aria-valuenow="@GetSimulationProgress(simulation)" aria-valuemin="0" aria-valuemax="100"></div>
+                                            </div>
+                                            <small class="text-muted">
+                                                @(simulation.ConsensusRounds?.Count ?? 0) rounds completed
+                                                @if (simulation.StartedAt.HasValue)
+                                                {
+                                                    <span> • Running for @GetDuration(simulation.StartedAt.Value)</span>
+                                                }
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Success Toast -->
+<div class="toast-container position-fixed top-0 end-0 p-3">
+    <div id="successToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header bg-success text-white">
+            <i class="bi bi-check-circle me-2"></i>
+            <strong class="me-auto">Success</strong>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body">
+            @successMessage
+        </div>
+    </div>
+</div>
+
+<!-- Error Toast -->
+<div class="toast-container position-fixed top-0 end-0 p-3">
+    <div id="errorToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="toast-header bg-danger text-white">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong class="me-auto">Error</strong>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="toast"></button>
+        </div>
+        <div class="toast-body">
+            @errorMessage
+        </div>
+    </div>
+</div>
+
+<style>
+    .spin {
+        animation: spin 1s linear infinite;
+    }
+
+    @@keyframes spin {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+</style>
+
+@code {
+    private HubConnection? hubConnection;
+    private List<SimulationRun> allSimulations = new();
+    private List<SimulationRun> recentSimulations = new();
+    private List<SimulationRun> activeSimulations = new();
+    
+    private int activeSimulationsCount = 0;
+    private int totalSimulationsCount = 0;
+    private int completedTodayCount = 0;
+    private int failedSimulationsCount = 0;
+    
+    private bool isConnected = false;
+    private bool isLoading = false;
+    private string successMessage = string.Empty;
+    private string errorMessage = string.Empty;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        await InitializeSignalR();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            // Load all simulations
+            allSimulations = (await SimulationService.GetSimulationsAsync()).ToList();
+            
+            // Calculate statistics
+            activeSimulations = allSimulations.Where(s => s.Status == SimulationStatus.Running).ToList();
+            recentSimulations = allSimulations.OrderByDescending(s => s.CreatedAt).ToList();
+            
+            activeSimulationsCount = allSimulations.Count(s => s.Status == SimulationStatus.Running);
+            totalSimulationsCount = allSimulations.Count;
+            completedTodayCount = allSimulations.Count(s => 
+                s.Status == SimulationStatus.Completed && 
+                s.CompletedAt.HasValue && 
+                s.CompletedAt.Value.Date == DateTime.UtcNow.Date);
+            failedSimulationsCount = allSimulations.Count(s => s.Status == SimulationStatus.Failed);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load dashboard data");
+            await ShowError("Failed to load dashboard data");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task InitializeSignalR()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/simulationHub"))
+                .Build();
+
+            hubConnection.On<RoundUpdate>("RoundUpdate", async (update) =>
+            {
+                await InvokeAsync(() =>
+                {
+                    // Update active simulation data when rounds complete
+                    StateHasChanged();
+                });
+            });
+
+            hubConnection.On<SimulationUpdate>("SimulationUpdate", async (update) =>
+            {
+                await InvokeAsync(async () =>
+                {
+                    // Refresh data when simulation status changes
+                    await LoadData();
+                });
+            });
+
+            await hubConnection.StartAsync();
+            isConnected = hubConnection.State == HubConnectionState.Connected;
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to connect to SignalR hub");
+            isConnected = false;
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+
+
+
+    private async Task StopSimulation(Guid simulationId)
+    {
+        try
+        {
+            await SimulationService.StopSimulationAsync(simulationId);
+            await ShowSuccess("Simulation stopped successfully");
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to stop simulation {SimulationId}", simulationId);
+            await ShowError("Failed to stop simulation");
+        }
+    }
+
+    private async Task ShowSuccess(string message)
+    {
+        successMessage = message;
+        await JSRuntime.InvokeVoidAsync("alert", message);
+    }
+
+    private async Task ShowError(string message)
+    {
+        errorMessage = message;
+        await JSRuntime.InvokeVoidAsync("alert", $"Error: {message}");
+    }
+
+    private string GetAlgorithmDisplayName(ConsensusAlgorithm algorithm)
+    {
+        return algorithm switch
+        {
+            ConsensusAlgorithm.ProofOfWork => "Proof of Work",
+            ConsensusAlgorithm.ProofOfStake => "Proof of Stake",
+            ConsensusAlgorithm.ProofOfElapsedTime => "Proof of Elapsed Time",
+            ConsensusAlgorithm.PracticalByzantineFaultTolerance => "PBFT",
+            ConsensusAlgorithm.Raft => "Raft",
+            ConsensusAlgorithm.DelegatedProofOfStake => "Delegated PoS",
+            _ => algorithm.ToString()
+        };
+    }
+
+    private string GetStatusBadgeClass(SimulationStatus status)
+    {
+        return status switch
+        {
+            SimulationStatus.Running => "bg-success",
+            SimulationStatus.Completed => "bg-primary",
+            SimulationStatus.Failed => "bg-danger",
+            SimulationStatus.Stopped => "bg-warning text-dark",
+            SimulationStatus.Paused => "bg-info",
+            SimulationStatus.Ready => "bg-secondary",
+            _ => "bg-light text-dark"
+        };
+    }
+
+    private double GetSimulationProgress(SimulationRun simulation)
+    {
+        // For now, just return a basic progress based on time or rounds
+        var completedRounds = simulation.ConsensusRounds?.Count ?? 0;
+        return completedRounds > 0 ? Math.Min(100, completedRounds * 10) : 0;
+    }
+
+    private string GetDuration(DateTime startTime)
+    {
+        var duration = DateTime.UtcNow - startTime;
+        if (duration.TotalHours >= 1)
+            return $"{(int)duration.TotalHours:D2}:{duration.Minutes:D2}:{duration.Seconds:D2}";
+        else
+            return $"{duration.Minutes:D2}:{duration.Seconds:D2}";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

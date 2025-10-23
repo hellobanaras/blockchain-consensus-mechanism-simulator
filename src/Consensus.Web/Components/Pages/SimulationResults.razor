@@ -1,0 +1,563 @@
+@page "/simulation-results/{SimulationId:guid}"
+@using Consensus.Core.Models
+@using Consensus.Core.Services
+@using Microsoft.AspNetCore.Authorization
+@using System.Text.Json
+@inject ISimulationMetricsService MetricsService
+@inject ISimulationResultsExportService ExportService
+@inject IJSRuntime JSRuntime
+@inject ILogger<SimulationResults> Logger
+@attribute [Authorize(Roles = "Admin,Operator,Viewer")]
+
+<PageTitle>Simulation Results - Consensus Simulator</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <h1><i class="bi bi-graph-up"></i> Simulation Results</h1>
+                    <p class="lead">Comprehensive analysis and metrics for simulation @SimulationId.ToString("N")[..8]</p>
+                </div>
+                <div>
+                    <div class="btn-group" role="group">
+                        <button class="btn btn-outline-primary" @onclick="RefreshData">
+                            <i class="bi bi-arrow-clockwise"></i> Refresh
+                        </button>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-primary dropdown-toggle" data-bs-toggle="dropdown">
+                                <i class="bi bi-download"></i> Export
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" @onclick="() => ExportResults(ExportFormat.JSON)">JSON Format</a></li>
+                                <li><a class="dropdown-item" href="#" @onclick="() => ExportResults(ExportFormat.CSV)">CSV Format</a></li>
+                                <li><a class="dropdown-item" href="#" @onclick="() => ExportResults(ExportFormat.Excel)">Excel Format</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><a class="dropdown-item" href="#" @onclick="() => GenerateReport(ReportFormat.SummaryReport)">Summary Report</a></li>
+                                <li><a class="dropdown-item" href="#" @onclick="() => GenerateReport(ReportFormat.DetailedReport)">Detailed Report</a></li>
+                                <li><a class="dropdown-item" href="#" @onclick="() => GenerateReport(ReportFormat.PerformanceReport)">Performance Report</a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="row">
+            <div class="col-12 text-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Loading simulation results...</p>
+            </div>
+        </div>
+    }
+    else if (summary != null)
+    {
+        <!-- Summary Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card bg-primary text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h5 class="card-title">Success Rate</h5>
+                                <h3 class="mb-0">@summary.SuccessRate.ToString("F1")%</h3>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-check-circle fs-1"></i>
+                            </div>
+                        </div>
+                        <small>@summary.SuccessfulRounds of @summary.TotalRounds rounds</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-success text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h5 class="card-title">Throughput</h5>
+                                <h3 class="mb-0">@summary.ThroughputTps.ToString("F2")</h3>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-speedometer2 fs-1"></i>
+                            </div>
+                        </div>
+                        <small>Transactions per second</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h5 class="card-title">Total Blocks</h5>
+                                <h3 class="mb-0">@summary.TotalBlocks.ToString("N0")</h3>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-boxes fs-1"></i>
+                            </div>
+                        </div>
+                        <small>@summary.TotalTransactions.ToString("N0") transactions</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between">
+                            <div>
+                                <h5 class="card-title">Performance</h5>
+                                <h3 class="mb-0">@summary.PerformanceGrade</h3>
+                            </div>
+                            <div class="align-self-center">
+                                <i class="bi bi-trophy fs-1"></i>
+                            </div>
+                        </div>
+                        <small>@summary.ConsensusEfficiency.ToString("F1")% efficiency</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Information -->
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-info-circle"></i> Simulation Overview</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <table class="table table-sm">
+                                    <tr>
+                                        <td><strong>Algorithm:</strong></td>
+                                        <td>@summary.ConsensusAlgorithm</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Duration:</strong></td>
+                                        <td>@FormatDuration(summary.Duration)</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Node Count:</strong></td>
+                                        <td>@summary.NodeCount</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Average Block Time:</strong></td>
+                                        <td>@summary.AverageBlockTime.TotalSeconds.ToString("F2")s</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <table class="table table-sm">
+                                    <tr>
+                                        <td><strong>Network Latency:</strong></td>
+                                        <td>@summary.NetworkLatency.TotalMilliseconds.ToString("F0")ms</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Fork Count:</strong></td>
+                                        <td>@summary.ForkCount</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Orphan Blocks:</strong></td>
+                                        <td>@summary.OrphanBlocks</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Generated:</strong></td>
+                                        <td>@summary.GeneratedAt.ToString("MMM dd, yyyy HH:mm")</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-bar-chart"></i> Round Statistics</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Success Rate</label>
+                            <div class="progress">
+                                <div class="progress-bar @GetProgressBarClass(summary.SuccessRate)" 
+                                     role="progressbar" 
+                                     style="width: @summary.SuccessRate.ToString("F1")%">
+                                    @summary.SuccessRate.ToString("F1")%
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Consensus Efficiency</label>
+                            <div class="progress">
+                                <div class="progress-bar @GetProgressBarClass(summary.ConsensusEfficiency)" 
+                                     role="progressbar" 
+                                     style="width: @summary.ConsensusEfficiency.ToString("F1")%">
+                                    @summary.ConsensusEfficiency.ToString("F1")%
+                                </div>
+                            </div>
+                        </div>
+                        <small class="text-muted">
+                            Avg Duration: @summary.RoundStatistics.AverageRoundDuration.TotalSeconds.ToString("F2")s<br>
+                            Avg Blocks/Round: @summary.RoundStatistics.AverageBlocksPerRound.ToString("F1")<br>
+                            Avg Txns/Round: @summary.RoundStatistics.AverageTransactionsPerRound.ToString("F1")
+                        </small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-graph-up"></i> Round Performance</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="roundPerformanceChart" style="height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Block Distribution</h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="blockDistributionChart" style="height: 300px;"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Node Performance Table -->
+        @if (summary.NodePerformance.Any())
+        {
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-diagram-3"></i> Node Performance Analysis</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-striped">
+                                    <thead>
+                                        <tr>
+                                            <th>Node</th>
+                                            <th>Blocks Proposed</th>
+                                            <th>Blocks Accepted</th>
+                                            <th>Success Rate</th>
+                                            <th>Uptime</th>
+                                            <th>Participation</th>
+                                            <th>Final Stake</th>
+                                            <th>Reputation</th>
+                                            <th>Rating</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var node in summary.NodePerformance.Values.OrderByDescending(n => n.TotalBlocksAccepted))
+                                        {
+                                            <tr>
+                                                <td>
+                                                    <span class="badge bg-secondary">@node.NodeName</span>
+                                                </td>
+                                                <td>@node.TotalBlocksProposed</td>
+                                                <td>@node.TotalBlocksAccepted</td>
+                                                <td>
+                                                    <span class="badge @GetSuccessRateBadgeClass(node.BlockSuccessRate)">
+                                                        @node.BlockSuccessRate.ToString("F1")%
+                                                    </span>
+                                                </td>
+                                                <td>@node.UptimePercentage.ToString("F1")%</td>
+                                                <td>@node.ConsensusParticipation.ToString("F1")%</td>
+                                                <td>@node.FinalStake.ToString("N2")</td>
+                                                <td>@node.FinalReputation.ToString("F1")</td>
+                                                <td>
+                                                    <span class="badge @GetPerformanceRatingBadgeClass(node.PerformanceRating)">
+                                                        @node.PerformanceRating
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Recent Events -->
+        @if (summary.ConsensusEvents.Any())
+        {
+            <div class="row">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-list-ul"></i> Recent Consensus Events</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Time</th>
+                                            <th>Round</th>
+                                            <th>Event</th>
+                                            <th>Description</th>
+                                            <th>Severity</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var evt in summary.ConsensusEvents.TakeLast(20).Reverse())
+                                        {
+                                            <tr>
+                                                <td>@evt.Timestamp.ToString("HH:mm:ss")</td>
+                                                <td>@evt.RoundNumber</td>
+                                                <td>@evt.EventType</td>
+                                                <td>@evt.Description</td>
+                                                <td>
+                                                    <span class="badge @GetSeverityBadgeClass(evt.Severity)">
+                                                        @evt.Severity
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else if (errorMessage != null)
+    {
+        <div class="row">
+            <div class="col-12">
+                <div class="alert alert-danger" role="alert">
+                    <h4 class="alert-heading">Error Loading Results</h4>
+                    <p>@errorMessage</p>
+                    <hr>
+                    <button class="btn btn-outline-danger" @onclick="RefreshData">
+                        <i class="bi bi-arrow-clockwise"></i> Retry
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid SimulationId { get; set; }
+
+    private SimulationSummary? summary;
+    private List<RoundMetrics>? roundMetrics;
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSimulationResults();
+    }
+
+    private async Task LoadSimulationResults()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            StateHasChanged();
+
+            summary = await MetricsService.GenerateSimulationSummaryAsync(SimulationId);
+            roundMetrics = await MetricsService.GetRoundMetricsAsync(SimulationId);
+
+            // Initialize charts after data is loaded
+            await Task.Delay(100); // Give the DOM time to render
+            await InitializeCharts();
+        }
+        catch (ArgumentException ex)
+        {
+            errorMessage = $"Simulation not found: {ex.Message}";
+            Logger.LogWarning("Simulation {SimulationId} not found", SimulationId);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Failed to load simulation results. Please try again.";
+            Logger.LogError(ex, "Failed to load results for simulation {SimulationId}", SimulationId);
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadSimulationResults();
+    }
+
+    private async Task ExportResults(ExportFormat format)
+    {
+        try
+        {
+            var request = new SimulationExportRequest
+            {
+                SimulationId = SimulationId,
+                Format = format,
+                IncludeRoundData = true,
+                IncludeNodeData = true,
+                IncludeEventLog = true,
+                IncludePrettyFormatting = true,
+                ExportedBy = "Web User"
+            };
+
+            var result = await ExportService.ExportSimulationResultsAsync(request);
+            
+            if (result.Success)
+            {
+                await DownloadFile(result.Data.ToArray(), result.FileName, result.ContentType);
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Export failed: {result.ErrorMessage}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to export simulation results");
+            await JSRuntime.InvokeVoidAsync("alert", "Export failed. Please try again.");
+        }
+    }
+
+    private async Task GenerateReport(ReportFormat format)
+    {
+        try
+        {
+            var reportStream = await ExportService.GenerateSimulationReportAsync(SimulationId, format);
+            var fileName = $"simulation_{SimulationId.ToString("N")[..8]}_{format.ToString().ToLower()}_report.txt";
+            
+            await DownloadFile(reportStream.ToArray(), fileName, "text/plain");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to generate simulation report");
+            await JSRuntime.InvokeVoidAsync("alert", "Report generation failed. Please try again.");
+        }
+    }
+
+    private async Task DownloadFile(byte[] data, string fileName, string contentType)
+    {
+        var base64 = Convert.ToBase64String(data);
+        await JSRuntime.InvokeVoidAsync("downloadFile", fileName, contentType, base64);
+    }
+
+    private async Task InitializeCharts()
+    {
+        try
+        {
+            if (roundMetrics != null && roundMetrics.Any())
+            {
+                // Round performance chart data
+                var roundData = roundMetrics.Select(r => new
+                {
+                    round = r.RoundNumber,
+                    duration = r.Duration.TotalMilliseconds,
+                    blocks = r.BlocksAccepted,
+                    success = r.Success
+                }).ToArray();
+
+                await JSRuntime.InvokeVoidAsync("initializeRoundPerformanceChart", JsonSerializer.Serialize(roundData));
+            }
+
+            if (summary?.NodePerformance != null && summary.NodePerformance.Any())
+            {
+                // Block distribution chart data
+                var blockData = summary.NodePerformance.Values.Select(n => new
+                {
+                    label = n.NodeName,
+                    value = n.TotalBlocksAccepted
+                }).ToArray();
+
+                await JSRuntime.InvokeVoidAsync("initializeBlockDistributionChart", JsonSerializer.Serialize(blockData));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Failed to initialize charts");
+        }
+    }
+
+    #region Helper Methods
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalDays >= 1)
+            return $"{duration.TotalDays:F1} days";
+        if (duration.TotalHours >= 1)
+            return $"{duration.TotalHours:F1} hours";
+        if (duration.TotalMinutes >= 1)
+            return $"{duration.TotalMinutes:F1} minutes";
+        return $"{duration.TotalSeconds:F1} seconds";
+    }
+
+    private string GetProgressBarClass(double percentage)
+    {
+        return percentage switch
+        {
+            >= 90 => "bg-success",
+            >= 75 => "bg-info",
+            >= 60 => "bg-warning",
+            _ => "bg-danger"
+        };
+    }
+
+    private string GetSuccessRateBadgeClass(double rate)
+    {
+        return rate switch
+        {
+            >= 95 => "bg-success",
+            >= 85 => "bg-primary",
+            >= 75 => "bg-warning",
+            _ => "bg-danger"
+        };
+    }
+
+    private string GetPerformanceRatingBadgeClass(string rating)
+    {
+        return rating switch
+        {
+            "Excellent" => "bg-success",
+            "Good" => "bg-primary",
+            "Average" => "bg-warning",
+            "Poor" => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetSeverityBadgeClass(string severity)
+    {
+        return severity switch
+        {
+            "Info" => "bg-info",
+            "Warning" => "bg-warning",
+            "Error" => "bg-danger",
+            "Critical" => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    #endregion
+}

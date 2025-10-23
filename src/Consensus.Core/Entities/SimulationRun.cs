@@ -54,6 +54,21 @@ public class SimulationRun
     public int? TargetBlockCount { get; set; }
 
     /// <summary>
+    /// Maximum number of consensus rounds to execute
+    /// </summary>
+    public int? MaxRounds { get; set; }
+
+    /// <summary>
+    /// Current progress of the simulation (0.0 to 1.0)
+    /// </summary>
+    public double Progress { get; set; } = 0.0;
+
+    /// <summary>
+    /// Error message if the simulation failed
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>
     /// Duration of the simulation in seconds (null for unlimited)
     /// </summary>
     public int? DurationSeconds { get; set; }

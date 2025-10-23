@@ -1,0 +1,1498 @@
+@page "/analytics-dashboard"
+@using Consensus.Web.Models.Api
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Web
+@using System.Text.Json
+@inject IHttpClientFactory HttpClientFactory
+@inject IJSRuntime JSRuntime
+@inject ILogger<AnalyticsDashboard> Logger
+@implements IAsyncDisposable
+@attribute [Authorize(Roles = "Admin,Operator,Viewer")]
+
+<PageTitle>Analytics Dashboard - Consensus Simulator</PageTitle>
+
+<link href="~/css/analytics-dashboard.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.11/signalr.min.js"></script>
+<script src="~/js/download-utils.js"></script>
+<script src="~/js/analytics-signalr.js" type="module"></script>
+
+<div class="analytics-dashboard">
+    <!-- Page Header -->
+    <div class="dashboard-header">
+        <div class="header-content">
+            <div class="header-text">
+                <h1 class="dashboard-title">
+                    <i class="fas fa-chart-line me-3"></i>
+                    Analytics Dashboard
+                </h1>
+                <p class="dashboard-description">
+                    Comprehensive real-time analytics and performance insights for blockchain consensus simulations
+                </p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" @onclick="RefreshData" disabled="@isLoading">
+                    @if (isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    }
+                    else
+                    {
+                        <i class="fas fa-sync-alt me-2"></i>
+                    }
+                    Refresh Data
+                </button>
+                
+                <!-- Real-time connection status -->
+                <div class="real-time-status">
+                    <span class="status-indicator @(isRealTimeConnected ? "connected" : "disconnected")" 
+                          title="@(isRealTimeConnected ? "Connected to real-time updates" : "Disconnected from real-time updates")">
+                        <i class="fas @(isRealTimeConnected ? "fa-circle" : "fa-circle")"></i>
+                    </span>
+                    <small class="text-muted">@(isRealTimeConnected ? "Live" : "Static")</small>
+                    <button class="btn btn-sm btn-outline-info ms-2" @onclick="ToggleRealTimeConnection" 
+                            title="@(isRealTimeConnected ? "Disconnect from real-time updates" : "Connect to real-time updates")">
+                        <i class="fas @(isRealTimeConnected ? "fa-pause" : "fa-play")"></i>
+                    </button>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-calendar-range me-2"></i>
+                        @selectedTimeRange
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" @onclick='() => SetTimeRange("Last Hour")'>Last Hour</a></li>
+                        <li><a class="dropdown-item" href="#" @onclick='() => SetTimeRange("Last 24 Hours")'>Last 24 Hours</a></li>
+                        <li><a class="dropdown-item" href="#" @onclick='() => SetTimeRange("Last 7 Days")'>Last 7 Days</a></li>
+                        <li><a class="dropdown-item" href="#" @onclick='() => SetTimeRange("Last 30 Days")'>Last 30 Days</a></li>
+                        <li><a class="dropdown-item" href="#" @onclick='() => SetTimeRange("All Time")'>All Time</a></li>
+                    </ul>
+                </div>
+                <div class="dropdown">
+                    <button class="btn btn-outline-info dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-download me-2"></i>
+                        Export
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" @onclick='() => ExportData("csv")'>
+                            <i class="fas fa-file-csv me-2"></i>Export CSV
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" @onclick='() => ExportData("json")'>
+                            <i class="fas fa-file-code me-2"></i>Export JSON
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" @onclick='() => ExportData("pdf")'>
+                            <i class="fas fa-file-pdf me-2"></i>Export PDF Report
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading && analyticsData == null)
+    {
+        <div class="loading-container">
+            <div class="loading-spinner">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                    <span class="visually-hidden">Loading analytics...</span>
+                </div>
+                <h4 class="mt-3 text-muted">Loading Analytics Data...</h4>
+                <p class="text-muted">Gathering insights from consensus simulations</p>
+            </div>
+        </div>
+    }
+    else if (errorMessage != null)
+    {
+        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>Error:</strong> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+    else if (analyticsData != null)
+    {
+        <!-- Filters Section -->
+        <div class="filters-section mb-4">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label for="algorithmFilter" class="form-label fw-semibold">
+                        <i class="fas fa-cogs me-1"></i>Algorithm Filter
+                    </label>
+                    <select class="form-select" id="algorithmFilter" @bind="selectedAlgorithm" @bind:after="ApplyFilters">
+                        <option value="">All Algorithms</option>
+                        <option value="ProofOfWork">Proof of Work</option>
+                        <option value="ProofOfStake">Proof of Stake</option>
+                        <option value="DelegatedProofOfStake">Delegated Proof of Stake</option>
+                        <option value="ProofOfElapsedTime">Proof of Elapsed Time</option>
+                        <option value="PracticalByzantineFaultTolerance">PBFT</option>
+                        <option value="Tendermint">Tendermint</option>
+                        <option value="HoneyBadgerBFT">HoneyBadger BFT</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="nodeCountFilter" class="form-label fw-semibold">
+                        <i class="fas fa-server me-1"></i>Node Count
+                    </label>
+                    <select class="form-select" id="nodeCountFilter" @bind="selectedNodeCount" @bind:after="ApplyFilters">
+                        <option value="0">All Counts</option>
+                        <option value="10">10 Nodes</option>
+                        <option value="25">25 Nodes</option>
+                        <option value="50">50 Nodes</option>
+                        <option value="100">100+ Nodes</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="statusFilter" class="form-label fw-semibold">
+                        <i class="fas fa-check-circle me-1"></i>Status
+                    </label>
+                    <select class="form-select" id="statusFilter" @bind="selectedStatus" @bind:after="ApplyFilters">
+                        <option value="">All Status</option>
+                        <option value="Completed">Completed</option>
+                        <option value="Running">Running</option>
+                        <option value="Failed">Failed</option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="chartTheme" class="form-label fw-semibold">
+                        <i class="fas fa-palette me-1"></i>Chart Theme
+                    </label>
+                    <select class="form-select" id="chartTheme" @bind="selectedChartTheme" @bind:after="UpdateChartThemes">
+                        <option value="primary">Primary</option>
+                        <option value="pastel">Pastel</option>
+                        <option value="vibrant">Vibrant</option>
+                        <option value="monochrome">Monochrome</option>
+                    </select>
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-outline-primary w-100" @onclick="ApplyFilters" disabled="@isLoading">
+                        <i class="fas fa-filter me-2"></i>Apply
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Key Metrics Overview -->
+        <div class="metrics-overview mb-4">
+            <div class="row g-3">
+                <div class="col-md-2">
+                    <div class="metric-card metric-primary">
+                        <div class="metric-icon">
+                            <i class="fas fa-play-circle"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3 class="metric-value">@analyticsData.TotalSimulations</h3>
+                            <p class="metric-label">Total Simulations</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card metric-success">
+                        <div class="metric-icon">
+                            <i class="fas fa-cubes"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3 class="metric-value">@analyticsData.TotalBlocks.ToString("N0")</h3>
+                            <p class="metric-label">Blocks Created</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card metric-info">
+                        <div class="metric-icon">
+                            <i class="fas fa-server"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3 class="metric-value">@analyticsData.TotalNodes</h3>
+                            <p class="metric-label">Total Nodes</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card metric-warning">
+                        <div class="metric-icon">
+                            <i class="fas fa-clock"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3 class="metric-value">@FormatDuration(analyticsData.AverageSimulationDuration)</h3>
+                            <p class="metric-label">Avg Duration</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card metric-secondary">
+                        <div class="metric-icon">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3 class="metric-value">@GetAverageProcessingTime()ms</h3>
+                            <p class="metric-label">Avg Processing</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="metric-card metric-dark">
+                        <div class="metric-icon">
+                            <i class="fas fa-percentage"></i>
+                        </div>
+                        <div class="metric-content">
+                            <h3 class="metric-value">@GetSuccessRate()%</h3>
+                            <p class="metric-label">Success Rate</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Charts Section -->
+        <div class="charts-section mb-4">
+            <div class="row g-4">
+                <!-- Winner Distribution Chart -->
+                <div class="col-lg-6">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h5 class="chart-title">
+                                <i class="fas fa-trophy me-2"></i>
+                                Block Winner Distribution
+                            </h5>
+                            <div class="chart-actions">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick='() => ExportChart("winnerChart")'>
+                                    <i class="fas fa-download"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chart-body">
+                            <canvas id="winnerChart" width="400" height="350"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Algorithm Performance Chart -->
+                <div class="col-lg-6">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h5 class="chart-title">
+                                <i class="fas fa-chart-pie me-2"></i>
+                                Algorithm Distribution
+                            </h5>
+                            <div class="chart-actions">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick='() => ExportChart("algorithmChart")'>
+                                    <i class="fas fa-download"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chart-body">
+                            <canvas id="algorithmChart" width="400" height="350"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Trends -->
+        <div class="performance-section mb-4">
+            <div class="row g-4">
+                <!-- Performance Timeline -->
+                <div class="col-12">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h5 class="chart-title">
+                                <i class="fas fa-chart-line me-2"></i>
+                                Performance Trends Over Time
+                            </h5>
+                            <div class="chart-actions">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <input type="radio" class="btn-check" name="performanceMetric" id="processing" value="processing" @onchange="UpdatePerformanceChart" checked="@(selectedPerformanceMetric == "processing")">
+                                    <label class="btn btn-outline-primary" for="processing">Processing Time</label>
+                                    
+                                    <input type="radio" class="btn-check" name="performanceMetric" id="consensus" value="consensus" @onchange="UpdatePerformanceChart" checked="@(selectedPerformanceMetric == "consensus")">
+                                    <label class="btn btn-outline-primary" for="consensus">Consensus Time</label>
+                                    
+                                    <input type="radio" class="btn-check" name="performanceMetric" id="both" value="both" @onchange="UpdatePerformanceChart" checked="@(selectedPerformanceMetric == "both")">
+                                    <label class="btn btn-outline-primary" for="both">Both</label>
+                                </div>
+                                <button class="btn btn-sm btn-outline-secondary ms-2" @onclick='() => ExportChart("performanceChart")'>
+                                    <i class="fas fa-download"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chart-body">
+                            <canvas id="performanceChart" width="800" height="400"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistical Analysis -->
+        <div class="statistics-section mb-4">
+            <div class="row g-4">
+                <!-- Processing Time Histogram -->
+                <div class="col-lg-6">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h5 class="chart-title">
+                                <i class="fas fa-chart-area me-2"></i>
+                                Processing Time Distribution
+                            </h5>
+                            <div class="chart-actions">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick='() => ExportChart("processingHistogram")'>
+                                    <i class="fas fa-download"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chart-body">
+                            <canvas id="processingHistogram" width="400" height="350"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Protocol Usage -->
+                <div class="col-lg-6">
+                    <div class="chart-card">
+                        <div class="chart-header">
+                            <h5 class="chart-title">
+                                <i class="fas fa-network-wired me-2"></i>
+                                Protocol Usage
+                            </h5>
+                            <div class="chart-actions">
+                                <button class="btn btn-sm btn-outline-secondary" @onclick='() => ExportChart("protocolChart")'>
+                                    <i class="fas fa-download"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="chart-body">
+                            <canvas id="protocolChart" width="400" height="350"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Summary Table -->
+        @if (performanceSummary?.Any() == true)
+        {
+            <div class="table-section mb-4">
+                <div class="table-card">
+                    <div class="table-header">
+                        <h5 class="table-title">
+                            <i class="fas fa-table me-2"></i>
+                            Algorithm Performance Summary
+                        </h5>
+                        <div class="table-actions">
+                            <button class="btn btn-sm btn-outline-primary" @onclick="ExportPerformanceData">
+                                <i class="fas fa-file-export me-1"></i>Export Table
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-striped">
+                                <thead class="table-dark">
+                                    <tr>
+                                        <th scope="col">Algorithm</th>
+                                        <th scope="col">Simulations</th>
+                                        <th scope="col">Avg Processing (ms)</th>
+                                        <th scope="col">Avg Consensus (ms)</th>
+                                        <th scope="col">Success Rate</th>
+                                        <th scope="col">Efficiency Score</th>
+                                        <th scope="col">Rank</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var item in performanceSummary.OrderByDescending(p => p.EfficiencyScore))
+                                    {
+                                        <tr>
+                                            <td><strong>@item.Algorithm</strong></td>
+                                            <td>@item.TotalSimulations</td>
+                                            <td>@item.AverageProcessingTime.ToString("F1")</td>
+                                            <td>@item.AverageConsensusTime.ToString("F1")</td>
+                                            <td>
+                                                <div class="progress-container">
+                                                    <div class="progress">
+                                                        <div class="progress-bar @GetSuccessRateClass(item.SuccessRate)" 
+                                                             style="width: @item.SuccessRate%"></div>
+                                                    </div>
+                                                    <span class="progress-text">@item.SuccessRate.ToString("F1")%</span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="badge @GetEfficiencyBadgeClass(item.EfficiencyScore)">
+                                                    @item.EfficiencyScore.ToString("F2")
+                                                </span>
+                                            </td>
+                                            <td>
+                                                @{
+                                                    var rank = performanceSummary.OrderByDescending(p => p.EfficiencyScore).ToList().IndexOf(item) + 1;
+                                                }
+                                                @if (rank == 1)
+                                                {
+                                                    <span class="badge bg-success">
+                                                        <i class="fas fa-crown me-1"></i>#@rank
+                                                    </span>
+                                                }
+                                                else if (rank <= 3)
+                                                {
+                                                    <span class="badge bg-info">#@rank</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="badge bg-secondary">#@rank</span>
+                                                }
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Real-time Stats Panel -->
+        <div class="realtime-section">
+            <div class="realtime-card">
+                <div class="realtime-header">
+                    <h5 class="realtime-title">
+                        <i class="fas fa-broadcast-tower me-2"></i>
+                        Real-time Statistics
+                        <span class="badge bg-success ms-2">
+                            <i class="fas fa-circle" style="font-size: 0.5rem;"></i>
+                            Live
+                        </span>
+                    </h5>
+                    <div class="realtime-toggle">
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="realtimeToggle" @bind="enableRealTime" @bind:after="ToggleRealTime">
+                            <label class="form-check-label" for="realtimeToggle">
+                                Auto-refresh
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="realtime-body">
+                    <div class="row g-3">
+                        <div class="col-md-2">
+                            <div class="stat-item">
+                                <div class="stat-label">Active Simulations</div>
+                                <div class="stat-value text-primary">@activeSimulations</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="stat-item">
+                                <div class="stat-label">Blocks/Second</div>
+                                <div class="stat-value text-success">@currentBlockRate.ToString("F2")</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="stat-item">
+                                <div class="stat-label">Network Nodes</div>
+                                <div class="stat-value text-info">@activeNodes</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="stat-item">
+                                <div class="stat-label">System Load</div>
+                                <div class="stat-value text-warning">@systemLoad.ToString("F1")%</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="stat-item">
+                                <div class="stat-label">Memory Usage</div>
+                                <div class="stat-value text-secondary">@memoryUsage.ToString("F1")%</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="stat-item">
+                                <div class="stat-label">Last Updated</div>
+                                <div class="stat-value text-muted" style="font-size: 0.8rem;">@lastUpdateTime.ToString("HH:mm:ss")</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="empty-state">
+            <div class="empty-state-content">
+                <i class="fas fa-chart-line fa-4x text-muted mb-4"></i>
+                <h3 class="text-muted">No Analytics Data Available</h3>
+                <p class="text-muted mb-4">Start running some consensus simulations to see analytics here.</p>
+                <a href="/simulations" class="btn btn-primary">
+                    <i class="fas fa-play me-2"></i>Run Simulations
+                </a>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    // Data and state
+    private AnalyticsData? analyticsData;
+    private List<PerformanceMetrics>? performanceSummary;
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    // Chart instances
+    private IJSObjectReference? chartModule;
+    private IJSObjectReference? winnerChartInstance;
+    private IJSObjectReference? algorithmChartInstance;
+    private IJSObjectReference? performanceChartInstance;
+    private IJSObjectReference? processingHistogramInstance;
+    private IJSObjectReference? protocolChartInstance;
+
+    // Filters
+    private string selectedTimeRange = "Last 24 Hours";
+    private string selectedAlgorithm = "";
+    private int selectedNodeCount = 0;
+    private string selectedStatus = "";
+    private string selectedChartTheme = "primary";
+    private string selectedPerformanceMetric = "both";
+
+    // Real-time data
+    private bool enableRealTime = false;
+    private Timer? realTimeTimer;
+    private int activeSimulations = 0;
+    private double currentBlockRate = 0.0;
+    private int activeNodes = 0;
+    private double systemLoad = 0.0;
+    private double memoryUsage = 0.0;
+    private DateTime lastUpdateTime = DateTime.Now;
+
+    // Real-time SignalR connection
+    private bool isRealTimeConnected = false;
+    private IJSObjectReference? signalRModule;
+    private readonly List<IJSObjectReference> chartInstances = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/chart-interop-v2.js");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load chart module");
+        }
+        
+        await LoadAnalyticsData();
+    }
+
+    private async Task LoadAnalyticsData()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            // Simulate loading analytics data for now
+            await Task.Delay(1000);
+            
+            // Mock data - replace with actual API call
+            analyticsData = new AnalyticsData
+            {
+                TotalSimulations = 47,
+                TotalBlocks = 1247,
+                TotalNodes = 125,
+                AverageSimulationDuration = 234.5,
+                AlgorithmPerformance = new Dictionary<string, AlgorithmPerformanceData>
+                {
+                    ["ProofOfWork"] = new() { TotalSimulations = 15, AverageProcessingTime = 4200, AverageConsensusTime = 2800, SuccessRate = 94.2 },
+                    ["ProofOfStake"] = new() { TotalSimulations = 12, AverageProcessingTime = 1800, AverageConsensusTime = 1200, SuccessRate = 96.8 },
+                    ["PBFT"] = new() { TotalSimulations = 8, AverageProcessingTime = 2100, AverageConsensusTime = 1500, SuccessRate = 98.1 },
+                    ["Raft"] = new() { TotalSimulations = 12, AverageProcessingTime = 890, AverageConsensusTime = 650, SuccessRate = 99.2 }
+                },
+                NodeStats = new Dictionary<string, NodeStatsData>
+                {
+                    ["node-001"] = new() { BlocksProduced = 45, WinRate = 18.2, AverageBlockTime = 2.1, EfficiencyScore = 8.7, PerformanceRank = 1 },
+                    ["node-002"] = new() { BlocksProduced = 42, WinRate = 17.1, AverageBlockTime = 2.3, EfficiencyScore = 8.4, PerformanceRank = 2 },
+                    ["node-003"] = new() { BlocksProduced = 38, WinRate = 15.4, AverageBlockTime = 2.5, EfficiencyScore = 8.1, PerformanceRank = 3 },
+                    ["node-004"] = new() { BlocksProduced = 35, WinRate = 14.2, AverageBlockTime = 2.7, EfficiencyScore = 7.8, PerformanceRank = 4 },
+                    ["node-005"] = new() { BlocksProduced = 32, WinRate = 13.0, AverageBlockTime = 2.9, EfficiencyScore = 7.5, PerformanceRank = 5 }
+                },
+                TimeSeriesData = GenerateTimeSeriesData()
+            };
+
+            // Generate performance summary
+            await GeneratePerformanceSummary();
+            
+            // Create charts after data is loaded
+            await CreateAllCharts();
+            
+            Logger.LogInformation("Loaded analytics for {SimulationCount} simulations", analyticsData?.TotalSimulations ?? 0);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading analytics data");
+            errorMessage = $"Failed to load analytics data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private List<TimeSeriesDataPoint> GenerateTimeSeriesData()
+    {
+        var data = new List<TimeSeriesDataPoint>();
+        var baseTime = DateTime.Now.AddHours(-24);
+        
+        for (int i = 0; i < 24; i++)
+        {
+            data.Add(new TimeSeriesDataPoint
+            {
+                Timestamp = baseTime.AddHours(i),
+                AverageProcessingTime = 1000 + Random.Shared.Next(-300, 300),
+                AverageConsensusTime = 800 + Random.Shared.Next(-200, 200),
+                ActiveSimulations = Random.Shared.Next(5, 15),
+                ActiveNodes = Random.Shared.Next(100, 150),
+                BlocksCreated = Random.Shared.Next(20, 80)
+            });
+        }
+        
+        return data;
+    }
+
+    private async Task CreateAllCharts()
+    {
+        if (analyticsData == null || chartModule == null) return;
+
+        try
+        {
+            await Task.Delay(100); // Ensure DOM is ready
+
+            // Create winner distribution chart
+            if (analyticsData.NodeStats?.Any() == true)
+            {
+                var winnerData = analyticsData.NodeStats
+                    .OrderByDescending(n => n.Value.BlocksProduced)
+                    .Take(10)
+                    .ToDictionary(
+                        n => n.Key.Length > 8 ? n.Key.Substring(0, 8) + "..." : n.Key,
+                        n => n.Value.BlocksProduced
+                    );
+
+                var winnerConfig = new
+                {
+                    type = "bar",
+                    data = new
+                    {
+                        labels = winnerData.Keys.ToArray(),
+                        datasets = new[]
+                        {
+                            new
+                            {
+                                label = "Blocks Produced",
+                                data = winnerData.Values.ToArray(),
+                                backgroundColor = new[] { "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40", "#FF6384", "#C9CBCF", "#4BC0C0", "#FF6384" },
+                                borderColor = new[] { "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0", "#9966FF", "#FF9F40", "#FF6384", "#C9CBCF", "#4BC0C0", "#FF6384" },
+                                borderWidth = 2
+                            }
+                        }
+                    },
+                    options = new
+                    {
+                        responsive = true,
+                        maintainAspectRatio = false,
+                        plugins = new
+                        {
+                            legend = new { display = false },
+                            title = new { display = true, text = "Block Winner Distribution" }
+                        },
+                        scales = new
+                        {
+                            y = new { beginAtZero = true, title = new { display = true, text = "Blocks Produced" } },
+                            x = new { title = new { display = true, text = "Node" } }
+                        }
+                    }
+                };
+
+                winnerChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "winnerChart", winnerConfig);
+            }
+
+            // Create algorithm distribution chart
+            if (analyticsData.AlgorithmPerformance?.Any() == true)
+            {
+                var algorithmData = analyticsData.AlgorithmPerformance.ToDictionary(
+                    a => a.Key,
+                    a => a.Value.TotalSimulations
+                );
+
+                var algorithmConfig = new
+                {
+                    type = "pie",
+                    data = new
+                    {
+                        labels = algorithmData.Keys.ToArray(),
+                        datasets = new[]
+                        {
+                            new
+                            {
+                                data = algorithmData.Values.ToArray(),
+                                backgroundColor = new[] { "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0" },
+                                borderColor = new[] { "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0" },
+                                borderWidth = 2
+                            }
+                        }
+                    },
+                    options = new
+                    {
+                        responsive = true,
+                        maintainAspectRatio = false,
+                        plugins = new
+                        {
+                            legend = new { display = true, position = "right" },
+                            title = new { display = true, text = "Algorithm Distribution" }
+                        }
+                    }
+                };
+
+                algorithmChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "algorithmChart", algorithmConfig);
+            }
+
+            // Create performance trends chart
+            if (analyticsData.TimeSeriesData?.Any() == true)
+            {
+                await UpdatePerformanceChart();
+            }
+
+            // Create processing time histogram
+            if (performanceSummary?.Any() == true)
+            {
+                var processingTimes = performanceSummary.Select(p => p.AverageProcessingTime).ToList();
+                var histogramData = CreateHistogramData(processingTimes);
+
+                var histogramConfig = new
+                {
+                    type = "bar",
+                    data = new
+                    {
+                        labels = histogramData.Labels.ToArray(),
+                        datasets = new[]
+                        {
+                            new
+                            {
+                                label = "Frequency",
+                                data = histogramData.Values.ToArray(),
+                                backgroundColor = "#36A2EB",
+                                borderColor = "#36A2EB",
+                                borderWidth = 1
+                            }
+                        }
+                    },
+                    options = new
+                    {
+                        responsive = true,
+                        maintainAspectRatio = false,
+                        plugins = new
+                        {
+                            legend = new { display = false },
+                            title = new { display = true, text = "Processing Time Distribution" }
+                        },
+                        scales = new
+                        {
+                            y = new { beginAtZero = true, title = new { display = true, text = "Frequency" } },
+                            x = new { title = new { display = true, text = "Processing Time (ms)" } }
+                        }
+                    }
+                };
+
+                processingHistogramInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "processingHistogram", histogramConfig);
+            }
+
+            // Create protocol usage chart
+            if (analyticsData.AlgorithmPerformance?.Any() == true)
+            {
+                var protocolData = analyticsData.AlgorithmPerformance.ToDictionary(
+                    a => a.Key,
+                    a => a.Value.TotalSimulations
+                );
+
+                var protocolConfig = new
+                {
+                    type = "doughnut",
+                    data = new
+                    {
+                        labels = protocolData.Keys.ToArray(),
+                        datasets = new[]
+                        {
+                            new
+                            {
+                                data = protocolData.Values.ToArray(),
+                                backgroundColor = new[] { "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0" },
+                                borderColor = new[] { "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0" },
+                                borderWidth = 2
+                            }
+                        }
+                    },
+                    options = new
+                    {
+                        responsive = true,
+                        maintainAspectRatio = false,
+                        plugins = new
+                        {
+                            legend = new { display = true, position = "right" },
+                            title = new { display = true, text = "Protocol Usage Distribution" }
+                        }
+                    }
+                };
+
+                protocolChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "protocolChart", protocolConfig);
+            }
+
+            Logger.LogDebug("All charts created successfully");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating charts");
+        }
+    }
+
+    private async Task UpdatePerformanceChart()
+    {
+        if (analyticsData?.TimeSeriesData == null || chartModule == null) return;
+
+        try
+        {
+            var timeLabels = analyticsData.TimeSeriesData.Select(ts => ts.Timestamp.ToString("MM/dd HH:mm")).ToArray();
+            
+            var datasets = selectedPerformanceMetric switch
+            {
+                "processing" => new[]
+                {
+                    new
+                    {
+                        label = "Processing Time (ms)",
+                        data = analyticsData.TimeSeriesData.Select(ts => ts.AverageProcessingTime).ToArray(),
+                        borderColor = "#2ECC71",
+                        backgroundColor = "rgba(46, 204, 113, 0.1)",
+                        borderWidth = 2,
+                        fill = false,
+                        tension = 0.1
+                    }
+                },
+                "consensus" => new[]
+                {
+                    new
+                    {
+                        label = "Consensus Time (ms)",
+                        data = analyticsData.TimeSeriesData.Select(ts => ts.AverageConsensusTime).ToArray(),
+                        borderColor = "#3498DB",
+                        backgroundColor = "rgba(52, 152, 219, 0.1)",
+                        borderWidth = 2,
+                        fill = false,
+                        tension = 0.1
+                    }
+                },
+                _ => new[]
+                {
+                    new
+                    {
+                        label = "Processing Time (ms)",
+                        data = analyticsData.TimeSeriesData.Select(ts => ts.AverageProcessingTime).ToArray(),
+                        borderColor = "#2ECC71",
+                        backgroundColor = "rgba(46, 204, 113, 0.1)",
+                        borderWidth = 2,
+                        fill = false,
+                        tension = 0.1
+                    },
+                    new
+                    {
+                        label = "Consensus Time (ms)",
+                        data = analyticsData.TimeSeriesData.Select(ts => ts.AverageConsensusTime).ToArray(),
+                        borderColor = "#3498DB",
+                        backgroundColor = "rgba(52, 152, 219, 0.1)",
+                        borderWidth = 2,
+                        fill = false,
+                        tension = 0.1
+                    }
+                }
+            };
+
+            var performanceConfig = new
+            {
+                type = "line",
+                data = new
+                {
+                    labels = timeLabels,
+                    datasets = datasets
+                },
+                options = new
+                {
+                    responsive = true,
+                    maintainAspectRatio = false,
+                    plugins = new
+                    {
+                        legend = new { display = true, position = "top" },
+                        title = new { display = true, text = "Performance Trends Over Time" }
+                    },
+                    scales = new
+                    {
+                        y = new { beginAtZero = true, title = new { display = true, text = "Time (ms)" } },
+                        x = new { title = new { display = true, text = "Time" } }
+                    }
+                }
+            };
+
+            // Destroy existing chart if it exists
+            if (performanceChartInstance != null)
+            {
+                await performanceChartInstance.InvokeVoidAsync("destroy");
+            }
+
+            performanceChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "performanceChart", performanceConfig);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating performance chart");
+        }
+    }
+
+    private (List<string> Labels, List<int> Values) CreateHistogramData(List<double> values)
+    {
+        if (!values.Any()) return (new List<string>(), new List<int>());
+
+        var min = values.Min();
+        var max = values.Max();
+        var binCount = Math.Min(10, (int)Math.Sqrt(values.Count));
+        var binWidth = (max - min) / binCount;
+
+        var labels = new List<string>();
+        var counts = new List<int>();
+
+        for (int i = 0; i < binCount; i++)
+        {
+            var binStart = min + i * binWidth;
+            var binEnd = min + (i + 1) * binWidth;
+            var binLabel = $"{binStart:F0}-{binEnd:F0}";
+            var count = values.Count(v => v >= binStart && v < binEnd);
+            
+            labels.Add(binLabel);
+            counts.Add(count);
+        }
+
+        return (labels, counts);
+    }
+
+    private async Task GeneratePerformanceSummary()
+    {
+        if (analyticsData?.AlgorithmPerformance == null) return;
+
+        performanceSummary = analyticsData.AlgorithmPerformance.Select(alg => new PerformanceMetrics
+        {
+            Algorithm = alg.Key,
+            TotalSimulations = alg.Value.TotalSimulations,
+            AverageProcessingTime = alg.Value.AverageProcessingTime,
+            AverageConsensusTime = alg.Value.AverageConsensusTime,
+            SuccessRate = alg.Value.SuccessRate,
+            EfficiencyScore = CalculateEfficiencyScore(alg.Value)
+        }).ToList();
+
+        await Task.CompletedTask;
+    }
+
+    private double CalculateEfficiencyScore(AlgorithmPerformanceData performance)
+    {
+        // Weighted efficiency score: 40% success rate, 30% speed, 30% consistency
+        var speedScore = Math.Max(0, 100 - (performance.AverageProcessingTime + performance.AverageConsensusTime) / 100);
+        var consistencyScore = Math.Max(0, 100 - performance.SuccessRate);
+        
+        return (performance.SuccessRate * 0.4) + (speedScore * 0.3) + (consistencyScore * 0.3);
+    }
+
+    // Event handlers
+    private async Task RefreshData()
+    {
+        await LoadAnalyticsData();
+    }
+
+    private async Task SetTimeRange(string range)
+    {
+        selectedTimeRange = range;
+        await LoadAnalyticsData();
+    }
+
+    private async Task ApplyFilters()
+    {
+        await LoadAnalyticsData();
+    }
+
+    private async Task UpdateChartThemes()
+    {
+        // Update all chart themes - simplified for now
+        if (chartModule != null)
+        {
+            try
+            {
+                var chartIds = new[] { "winnerChart", "algorithmChart", "protocolChart" };
+                foreach (var chartId in chartIds)
+                {
+                    // For now, just log the theme change
+                    Logger.LogDebug("Chart theme changed to {Theme} for {ChartId}", selectedChartTheme, chartId);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Error updating chart themes");
+            }
+        }
+    }
+
+    private async Task ExportChart(string chartId)
+    {
+        if (chartModule != null)
+        {
+            try
+            {
+                await chartModule.InvokeVoidAsync("exportChart", chartId, "png");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error exporting chart {ChartId}", chartId);
+                errorMessage = $"Failed to export chart: {ex.Message}";
+            }
+        }
+    }
+
+    private async Task ExportData(string format)
+    {
+        try
+        {
+            using var httpClient = HttpClientFactory.CreateClient();
+            var response = await httpClient.GetAsync($"/api/analytics/export?format={format}");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsByteArrayAsync();
+                var fileName = $"analytics-export-{DateTime.Now:yyyyMMdd-HHmmss}.{format}";
+                await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(content));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting data in format {Format}", format);
+            errorMessage = $"Failed to export data: {ex.Message}";
+        }
+    }
+
+    private async Task ExportPerformanceData()
+    {
+        if (performanceSummary == null) return;
+
+        try
+        {
+            var csv = "Algorithm,Simulations,Avg Processing (ms),Avg Consensus (ms),Success Rate (%),Efficiency Score\n";
+            csv += string.Join("\n", performanceSummary.Select(p => 
+                $"{p.Algorithm},{p.TotalSimulations},{p.AverageProcessingTime:F1},{p.AverageConsensusTime:F1},{p.SuccessRate:F1},{p.EfficiencyScore:F2}"));
+
+            var bytes = System.Text.Encoding.UTF8.GetBytes(csv);
+            var fileName = $"performance-summary-{DateTime.Now:yyyyMMdd-HHmmss}.csv";
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting performance data");
+            errorMessage = $"Failed to export performance data: {ex.Message}";
+        }
+    }
+
+    private void ToggleRealTime()
+    {
+        if (enableRealTime)
+        {
+            realTimeTimer = new Timer(async _ => await UpdateRealTimeStats(), null, TimeSpan.Zero, TimeSpan.FromSeconds(5));
+        }
+        else
+        {
+            realTimeTimer?.Dispose();
+            realTimeTimer = null;
+        }
+    }
+
+    private async Task ToggleRealTimeConnection()
+    {
+        try
+        {
+            if (isRealTimeConnected)
+            {
+                await DisconnectFromRealTimeUpdates();
+            }
+            else
+            {
+                await ConnectToRealTimeUpdates();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error toggling real-time connection");
+            errorMessage = $"Failed to toggle real-time connection: {ex.Message}";
+        }
+    }
+
+    private async Task ConnectToRealTimeUpdates()
+    {
+        try
+        {
+            var script = @"
+                if (window.analyticsSignalR && !window.analyticsSignalR.isConnected) {
+                    await window.analyticsSignalR.initialize(false);
+                    
+                    // Set up event handlers
+                    window.analyticsSignalR.on('connected', () => {
+                        window.blazorInstance.invokeMethodAsync('OnSignalRConnected');
+                    });
+                    
+                    window.analyticsSignalR.on('disconnected', () => {
+                        window.blazorInstance.invokeMethodAsync('OnSignalRDisconnected');
+                    });
+                    
+                    window.analyticsSignalR.on('realTimeStats', (data) => {
+                        window.blazorInstance.invokeMethodAsync('OnRealTimeStatsReceived', data);
+                    });
+                    
+                    window.analyticsSignalR.on('analyticsUpdate', (data) => {
+                        window.blazorInstance.invokeMethodAsync('OnAnalyticsUpdateReceived', data);
+                    });
+                    
+                    window.analyticsSignalR.on('chartUpdate', (data) => {
+                        window.blazorInstance.invokeMethodAsync('OnChartUpdateReceived', data);
+                    });
+                    
+                    // Subscribe to all updates
+                    await window.analyticsSignalR.subscribe('performance');
+                    await window.analyticsSignalR.subscribe('simulation');
+                    await window.analyticsSignalR.subscribe('charts');
+                }";
+
+            await JSRuntime.InvokeVoidAsync("eval", script);
+
+            // Set reference to this Blazor component for callbacks
+            await JSRuntime.InvokeVoidAsync("eval", "window.blazorInstance = arguments[0]", DotNetObjectReference.Create(this));
+            
+            Logger.LogInformation("Connected to real-time analytics updates");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to connect to real-time updates");
+            throw;
+        }
+    }
+
+    private async Task DisconnectFromRealTimeUpdates()
+    {
+        try
+        {
+            var script = @"
+                if (window.analyticsSignalR && window.analyticsSignalR.isConnected) {
+                    await window.analyticsSignalR.disconnect();
+                }";
+                
+            await JSRuntime.InvokeVoidAsync("eval", script);
+            
+            isRealTimeConnected = false;
+            await InvokeAsync(StateHasChanged);
+            
+            Logger.LogInformation("Disconnected from real-time analytics updates");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to disconnect from real-time updates");
+            throw;
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnSignalRConnected()
+    {
+        isRealTimeConnected = true;
+        await InvokeAsync(StateHasChanged);
+        Logger.LogDebug("SignalR connected callback received");
+    }
+
+    [JSInvokable]
+    public async Task OnSignalRDisconnected()
+    {
+        isRealTimeConnected = false;
+        await InvokeAsync(StateHasChanged);
+        Logger.LogDebug("SignalR disconnected callback received");
+    }
+
+    [JSInvokable]
+    public async Task OnRealTimeStatsReceived(JsonElement data)
+    {
+        try
+        {
+            var stats = System.Text.Json.JsonSerializer.Deserialize<RealTimeStats>(data.GetRawText(), new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            });
+
+            if (stats != null)
+            {
+                activeSimulations = stats.ActiveSimulations;
+                currentBlockRate = stats.CurrentBlockRate;
+                activeNodes = stats.ActiveNodes;
+                systemLoad = stats.SystemLoad;
+                memoryUsage = stats.MemoryUsage;
+                lastUpdateTime = DateTime.Now;
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error processing real-time stats update");
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnAnalyticsUpdateReceived(JsonElement data)
+    {
+        try
+        {
+            // Update analytics data from real-time feed
+            Logger.LogDebug("Received analytics update via SignalR");
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error processing analytics update");
+        }
+    }
+
+    [JSInvokable]
+    public async Task OnChartUpdateReceived(JsonElement data)
+    {
+        try
+        {
+            // Update specific chart from real-time data
+            var updateData = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(data.GetRawText(), new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+            });
+
+            if (updateData != null && updateData.ContainsKey("chartType"))
+            {
+                var chartType = updateData["chartType"].ToString();
+                Logger.LogDebug("Received chart update for {ChartType} via SignalR", chartType);
+                
+                // Update specific chart based on type
+                await UpdateChartFromSignalR(chartType, updateData["data"]);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error processing chart update");
+        }
+    }
+
+    private async Task UpdateChartFromSignalR(string? chartType, object? chartData)
+    {
+        if (chartModule == null || string.IsNullOrEmpty(chartType)) return;
+
+        try
+        {
+            var chartElementId = chartType.ToLower() switch
+            {
+                "winner" => "winnerChart",
+                "algorithm" => "algorithmChart", 
+                "performance" => "performanceChart",
+                "histogram" => "processingHistogram",
+                _ => null
+            };
+
+            if (!string.IsNullOrEmpty(chartElementId) && chartData != null)
+            {
+                // Update chart with new data
+                await chartModule.InvokeVoidAsync("updateChart", chartElementId, chartData);
+                
+                // Add visual indicator that chart was updated
+                var updateScript = $@"
+                    const chartElement = document.getElementById('{chartElementId}');
+                    if (chartElement) {{
+                        chartElement.classList.add('real-time-update');
+                        setTimeout(() => chartElement.classList.remove('real-time-update'), 1000);
+                    }}";
+                    
+                await JSRuntime.InvokeVoidAsync("eval", updateScript);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating chart {ChartType} from SignalR", chartType);
+        }
+    }
+
+    private async Task UpdateRealTimeStats()
+    {
+        try
+        {
+            using var httpClient = HttpClientFactory.CreateClient();
+            var response = await httpClient.GetAsync("/api/analytics/realtime");
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var jsonContent = await response.Content.ReadAsStringAsync();
+                var realtimeData = System.Text.Json.JsonSerializer.Deserialize<RealTimeStats>(jsonContent, new System.Text.Json.JsonSerializerOptions
+                {
+                    PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase
+                });
+
+                if (realtimeData != null)
+                {
+                    activeSimulations = realtimeData.ActiveSimulations;
+                    currentBlockRate = realtimeData.CurrentBlockRate;
+                    activeNodes = realtimeData.ActiveNodes;
+                    systemLoad = realtimeData.SystemLoad;
+                    memoryUsage = realtimeData.MemoryUsage;
+                    lastUpdateTime = DateTime.Now;
+
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error updating real-time stats");
+        }
+    }
+
+    // Helper methods
+    private string FormatDuration(double seconds)
+    {
+        var timeSpan = TimeSpan.FromSeconds(seconds);
+        if (timeSpan.TotalDays >= 1)
+            return $"{timeSpan.TotalDays:F1}d";
+        if (timeSpan.TotalHours >= 1)
+            return $"{timeSpan.TotalHours:F1}h";
+        if (timeSpan.TotalMinutes >= 1)
+            return $"{timeSpan.TotalMinutes:F1}m";
+        return $"{timeSpan.TotalSeconds:F1}s";
+    }
+
+    private string GetAverageProcessingTime()
+    {
+        return performanceSummary?.Any() == true 
+            ? performanceSummary.Average(p => p.AverageProcessingTime).ToString("F0")
+            : "0";
+    }
+
+    private string GetSuccessRate()
+    {
+        return performanceSummary?.Any() == true 
+            ? performanceSummary.Average(p => p.SuccessRate).ToString("F1")
+            : "0.0";
+    }
+
+    private string GetSuccessRateClass(double rate)
+    {
+        return rate switch
+        {
+            >= 95 => "bg-success",
+            >= 85 => "bg-primary",
+            >= 70 => "bg-warning",
+            _ => "bg-danger"
+        };
+    }
+
+    private string GetEfficiencyBadgeClass(double score)
+    {
+        return score switch
+        {
+            >= 90 => "bg-success",
+            >= 80 => "bg-primary",
+            >= 70 => "bg-warning",
+            _ => "bg-danger"
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        realTimeTimer?.Dispose();
+        
+        try
+        {
+            // Clean up chart instances
+            var chartInstances = new[] { winnerChartInstance, algorithmChartInstance, performanceChartInstance, processingHistogramInstance, protocolChartInstance };
+            foreach (var chartInstance in chartInstances)
+            {
+                if (chartInstance != null)
+                {
+                    await chartInstance.InvokeVoidAsync("destroy");
+                    await chartInstance.DisposeAsync();
+                }
+            }
+
+            // Dispose chart module
+            if (chartModule != null)
+            {
+                await chartModule.DisposeAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error disposing charts");
+        }
+    }
+
+    // Data models
+    public class AnalyticsData
+    {
+        public int TotalSimulations { get; set; }
+        public int TotalBlocks { get; set; }
+        public int TotalNodes { get; set; }
+        public double AverageSimulationDuration { get; set; }
+        public Dictionary<string, AlgorithmPerformanceData>? AlgorithmPerformance { get; set; }
+        public Dictionary<string, NodeStatsData>? NodeStats { get; set; }
+        public List<TimeSeriesDataPoint>? TimeSeriesData { get; set; }
+    }
+
+    public class AlgorithmPerformanceData
+    {
+        public int TotalSimulations { get; set; }
+        public double AverageProcessingTime { get; set; }
+        public double AverageConsensusTime { get; set; }
+        public double SuccessRate { get; set; }
+    }
+
+    public class NodeStatsData
+    {
+        public int BlocksProduced { get; set; }
+        public double WinRate { get; set; }
+        public double AverageBlockTime { get; set; }
+        public double EfficiencyScore { get; set; }
+        public int PerformanceRank { get; set; }
+    }
+
+    public class TimeSeriesDataPoint
+    {
+        public DateTime Timestamp { get; set; }
+        public double AverageProcessingTime { get; set; }
+        public double AverageConsensusTime { get; set; }
+        public int ActiveSimulations { get; set; }
+        public int ActiveNodes { get; set; }
+        public int BlocksCreated { get; set; }
+    }
+
+    public class PerformanceMetrics
+    {
+        public string Algorithm { get; set; } = "";
+        public int TotalSimulations { get; set; }
+        public double AverageProcessingTime { get; set; }
+        public double AverageConsensusTime { get; set; }
+        public double SuccessRate { get; set; }
+        public double EfficiencyScore { get; set; }
+    }
+
+    public class RealTimeStats
+    {
+        public int ActiveSimulations { get; set; }
+        public double CurrentBlockRate { get; set; }
+        public int ActiveNodes { get; set; }
+        public double SystemLoad { get; set; }
+        public double MemoryUsage { get; set; }
+    }
+}

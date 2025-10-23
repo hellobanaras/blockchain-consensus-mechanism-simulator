@@ -3,10 +3,13 @@
 @using Consensus.Core.Enums
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web
+@rendermode InteractiveServer
 @inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
-<PageTitle>Simulations - Consensus Simulator</PageTitle>
+@* Simulations Page *@
 
 <div class="container-fluid">
     <div class="row mb-4">
@@ -158,26 +161,18 @@
                                                     
                                                     @if (simulation.Status == SimulationStatus.Running)
                                                     {
-                                                        <AuthorizeView Roles="Admin,Operator">
-                                                            <Authorized>
-                                                                <button class="btn btn-outline-warning btn-sm" @onclick="() => PauseSimulation(simulation.Id)">
-                                                                    <i class="bi bi-pause"></i> Pause
-                                                                </button>
-                                                                <button class="btn btn-outline-danger btn-sm" @onclick="() => StopSimulation(simulation.Id)">
-                                                                    <i class="bi bi-stop"></i> Stop
-                                                                </button>
-                                                            </Authorized>
-                                                        </AuthorizeView>
+                                                        <button class="btn btn-outline-warning btn-sm" @onclick="() => PauseSimulation(simulation.Id)">
+                                                            <i class="bi bi-pause"></i> Pause
+                                                        </button>
+                                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => StopSimulation(simulation.Id)">
+                                                            <i class="bi bi-stop"></i> Stop
+                                                        </button>
                                                     }
                                                     else if (simulation.Status == SimulationStatus.Paused)
                                                     {
-                                                        <AuthorizeView Roles="Admin,Operator">
-                                                            <Authorized>
-                                                                <button class="btn btn-outline-success btn-sm" @onclick="() => ResumeSimulation(simulation.Id)">
-                                                                    <i class="bi bi-play"></i> Resume
-                                                                </button>
-                                                            </Authorized>
-                                                        </AuthorizeView>
+                                                        <button class="btn btn-outline-success btn-sm" @onclick="() => ResumeSimulation(simulation.Id)">
+                                                            <i class="bi bi-play"></i> Resume
+                                                        </button>
                                                     }
                                                     else if (simulation.Status == SimulationStatus.Completed || simulation.Status == SimulationStatus.Failed)
                                                     {
@@ -379,8 +374,10 @@
         StateHasChanged();
     }
 
-    private void ShowCreateSimulationModal()
+    private async Task ShowCreateSimulationModal()
     {
+        Console.WriteLine("ShowCreateSimulationModal called");
+        await JSRuntime.InvokeVoidAsync("console.log", "ShowCreateSimulationModal called from Blazor");
         showCreateModal = true;
         // Reset form
         newSimulationName = "";
@@ -390,11 +387,13 @@
         newSimulationRounds = 100;
         newSimulationFaultyNodes = 0;
         newSimulationTopology = NetworkTopologyType.FullMesh;
+        StateHasChanged();
     }
 
     private void HideCreateSimulationModal()
     {
         showCreateModal = false;
+        StateHasChanged();
     }
 
     private async Task CreateSimulation()
@@ -412,11 +411,15 @@
 
     private async Task ViewSimulation(Guid simulationId)
     {
-        await JSRuntime.InvokeVoidAsync("alert", $"Viewing simulation details for {simulationId}... (Feature coming soon!)");
+        Console.WriteLine($"ViewSimulation called for {simulationId}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"ViewSimulation called for {simulationId}");
+        Navigation.NavigateTo($"/simulation/{simulationId}");
     }
 
     private async Task PauseSimulation(Guid simulationId)
     {
+        Console.WriteLine($"PauseSimulation called for {simulationId}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"PauseSimulation called for {simulationId}");
         await JSRuntime.InvokeVoidAsync("alert", $"Pausing simulation {simulationId}... (Feature coming soon!)");
     }
 

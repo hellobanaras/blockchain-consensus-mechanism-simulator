@@ -169,7 +169,7 @@ The application includes a secure authentication system with role-based access c
 
 #### **Default Admin Account**
 - **Email**: `admin@consensus-lab.dev`
-- **Password**: `Admin123!`
+- **Password**: `Admin@123!`
 - **Role**: Admin (Full system access)
 
 #### **Available Roles**
@@ -199,7 +199,7 @@ The application includes a secure authentication system with role-based access c
 
 4. **Access the application**
    - Web UI: http://localhost:5027
-   - Login with: `admin@consensus-lab.dev` / `Admin123!`
+   - Login with: `admin@consensus-lab.dev` / `Admin@123!`
 
 ## 📖 **Documentation**
 

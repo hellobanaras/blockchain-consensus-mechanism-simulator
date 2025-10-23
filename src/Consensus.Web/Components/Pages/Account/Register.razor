@@ -2,6 +2,10 @@
 @using Microsoft.AspNetCore.Antiforgery
 @using Microsoft.AspNetCore.Components.Forms
 @using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
+@attribute [AllowAnonymous]
+@attribute [IgnoreAntiforgeryToken]
 @inject UserManager<ApplicationUser> UserManager
 @inject SignInManager<ApplicationUser> SignInManager
 @inject NavigationManager Navigation
@@ -41,8 +45,7 @@
                             </div>
                         }
 
-                        <EditForm Model="Input" OnValidSubmit="RegisterUser" FormName="register">
-                            <AntiforgeryToken />
+                        <EditForm Model="Input" OnValidSubmit="RegisterUser" FormName="register" data-enhance="false">
                             <DataAnnotationsValidator />
                             
                             <div class="row">

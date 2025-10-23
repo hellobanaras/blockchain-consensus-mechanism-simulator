@@ -1,0 +1,501 @@
+@page "/performance-baselines"
+@using Consensus.Web.Components.Charts
+@rendermode InteractiveServer
+
+<PageTitle>Performance Baselines - Consensus Simulator</PageTitle>
+
+<div class="performance-baselines-page">
+    <div class="page-header">
+        <div class="container-fluid">
+            <div class="row align-items-center">
+                <div class="col">
+                    <div class="page-title-section">
+                        <h1 class="page-title">
+                            <i class="fas fa-chart-bar me-3"></i>
+                            Performance Baselines
+                        </h1>
+                        <p class="page-subtitle">
+                            Comprehensive performance comparison and benchmarking across consensus mechanisms
+                        </p>
+                    </div>
+                </div>
+                <div class="col-auto">
+                    <div class="page-actions">
+                        <div class="status-indicator">
+                            <div class="status-dot @(isRealTimeEnabled ? "active" : "inactive")"></div>
+                            <span class="status-text">@(isRealTimeEnabled ? "Real-time" : "Static")</span>
+                        </div>
+                        <button class="btn btn-outline-primary" @onclick="ToggleRealTime">
+                            <i class="fas @(isRealTimeEnabled ? "fa-pause" : "fa-play") me-2"></i>
+                            @(isRealTimeEnabled ? "Pause" : "Start") Updates
+                        </button>
+                        <div class="dropdown">
+                            <button class="btn btn-outline-secondary dropdown-toggle" type="button" 
+                                    data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="fas fa-download me-2"></i>
+                                Export
+                            </button>
+                            <ul class="dropdown-menu">
+                                <li><a class="dropdown-item" href="#" @onclick='() => ExportData("csv")'>
+                                    <i class="fas fa-file-csv me-2"></i>CSV Report
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" @onclick='() => ExportData("excel")'>
+                                    <i class="fas fa-file-excel me-2"></i>Excel Workbook
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" @onclick='() => ExportData("pdf")'>
+                                    <i class="fas fa-file-pdf me-2"></i>PDF Report
+                                </a></li>
+                                <li><a class="dropdown-item" href="#" @onclick='() => ExportData("json")'>
+                                    <i class="fas fa-file-code me-2"></i>JSON Data
+                                </a></li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="page-content">
+        <div class="container-fluid">
+            <!-- Quick Overview Cards -->
+            <div class="row g-4 mb-4">
+                <div class="col-xl-3 col-lg-6">
+                    <div class="overview-card throughput">
+                        <div class="card-icon">
+                            <i class="fas fa-tachometer-alt"></i>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-value">@bestThroughput.ToString("N0")</div>
+                            <div class="card-label">Best Throughput (TPS)</div>
+                            <div class="card-detail">@bestThroughputMechanism</div>
+                        </div>
+                        <div class="card-trend positive">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>+12.5%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-xl-3 col-lg-6">
+                    <div class="overview-card latency">
+                        <div class="card-icon">
+                            <i class="fas fa-stopwatch"></i>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-value">@bestLatency.ToString("F1")ms</div>
+                            <div class="card-label">Lowest Latency</div>
+                            <div class="card-detail">@bestLatencyMechanism</div>
+                        </div>
+                        <div class="card-trend positive">
+                            <i class="fas fa-arrow-down"></i>
+                            <span>-8.3%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-xl-3 col-lg-6">
+                    <div class="overview-card efficiency">
+                        <div class="card-icon">
+                            <i class="fas fa-leaf"></i>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-value">@bestEfficiency.ToString("F1")%</div>
+                            <div class="card-label">Best Efficiency</div>
+                            <div class="card-detail">@bestEfficiencyMechanism</div>
+                        </div>
+                        <div class="card-trend positive">
+                            <i class="fas fa-arrow-up"></i>
+                            <span>+5.7%</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="col-xl-3 col-lg-6">
+                    <div class="overview-card security">
+                        <div class="card-icon">
+                            <i class="fas fa-shield-alt"></i>
+                        </div>
+                        <div class="card-content">
+                            <div class="card-value">@bestSecurity.ToString("F1")%</div>
+                            <div class="card-label">Best Security</div>
+                            <div class="card-detail">@bestSecurityMechanism</div>
+                        </div>
+                        <div class="card-trend neutral">
+                            <i class="fas fa-minus"></i>
+                            <span>+0.2%</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Benchmark Summary -->
+            <div class="row g-4 mb-4">
+                <div class="col-12">
+                    <div class="benchmark-summary-card">
+                        <div class="summary-header">
+                            <h4 class="summary-title">
+                                <i class="fas fa-trophy me-2"></i>
+                                Consensus Mechanism Rankings
+                            </h4>
+                            <div class="summary-actions">
+                                <div class="btn-group btn-group-sm" role="group">
+                                    <input type="radio" class="btn-check" name="rankingCriteria" id="overall" value="overall" 
+                                           checked="@(rankingCriteria == "overall")" @onchange="UpdateRankingCriteria">
+                                    <label class="btn btn-outline-primary" for="overall">Overall</label>
+                                    
+                                    <input type="radio" class="btn-check" name="rankingCriteria" id="performance" value="performance" 
+                                           checked="@(rankingCriteria == "performance")" @onchange="UpdateRankingCriteria">
+                                    <label class="btn btn-outline-primary" for="performance">Performance</label>
+                                    
+                                    <input type="radio" class="btn-check" name="rankingCriteria" id="efficiency" value="efficiency" 
+                                           checked="@(rankingCriteria == "efficiency")" @onchange="UpdateRankingCriteria">
+                                    <label class="btn btn-outline-primary" for="efficiency">Efficiency</label>
+                                    
+                                    <input type="radio" class="btn-check" name="rankingCriteria" id="security" value="security" 
+                                           checked="@(rankingCriteria == "security")" @onchange="UpdateRankingCriteria">
+                                    <label class="btn btn-outline-primary" for="security">Security</label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="summary-content">
+                            <div class="ranking-grid">
+                                @for (int i = 0; i < Math.Min(6, mechanismRankings.Count); i++)
+                                {
+                                    var ranking = mechanismRankings[i];
+                                    <div class="ranking-item rank-@(i + 1)">
+                                        <div class="rank-position">
+                                            <span class="rank-number">#@(i + 1)</span>
+                                            @if (i < 3)
+                                            {
+                                                <i class="fas @(i == 0 ? "fa-crown" : i == 1 ? "fa-medal" : "fa-award") rank-icon"></i>
+                                            }
+                                        </div>
+                                        <div class="mechanism-details">
+                                            <div class="mechanism-name">@ranking.Name</div>
+                                            <div class="mechanism-type">@ranking.Type</div>
+                                        </div>
+                                        <div class="ranking-score">
+                                            <div class="score-value">@ranking.Score.ToString("F1")</div>
+                                            <div class="score-max">/10</div>
+                                        </div>
+                                        <div class="ranking-metrics">
+                                            <div class="metric-badges">
+                                                <span class="metric-badge throughput">
+                                                    @ranking.ThroughputRank
+                                                </span>
+                                                <span class="metric-badge latency">
+                                                    @ranking.LatencyRank
+                                                </span>
+                                                <span class="metric-badge efficiency">
+                                                    @ranking.EfficiencyRank
+                                                </span>
+                                                <span class="metric-badge security">
+                                                    @ranking.SecurityRank
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Navigation Tabs -->
+            <div class="row g-4 mb-4">
+                <div class="col-12">
+                    <div class="analysis-tabs">
+                        <ul class="nav nav-pills nav-fill" id="analysisTab" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="comparison-tab" data-bs-toggle="pill" 
+                                        data-bs-target="#comparison" type="button" role="tab" 
+                                        aria-controls="comparison" aria-selected="true">
+                                    <i class="fas fa-balance-scale me-2"></i>
+                                    Performance Comparison
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="benchmarks-tab" data-bs-toggle="pill" 
+                                        data-bs-target="#benchmarks" type="button" role="tab" 
+                                        aria-controls="benchmarks" aria-selected="false">
+                                    <i class="fas fa-chart-line me-2"></i>
+                                    Historical Benchmarks
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="analysis-tab" data-bs-toggle="pill" 
+                                        data-bs-target="#analysis" type="button" role="tab" 
+                                        aria-controls="analysis" aria-selected="false">
+                                    <i class="fas fa-microscope me-2"></i>
+                                    Deep Analysis
+                                </button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="export-tab" data-bs-toggle="pill" 
+                                        data-bs-target="#export" type="button" role="tab" 
+                                        aria-controls="export" aria-selected="false">
+                                    <i class="fas fa-download me-2"></i>
+                                    Data Export
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Tab Content -->
+            <div class="tab-content" id="analysisTabContent">
+                <!-- Performance Comparison Tab -->
+                <div class="tab-pane fade show active" id="comparison" role="tabpanel" aria-labelledby="comparison-tab">
+                    <PerformanceBaselinesChart 
+                        OnDataExported="HandleDataExported"
+                        EnableRealTimeUpdates="@isRealTimeEnabled" />
+                </div>
+
+                <!-- Historical Benchmarks Tab -->
+                <div class="tab-pane fade" id="benchmarks" role="tabpanel" aria-labelledby="benchmarks-tab">
+                    <div class="benchmarks-content">
+                        <div class="row g-4">
+                            <div class="col-12">
+                                <div class="benchmark-info-card">
+                                    <div class="info-header">
+                                        <h5 class="info-title">
+                                            <i class="fas fa-info-circle me-2"></i>
+                                            Historical Performance Data
+                                        </h5>
+                                    </div>
+                                    <div class="info-content">
+                                        <p>Historical benchmarks provide insights into consensus mechanism performance trends over time. 
+                                           This data helps identify patterns, stability, and long-term viability of different approaches.</p>
+                                        <div class="benchmark-stats">
+                                            <div class="stat-item">
+                                                <span class="stat-label">Data Points</span>
+                                                <span class="stat-value">@totalDataPoints.ToString("N0")</span>
+                                            </div>
+                                            <div class="stat-item">
+                                                <span class="stat-label">Time Range</span>
+                                                <span class="stat-value">@dataTimeRange</span>
+                                            </div>
+                                            <div class="stat-item">
+                                                <span class="stat-label">Last Update</span>
+                                                <span class="stat-value">@lastUpdate</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Deep Analysis Tab -->
+                <div class="tab-pane fade" id="analysis" role="tabpanel" aria-labelledby="analysis-tab">
+                    <div class="analysis-content">
+                        <div class="row g-4">
+                            <div class="col-12">
+                                <div class="analysis-placeholder">
+                                    <div class="placeholder-icon">
+                                        <i class="fas fa-microscope fa-3x"></i>
+                                    </div>
+                                    <h4 class="placeholder-title">Deep Analysis</h4>
+                                    <p class="placeholder-description">
+                                        Advanced performance analysis tools and machine learning insights will be available here.
+                                        This includes predictive modeling, anomaly detection, and optimization recommendations.
+                                    </p>
+                                    <button class="btn btn-primary">
+                                        <i class="fas fa-cog me-2"></i>
+                                        Configure Analysis
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Data Export Tab -->
+                <div class="tab-pane fade" id="export" role="tabpanel" aria-labelledby="export-tab">
+                    <div class="export-content">
+                        <div class="row g-4">
+                            <div class="col-lg-8">
+                                <div class="export-options-card">
+                                    <div class="export-header">
+                                        <h5 class="export-title">
+                                            <i class="fas fa-download me-2"></i>
+                                            Export Options
+                                        </h5>
+                                    </div>
+                                    <div class="export-body">
+                                        <div class="export-formats">
+                                            <div class="format-group">
+                                                <h6 class="format-title">Report Formats</h6>
+                                                <div class="format-options">
+                                                    <button class="format-button" @onclick='() => ExportData("pdf-detailed")'>
+                                                        <div class="format-icon">
+                                                            <i class="fas fa-file-pdf"></i>
+                                                        </div>
+                                                        <div class="format-info">
+                                                            <div class="format-name">Detailed PDF Report</div>
+                                                            <div class="format-desc">Complete analysis with charts</div>
+                                                        </div>
+                                                    </button>
+                                                    <button class="format-button" @onclick='() => ExportData("excel-workbook")'>>
+                                                        <div class="format-icon">
+                                                            <i class="fas fa-file-excel"></i>
+                                                        </div>
+                                                        <div class="format-info">
+                                                            <div class="format-name">Excel Workbook</div>
+                                                            <div class="format-desc">Multiple sheets with data</div>
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div class="format-group">
+                                                <h6 class="format-title">Data Formats</h6>
+                                                <div class="format-options">
+                                                    <button class="format-button" @onclick='() => ExportData("csv-complete")'>
+                                                        <div class="format-icon">
+                                                            <i class="fas fa-file-csv"></i>
+                                                        </div>
+                                                        <div class="format-info">
+                                                            <div class="format-name">CSV Dataset</div>
+                                                            <div class="format-desc">Raw performance data</div>
+                                                        </div>
+                                                    </button>
+                                                    <button class="format-button" @onclick='() => ExportData("json-api")'>>
+                                                        <div class="format-icon">
+                                                            <i class="fas fa-file-code"></i>
+                                                        </div>
+                                                        <div class="format-info">
+                                                            <div class="format-name">JSON API</div>
+                                                            <div class="format-desc">Structured data format</div>
+                                                        </div>
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-lg-4">
+                                <div class="export-summary-card">
+                                    <div class="summary-header">
+                                        <h6 class="summary-title">Export Summary</h6>
+                                    </div>
+                                    <div class="summary-body">
+                                        <div class="summary-stats">
+                                            <div class="summary-stat">
+                                                <span class="stat-label">Total Exports</span>
+                                                <span class="stat-value">@totalExports</span>
+                                            </div>
+                                            <div class="summary-stat">
+                                                <span class="stat-label">Last Export</span>
+                                                <span class="stat-value">@lastExportTime</span>
+                                            </div>
+                                            <div class="summary-stat">
+                                                <span class="stat-label">Data Size</span>
+                                                <span class="stat-value">@estimatedDataSize</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<link href="~/css/performance-baselines.css" rel="stylesheet" />
+<link href="~/css/performance-baselines-page.css" rel="stylesheet" />
+
+@code {
+    private bool isRealTimeEnabled = false;
+    private string rankingCriteria = "overall";
+    
+    // Overview metrics
+    private double bestThroughput = 7842;
+    private string bestThroughputMechanism = "DPoS";
+    private double bestLatency = 0.085;
+    private string bestLatencyMechanism = "DPoS";
+    private double bestEfficiency = 89.3;
+    private string bestEfficiencyMechanism = "PoA";
+    private double bestSecurity = 94.7;
+    private string bestSecurityMechanism = "PoW";
+    
+    // Benchmark data
+    private int totalDataPoints = 156840;
+    private string dataTimeRange = "30 days";
+    private string lastUpdate = "2 min ago";
+    
+    // Export data
+    private int totalExports = 127;
+    private string lastExportTime = "1 hour ago";
+    private string estimatedDataSize = "2.4 MB";
+    
+    private List<MechanismRanking> mechanismRankings = new();
+
+    protected override void OnInitialized()
+    {
+        InitializeMechanismRankings();
+    }
+
+    private void InitializeMechanismRankings()
+    {
+        mechanismRankings = new List<MechanismRanking>
+        {
+            new() { Name = "Delegated Proof of Stake", Type = "Delegated", Score = 8.7, ThroughputRank = "A", LatencyRank = "A", EfficiencyRank = "A", SecurityRank = "B" },
+            new() { Name = "Proof of Authority", Type = "Permissioned", Score = 8.2, ThroughputRank = "A", LatencyRank = "A", EfficiencyRank = "A", SecurityRank = "C" },
+            new() { Name = "Practical Byzantine Fault Tolerance", Type = "Byzantine", Score = 7.9, ThroughputRank = "A", LatencyRank = "B", EfficiencyRank = "B", SecurityRank = "A" },
+            new() { Name = "Proof of Stake", Type = "Economic", Score = 7.4, ThroughputRank = "B", LatencyRank = "B", EfficiencyRank = "A", SecurityRank = "A" },
+            new() { Name = "Proof of Elapsed Time", Type = "Lottery", Score = 6.8, ThroughputRank = "B", LatencyRank = "C", EfficiencyRank = "A", SecurityRank = "B" },
+            new() { Name = "Proof of Work", Type = "Computational", Score = 5.9, ThroughputRank = "D", LatencyRank = "D", EfficiencyRank = "D", SecurityRank = "A" }
+        };
+    }
+
+    private async Task ToggleRealTime()
+    {
+        isRealTimeEnabled = !isRealTimeEnabled;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task UpdateRankingCriteria(ChangeEventArgs e)
+    {
+        rankingCriteria = e.Value?.ToString() ?? "overall";
+        // Re-sort rankings based on new criteria
+        // This would typically call a service to recalculate rankings
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task ExportData(string format)
+    {
+        // Handle different export formats
+        Console.WriteLine($"Exporting data in {format} format");
+        
+        // Update export stats
+        totalExports++;
+        lastExportTime = "Just now";
+        
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task HandleDataExported(string exportType)
+    {
+        Console.WriteLine($"Data exported: {exportType}");
+        await ExportData(exportType);
+    }
+
+    public class MechanismRanking
+    {
+        public string Name { get; set; } = "";
+        public string Type { get; set; } = "";
+        public double Score { get; set; }
+        public string ThroughputRank { get; set; } = "";
+        public string LatencyRank { get; set; } = "";
+        public string EfficiencyRank { get; set; } = "";
+        public string SecurityRank { get; set; } = "";
+    }
+}

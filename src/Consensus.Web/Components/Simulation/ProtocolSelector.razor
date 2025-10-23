@@ -1,28 +1,97 @@
 @using Consensus.Core.Enums
-@using Consensus.Api.Models
+@using Consensus.Web.Models.Api
 @using Consensus.Web.Models.Forms
+@using Consensus.Web.Services
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
 @inject IJSRuntime JSRuntime
+@inject IProtocolConfigurationService ConfigurationService
 @inject ILogger<ProtocolSelector> Logger
 
 <div class="card border-0 shadow-sm">
     <div class="card-header bg-transparent border-0 pt-3">
-        <h5 class="card-title mb-0">
-            <i class="bi bi-gear text-primary me-2"></i>
-            Consensus Protocol Configuration
-        </h5>
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-gear text-primary me-2"></i>
+                Consensus Protocol Configuration
+            </h5>
+            <div class="btn-group btn-group-sm">
+                <button type="button" class="btn btn-outline-secondary" @onclick="LoadRecommendedConfig" disabled="@(formModel.Algorithm == null)">
+                    <i class="bi bi-magic me-1"></i>
+                    Auto-Configure
+                </button>
+                <button type="button" class="btn btn-outline-info" @onclick="ShowPresetModal">
+                    <i class="bi bi-bookmark me-1"></i>
+                    Presets
+                </button>
+            </div>
+        </div>
     </div>
     <div class="card-body">
         <EditForm Model="@formModel" OnValidSubmit="@HandleValidSubmit">
             <DataAnnotationsValidator />
             
+            <!-- Validation Summary -->
+            @if (validationResult != null && (!validationResult.IsValid || validationResult.Warnings.Any() || validationResult.Recommendations.Any()))
+            {
+                <div class="validation-summary mb-4">
+                    @if (!validationResult.IsValid && validationResult.Errors.Any())
+                    {
+                        <div class="alert alert-danger">
+                            <h6 class="alert-heading">
+                                <i class="bi bi-exclamation-triangle me-2"></i>
+                                Configuration Errors
+                            </h6>
+                            <ul class="mb-0">
+                                @foreach (var error in validationResult.Errors)
+                                {
+                                    <li>@error</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    
+                    @if (validationResult.Warnings.Any())
+                    {
+                        <div class="alert alert-warning">
+                            <h6 class="alert-heading">
+                                <i class="bi bi-exclamation-circle me-2"></i>
+                                Warnings
+                            </h6>
+                            <ul class="mb-0">
+                                @foreach (var warning in validationResult.Warnings)
+                                {
+                                    <li>@warning</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                    
+                    @if (validationResult.Recommendations.Any())
+                    {
+                        <div class="alert alert-info">
+                            <h6 class="alert-heading">
+                                <i class="bi bi-lightbulb me-2"></i>
+                                Recommendations
+                            </h6>
+                            <ul class="mb-0">
+                                @foreach (var recommendation in validationResult.Recommendations)
+                                {
+                                    <li>@recommendation</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+            }
+
             <!-- Basic Configuration -->
             <div class="row mb-4">
                 <div class="col-md-6">
                     <label class="form-label fw-medium">Simulation Name</label>
                     <InputText @bind-Value="formModel.Name" class="form-control" 
-                               placeholder="Enter simulation name" />
+                               placeholder="Enter simulation name" @oninput="OnConfigurationChanged" />
                     <ValidationMessage For="@(() => formModel.Name)" class="text-danger small" />
                 </div>
                 <div class="col-md-6">
@@ -58,7 +127,7 @@
                            title="Total number of nodes in the consensus network"></i>
                     </label>
                     <InputNumber @bind-Value="formModel.NodeCount" class="form-control" 
-                                 min="3" max="100" />
+                                 min="3" max="100" @oninput="OnConfigurationChanged" />
                     <ValidationMessage For="@(() => formModel.NodeCount)" class="text-danger small" />
                     <small class="form-text text-muted">Minimum 3 nodes required</small>
                 </div>
@@ -69,7 +138,7 @@
                            title="Number of faulty/malicious nodes that may behave arbitrarily"></i>
                     </label>
                     <InputNumber @bind-Value="formModel.ByzantineNodeCount" class="form-control" 
-                                 min="0" max="@formModel.GetMaxByzantineNodes()" />
+                                 min="0" max="@formModel.GetMaxByzantineNodes()" @oninput="OnConfigurationChanged" />
                     <ValidationMessage For="@(() => formModel.ByzantineNodeCount)" class="text-danger small" />
                     <small class="form-text text-muted">
                         Max: @formModel.GetMaxByzantineNodes() (@formModel.GetByzantineTolerance() tolerance)
@@ -81,7 +150,7 @@
                         <i class="bi bi-diagram-3 text-muted ms-1" data-bs-toggle="tooltip" 
                            title="How nodes are connected in the network"></i>
                     </label>
-                    <InputSelect @bind-Value="formModel.NetworkTopology" class="form-select">
+                    <InputSelect @bind-Value="formModel.NetworkTopology" class="form-select" @onchange="OnConfigurationChanged">
                         @foreach (var topology in Enum.GetValues<NetworkTopologyType>())
                         {
                             <option value="@topology">@GetTopologyDisplayName(topology)</option>
@@ -100,7 +169,7 @@
                            title="How long the simulation should run"></i>
                     </label>
                     <InputNumber @bind-Value="formModel.DurationSeconds" class="form-control" 
-                                 min="10" max="3600" />
+                                 min="10" max="3600" @oninput="OnConfigurationChanged" />
                     <ValidationMessage For="@(() => formModel.DurationSeconds)" class="text-danger small" />
                     <small class="form-text text-muted">10 seconds to 1 hour</small>
                 </div>
@@ -111,7 +180,7 @@
                            title="Target time between blocks"></i>
                     </label>
                     <InputNumber @bind-Value="formModel.BlockTimeMs" class="form-control" 
-                                 min="100" max="30000" />
+                                 min="100" max="30000" @oninput="OnConfigurationChanged" />
                     <ValidationMessage For="@(() => formModel.BlockTimeMs)" class="text-danger small" />
                     <small class="form-text text-muted">100ms to 30s</small>
                 </div>
@@ -122,7 +191,7 @@
                            title="Number of transactions included in each block"></i>
                     </label>
                     <InputNumber @bind-Value="formModel.TransactionsPerBlock" class="form-control" 
-                                 min="1" max="1000" />
+                                 min="1" max="1000" @oninput="OnConfigurationChanged" />
                     <ValidationMessage For="@(() => formModel.TransactionsPerBlock)" class="text-danger small" />
                     <small class="form-text text-muted">1 to 1000 transactions</small>
                 </div>
@@ -133,7 +202,7 @@
                            title="Simulated network delay between nodes"></i>
                     </label>
                     <InputNumber @bind-Value="formModel.NetworkLatencyMs" class="form-control" 
-                                 min="0" max="2000" />
+                                 min="0" max="2000" @oninput="OnConfigurationChanged" />
                     <ValidationMessage For="@(() => formModel.NetworkLatencyMs)" class="text-danger small" />
                     <small class="form-text text-muted">0ms to 2s</small>
                 </div>
@@ -188,19 +257,66 @@
                                 </div>
                                 break;
 
+                            case ConsensusAlgorithm.DelegatedProofOfStake:
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Number of Witnesses</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="dposWitnessCount" min="3" max="21" />
+                                        <small class="form-text text-muted">Number of witnesses (delegates) to elect (3-21)</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Minimum Stake</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="dposMinStake" min="1" max="1000" />
+                                        <small class="form-text text-muted">Minimum stake required to participate</small>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Block Time (ms)</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="dposBlockTime" min="1000" max="10000" />
+                                        <small class="form-text text-muted">Time between blocks in milliseconds</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Re-election Interval</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="dposReelectionInterval" min="10" max="100" />
+                                        <small class="form-text text-muted">Rounds between witness re-elections</small>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-12">
+                                        <div class="alert alert-info">
+                                            <strong>DPoS Governance:</strong> Stakeholders vote for witnesses who produce blocks in round-robin fashion. 
+                                            Witnesses are periodically re-elected based on stake-weighted voting.
+                                        </div>
+                                    </div>
+                                </div>
+                                break;
+
                             case ConsensusAlgorithm.ProofOfWork:
                                 <div class="row">
                                     <div class="col-md-6">
                                         <label class="form-label">Mining Difficulty</label>
                                         <input type="number" class="form-control" 
-                                               @bind="powDifficulty" min="1" max="10" />
-                                        <small class="form-text text-muted">Number of leading zeros required</small>
+                                               @bind="powDifficulty" min="1" max="8" />
+                                        <small class="form-text text-muted">Number of leading zeros required (1=easy, 8=very hard)</small>
                                     </div>
                                     <div class="col-md-6">
-                                        <label class="form-label">Hash Rate Variation (%)</label>
+                                        <label class="form-label">Target Block Time (seconds)</label>
                                         <input type="number" class="form-control" 
-                                               @bind="powHashRateVariation" min="0" max="50" />
-                                        <small class="form-text text-muted">Random variation in node hash rates</small>
+                                               @bind="powBlockTime" min="1" max="30" />
+                                        <small class="form-text text-muted">Target time between blocks</small>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-12">
+                                        <div class="alert alert-info">
+                                            <strong>PoW Mining:</strong> Nodes compete to solve cryptographic puzzles. 
+                                            Higher difficulty means longer mining times but more security.
+                                        </div>
                                     </div>
                                 </div>
                                 break;
@@ -214,11 +330,49 @@
                                         <small class="form-text text-muted">Timeout before initiating view change</small>
                                     </div>
                                     <div class="col-md-6">
+                                        <label class="form-label">Message Timeout (ms)</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="pbftMessageTimeout" min="500" max="10000" />
+                                        <small class="form-text text-muted">Timeout for individual messages</small>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
                                         <label class="form-label">Message Authentication</label>
                                         <select class="form-select" @bind="pbftAuthentication">
                                             <option value="true">Enabled</option>
                                             <option value="false">Disabled</option>
                                         </select>
+                                        <small class="form-text text-muted">Enable digital message signatures</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Block Time (ms)</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="pbftBlockTime" min="1000" max="10000" />
+                                        <small class="form-text text-muted">Target time between blocks</small>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Leader Reward</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="pbftLeaderReward" min="1" max="100" step="0.1" />
+                                        <small class="form-text text-muted">Reward for primary node per block</small>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Participation Reward</label>
+                                        <input type="number" class="form-control" 
+                                               @bind="pbftParticipationReward" min="1" max="50" step="0.1" />
+                                        <small class="form-text text-muted">Reward for non-primary participation</small>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-12">
+                                        <div class="alert alert-info">
+                                            <strong>PBFT Consensus:</strong> Three-phase Byzantine fault tolerant protocol with pre-prepare, prepare, and commit phases. 
+                                            Tolerates up to f=(n-1)/3 faulty nodes with safety and liveness guarantees. 
+                                            Current configuration supports <strong>@formModel.GetMaxByzantineNodes()</strong> Byzantine faults.
+                                        </div>
                                     </div>
                                 </div>
                                 break;
@@ -335,21 +489,34 @@
     [Parameter] public EventCallback<StartSimulationRequest> OnSimulationCreate { get; set; }
 
     private SimulationFormModel formModel = new();
+    private ProtocolValidationResult? validationResult;
     private bool isSubmitting = false;
     private bool showAdvancedOptions = false;
+    private bool showPresetModal = false;
+    private List<string> availablePresets = new();
+    private string selectedPreset = string.Empty;
+    private Timer? validationTimer;
 
     // Algorithm-specific parameters
     private int poetMinWaitTime = 1000;
     private int poetMaxWaitTime = 5000;
     private string posStakeDistribution = "equal";
     private int posMinStake = 100;
+    private int dposWitnessCount = 5;
+    private int dposMinStake = 100;
+    private int dposBlockTime = 3000;
+    private int dposReelectionInterval = 21;
     private int powDifficulty = 4;
-    private int powHashRateVariation = 10;
+    private int powBlockTime = 5;
     private int pbftViewChangeTimeout = 5000;
+    private int pbftMessageTimeout = 3000;
     private string pbftAuthentication = "true";
+    private int pbftBlockTime = 2000;
+    private decimal pbftLeaderReward = 20.0m;
+    private decimal pbftParticipationReward = 5.0m;
     private string loggingLevel = "Information";
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         // Set default values
         formModel.Name = $"Simulation {DateTime.Now:yyyy-MM-dd HH:mm}";
@@ -361,6 +528,11 @@
         formModel.TransactionsPerBlock = 10;
         formModel.NetworkLatencyMs = 100;
         formModel.AutoStart = true;
+
+        // Load available presets
+        availablePresets = await ConfigurationService.GetAvailablePresetsAsync();
+        
+        await base.OnInitializedAsync();
     }
 
     private async Task HandleValidSubmit()
@@ -370,12 +542,23 @@
             isSubmitting = true;
             StateHasChanged();
 
+            // Final validation
+            validationResult = await ConfigurationService.ValidateConfigurationAsync(formModel);
+            if (!validationResult.IsValid)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Please fix the configuration errors before proceeding.");
+                return;
+            }
+
             // Build algorithm-specific configuration
-            formModel.AlgorithmConfiguration = BuildAlgorithmConfiguration();
+            formModel.AlgorithmConfiguration = await BuildAlgorithmConfiguration();
 
             // Convert to API request and invoke callback
             var apiRequest = formModel.ToApiRequest();
             await OnSimulationCreate.InvokeAsync(apiRequest);
+
+            Logger.LogInformation("Simulation '{SimulationName}' created with algorithm {Algorithm} and {NodeCount} nodes", 
+                formModel.Name, formModel.Algorithm, formModel.NodeCount);
         }
         catch (Exception ex)
         {
@@ -389,11 +572,14 @@
         }
     }
 
-    private Dictionary<string, object> BuildAlgorithmConfiguration()
+    private async Task<Dictionary<string, object>> BuildAlgorithmConfiguration()
     {
         if (!formModel.Algorithm.HasValue) return new Dictionary<string, object>();
 
-        return formModel.Algorithm.Value switch
+        var baseConfig = await ConfigurationService.GetAlgorithmParametersAsync(formModel.Algorithm.Value, formModel.NodeCount);
+        
+        // Override with user-specified parameters
+        var config = formModel.Algorithm.Value switch
         {
             ConsensusAlgorithm.ProofOfElapsedTime => new Dictionary<string, object>
             {
@@ -405,48 +591,227 @@
                 ["StakeDistribution"] = posStakeDistribution,
                 ["MinStake"] = posMinStake
             },
+            ConsensusAlgorithm.DelegatedProofOfStake => new Dictionary<string, object>
+            {
+                ["witnessCount"] = dposWitnessCount,
+                ["minimumStake"] = dposMinStake,
+                ["blockTimeMs"] = dposBlockTime,
+                ["reelectionInterval"] = dposReelectionInterval
+            },
             ConsensusAlgorithm.ProofOfWork => new Dictionary<string, object>
             {
-                ["Difficulty"] = powDifficulty,
-                ["HashRateVariation"] = powHashRateVariation
+                ["difficulty"] = powDifficulty,
+                ["maxHashAttemptsPerNode"] = 50000,
+                ["blockTimeTargetMs"] = powBlockTime * 1000,
+                ["timeoutMs"] = 30000
             },
             ConsensusAlgorithm.PracticalByzantineFaultTolerance => new Dictionary<string, object>
             {
-                ["ViewChangeTimeoutMs"] = pbftViewChangeTimeout,
-                ["MessageAuthentication"] = bool.Parse(pbftAuthentication)
+                ["viewChangeTimeoutMs"] = pbftViewChangeTimeout,
+                ["messageTimeoutMs"] = pbftMessageTimeout,
+                ["enableMessageAuthentication"] = bool.Parse(pbftAuthentication),
+                ["blockTimeMs"] = pbftBlockTime,
+                ["leaderReward"] = pbftLeaderReward,
+                ["participationReward"] = pbftParticipationReward
             },
             _ => new Dictionary<string, object>()
         };
+
+        // Merge with base configuration
+        foreach (var kvp in baseConfig)
+        {
+            if (!config.ContainsKey(kvp.Key))
+            {
+                config[kvp.Key] = kvp.Value;
+            }
+        }
+
+        return config;
     }
 
-    private void OnAlgorithmChanged(ChangeEventArgs e)
+    private async Task OnAlgorithmChanged(ChangeEventArgs e)
     {
         if (Enum.TryParse<ConsensusAlgorithm>(e.Value?.ToString(), out var algorithm))
         {
             formModel.Algorithm = algorithm;
             
             // Update suggested configuration based on algorithm
-            switch (algorithm)
-            {
-                case ConsensusAlgorithm.ProofOfElapsedTime:
-                    formModel.BlockTimeMs = 2000;
-                    formModel.NetworkLatencyMs = 100;
-                    break;
-                case ConsensusAlgorithm.ProofOfStake:
-                    formModel.BlockTimeMs = 1000;
-                    formModel.NetworkLatencyMs = 50;
-                    break;
-                case ConsensusAlgorithm.ProofOfWork:
-                    formModel.BlockTimeMs = 10000;
-                    formModel.NetworkLatencyMs = 200;
-                    break;
-                case ConsensusAlgorithm.PracticalByzantineFaultTolerance:
-                    formModel.BlockTimeMs = 500;
-                    formModel.NetworkLatencyMs = 50;
-                    break;
-            }
+            var recommendedConfig = await ConfigurationService.GetRecommendedConfigurationAsync(algorithm);
             
+            // Update relevant fields while preserving user changes to name
+            var currentName = formModel.Name;
+            formModel.NodeCount = recommendedConfig.NodeCount;
+            formModel.ByzantineNodeCount = recommendedConfig.ByzantineNodeCount;
+            formModel.BlockTimeMs = recommendedConfig.BlockTimeMs;
+            formModel.NetworkLatencyMs = recommendedConfig.NetworkLatencyMs;
+            formModel.DurationSeconds = recommendedConfig.DurationSeconds;
+            formModel.TransactionsPerBlock = recommendedConfig.TransactionsPerBlock;
+            formModel.NetworkTopology = recommendedConfig.NetworkTopology;
+            formModel.Name = currentName; // Preserve user's name choice
+            
+            // Update algorithm-specific parameters
+            var parameters = await ConfigurationService.GetAlgorithmParametersAsync(algorithm, formModel.NodeCount);
+            UpdateAlgorithmSpecificParameters(parameters);
+            
+            await ValidateConfiguration();
             StateHasChanged();
+        }
+    }
+
+    private void UpdateAlgorithmSpecificParameters(Dictionary<string, object> parameters)
+    {
+        switch (formModel.Algorithm!.Value)
+        {
+            case ConsensusAlgorithm.ProofOfElapsedTime:
+                if (parameters.TryGetValue("MinWaitTimeMs", out var minWait)) poetMinWaitTime = Convert.ToInt32(minWait);
+                if (parameters.TryGetValue("MaxWaitTimeMs", out var maxWait)) poetMaxWaitTime = Convert.ToInt32(maxWait);
+                break;
+            case ConsensusAlgorithm.ProofOfStake:
+                if (parameters.TryGetValue("MinStake", out var minStake)) posMinStake = Convert.ToInt32(minStake);
+                if (parameters.TryGetValue("StakeDistribution", out var stakeDist)) posStakeDistribution = stakeDist.ToString()!;
+                break;
+            case ConsensusAlgorithm.DelegatedProofOfStake:
+                if (parameters.TryGetValue("witnessCount", out var witnessCount)) dposWitnessCount = Convert.ToInt32(witnessCount);
+                if (parameters.TryGetValue("minimumStake", out var dposMinStakeVal)) dposMinStake = Convert.ToInt32(dposMinStakeVal);
+                if (parameters.TryGetValue("blockTimeMs", out var blockTimeMs)) dposBlockTime = Convert.ToInt32(blockTimeMs);
+                if (parameters.TryGetValue("reelectionInterval", out var reelectionInterval)) dposReelectionInterval = Convert.ToInt32(reelectionInterval);
+                break;
+            case ConsensusAlgorithm.ProofOfWork:
+                if (parameters.TryGetValue("difficulty", out var difficulty)) powDifficulty = Convert.ToInt32(difficulty);
+                if (parameters.TryGetValue("blockTimeTargetMs", out var blockTime)) powBlockTime = Convert.ToInt32(blockTime) / 1000;
+                break;
+            case ConsensusAlgorithm.PracticalByzantineFaultTolerance:
+                if (parameters.TryGetValue("viewChangeTimeoutMs", out var viewTimeout)) pbftViewChangeTimeout = Convert.ToInt32(viewTimeout);
+                if (parameters.TryGetValue("messageTimeoutMs", out var msgTimeout)) pbftMessageTimeout = Convert.ToInt32(msgTimeout);
+                if (parameters.TryGetValue("enableMessageAuthentication", out var auth)) pbftAuthentication = auth.ToString()!.ToLower();
+                if (parameters.TryGetValue("blockTimeMs", out var pbftBlockTimeMs)) pbftBlockTime = Convert.ToInt32(pbftBlockTimeMs);
+                if (parameters.TryGetValue("leaderReward", out var leader)) pbftLeaderReward = Convert.ToDecimal(leader);
+                if (parameters.TryGetValue("participationReward", out var participation)) pbftParticipationReward = Convert.ToDecimal(participation);
+                break;
+        }
+    }
+
+    private async Task OnConfigurationChanged(ChangeEventArgs e)
+    {
+        // Debounce validation to avoid excessive API calls
+        validationTimer?.Dispose();
+        validationTimer = new Timer(async _ => await ValidateConfiguration(), null, TimeSpan.FromMilliseconds(500), Timeout.InfiniteTimeSpan);
+    }
+
+    private async Task ValidateConfiguration()
+    {
+        try
+        {
+            validationResult = await ConfigurationService.ValidateConfigurationAsync(formModel);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during configuration validation");
+        }
+    }
+
+    private async Task LoadRecommendedConfig()
+    {
+        if (formModel.Algorithm.HasValue)
+        {
+            try
+            {
+                var recommended = await ConfigurationService.GetRecommendedConfigurationAsync(formModel.Algorithm.Value);
+                
+                // Preserve user's simulation name
+                var currentName = formModel.Name;
+                
+                // Copy recommended values
+                formModel.NodeCount = recommended.NodeCount;
+                formModel.ByzantineNodeCount = recommended.ByzantineNodeCount;
+                formModel.DurationSeconds = recommended.DurationSeconds;
+                formModel.NetworkTopology = recommended.NetworkTopology;
+                formModel.BlockTimeMs = recommended.BlockTimeMs;
+                formModel.TransactionsPerBlock = recommended.TransactionsPerBlock;
+                formModel.NetworkLatencyMs = recommended.NetworkLatencyMs;
+                formModel.Name = currentName;
+                
+                // Update algorithm-specific parameters
+                var parameters = await ConfigurationService.GetAlgorithmParametersAsync(formModel.Algorithm.Value, formModel.NodeCount);
+                UpdateAlgorithmSpecificParameters(parameters);
+                
+                await ValidateConfiguration();
+                StateHasChanged();
+                
+                await JSRuntime.InvokeVoidAsync("showToast", "Configuration auto-configured for optimal performance", "success");
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error loading recommended configuration");
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to load recommended configuration");
+            }
+        }
+    }
+
+    private void ShowPresetModal()
+    {
+        showPresetModal = true;
+        StateHasChanged();
+    }
+
+    private async Task LoadPreset()
+    {
+        if (!string.IsNullOrEmpty(selectedPreset))
+        {
+            try
+            {
+                var preset = await ConfigurationService.LoadPresetAsync(selectedPreset);
+                if (preset != null)
+                {
+                    formModel = preset;
+                    
+                    // Update algorithm-specific parameters based on loaded config
+                    if (formModel.AlgorithmConfiguration.Any())
+                    {
+                        UpdateAlgorithmSpecificParameters(formModel.AlgorithmConfiguration);
+                    }
+                    
+                    await ValidateConfiguration();
+                    showPresetModal = false;
+                    StateHasChanged();
+                    
+                    await JSRuntime.InvokeVoidAsync("showToast", $"Preset '{selectedPreset}' loaded successfully", "success");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error loading preset {PresetName}", selectedPreset);
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to load preset");
+            }
+        }
+    }
+
+    private async Task SaveAsPreset()
+    {
+        var presetName = await JSRuntime.InvokeAsync<string>("prompt", "Enter a name for this preset:");
+        if (!string.IsNullOrEmpty(presetName))
+        {
+            try
+            {
+                formModel.AlgorithmConfiguration = await BuildAlgorithmConfiguration();
+                var success = await ConfigurationService.SavePresetAsync(presetName, formModel);
+                
+                if (success)
+                {
+                    availablePresets = await ConfigurationService.GetAvailablePresetsAsync();
+                    await JSRuntime.InvokeVoidAsync("showToast", $"Preset '{presetName}' saved successfully", "success");
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", "Failed to save preset");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error saving preset {PresetName}", presetName);
+                await JSRuntime.InvokeVoidAsync("alert", "Failed to save preset");
+            }
         }
     }
 
@@ -458,19 +823,13 @@
     private void ResetForm()
     {
         formModel = new SimulationFormModel();
-        OnInitialized();
+        validationResult = null;
+        OnInitializedAsync();
     }
 
-    private async Task LoadPreset()
+    public void Dispose()
     {
-        // TODO: Implement preset loading from local storage or service
-        await JSRuntime.InvokeVoidAsync("alert", "Preset loading not yet implemented");
-    }
-
-    private async Task SaveAsPreset()
-    {
-        // TODO: Implement preset saving to local storage or service
-        await JSRuntime.InvokeVoidAsync("alert", "Preset saving not yet implemented");
+        validationTimer?.Dispose();
     }
 
     private int GetEstimatedRounds()
@@ -496,6 +855,7 @@
         {
             ConsensusAlgorithm.PracticalByzantineFaultTolerance => rounds * nodes * (nodes - 1) * 3, // 3 phases
             ConsensusAlgorithm.ProofOfStake => rounds * nodes * 2, // Proposal + vote
+            ConsensusAlgorithm.DelegatedProofOfStake => rounds * dposWitnessCount * (dposWitnessCount - 1) * 2, // Witness coordination + validation
             _ => rounds * nodes
         };
         
@@ -508,6 +868,7 @@
         {
             ConsensusAlgorithm.ProofOfElapsedTime => "Proof of Elapsed Time (PoET)",
             ConsensusAlgorithm.ProofOfStake => "Proof of Stake (PoS)",
+            ConsensusAlgorithm.DelegatedProofOfStake => "Delegated Proof of Stake (DPoS)",
             ConsensusAlgorithm.ProofOfWork => "Proof of Work (PoW)",
             ConsensusAlgorithm.PracticalByzantineFaultTolerance => "Practical Byzantine Fault Tolerance (pBFT)",
             _ => algorithm.ToString()
@@ -520,6 +881,7 @@
         {
             ConsensusAlgorithm.ProofOfElapsedTime => "Energy-efficient consensus using trusted execution environments and randomized wait times.",
             ConsensusAlgorithm.ProofOfStake => "Validators are chosen to create blocks based on their stake in the network.",
+            ConsensusAlgorithm.DelegatedProofOfStake => "Stakeholders vote for witnesses who take turns producing blocks in a democratic governance system.",
             ConsensusAlgorithm.ProofOfWork => "Miners compete to solve computational puzzles to validate transactions and create blocks.",
             ConsensusAlgorithm.PracticalByzantineFaultTolerance => "Byzantine fault tolerant algorithm requiring 2/3+ honest nodes through multi-phase voting.",
             _ => "Select an algorithm to see its description."

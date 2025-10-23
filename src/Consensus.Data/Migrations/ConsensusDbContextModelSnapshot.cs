@@ -648,6 +648,12 @@ namespace Consensus.Data.Migrations
                     b.Property<int?>("DurationSeconds")
                         .HasColumnType("integer");
 
+                    b.Property<string>("ErrorMessage")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("MaxRounds")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -661,6 +667,9 @@ namespace Consensus.Data.Migrations
 
                     b.Property<int>("NodeCount")
                         .HasColumnType("integer");
+
+                    b.Property<double>("Progress")
+                        .HasColumnType("double precision");
 
                     b.Property<string>("Results")
                         .HasColumnType("jsonb");

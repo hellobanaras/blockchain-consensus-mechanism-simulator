@@ -197,7 +197,7 @@ public class SimulationHostedService : BackgroundService
             RoundStartTime = round.StartedAt,
             ProposedValue = round.ProposedValue?.ToString(),
             Events = events,
-            Metrics = new RoundMetrics
+            Metrics = new Consensus.Web.Models.RoundMetrics
             {
                 AverageResponseTime = Random.Shared.NextDouble() * 100 + 50, // Simulated
                 NetworkThroughput = Random.Shared.NextDouble() * 1000 + 500, // Simulated

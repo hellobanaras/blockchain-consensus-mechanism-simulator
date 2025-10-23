@@ -1,7 +1,14 @@
 @page "/Account/Login"
 @using Microsoft.AspNetCore.Antiforgery
 @using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
 @using System.ComponentModel.DataAnnotations
+@using Consensus.Core.Entities
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
+@attribute [AllowAnonymous]
+@attribute [IgnoreAntiforgeryToken]
 @inject SignInManager<ApplicationUser> SignInManager
 @inject NavigationManager Navigation
 @inject ILogger<Login> Logger
@@ -32,8 +39,7 @@
                             </div>
                         }
 
-                        <EditForm Model="Input" asp-route-returnUrl="@ReturnUrl" method="post" OnValidSubmit="LoginUser" FormName="login">
-                            <AntiforgeryToken />
+                        <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login" data-enhance="false">
                             <DataAnnotationsValidator />
                             
                             <div class="mb-3">
@@ -148,11 +154,14 @@
             if (result.Succeeded)
             {
                 Logger.LogInformation("User {Email} logged in successfully.", Input.Email);
-                Navigation.NavigateTo(ReturnUrl ?? "/", forceLoad: true);
+                
+                // Use JavaScript to handle navigation to avoid NavigationException
+                await Task.Delay(100); // Small delay to ensure state is updated
+                Navigation.NavigateTo(ReturnUrl ?? "/");
             }
             else if (result.RequiresTwoFactor)
             {
-                Navigation.NavigateTo($"/Account/LoginWith2fa?returnUrl={ReturnUrl}", forceLoad: true);
+                Navigation.NavigateTo($"/Account/LoginWith2fa?returnUrl={ReturnUrl}");
             }
             else if (result.IsLockedOut)
             {

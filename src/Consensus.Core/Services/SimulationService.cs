@@ -243,6 +243,7 @@ public class SimulationService : ISimulationService
         var runtime = GetSimulationRuntime(simulationId);
         if (runtime == null)
         {
+            _logger.LogWarning("No runtime found for simulation {SimulationId}", simulationId);
             return;
         }
 
@@ -252,15 +253,32 @@ public class SimulationService : ISimulationService
             var protocol = runtime.Protocol;
             var cancellationToken = runtime.CancellationTokenSource.Token;
 
-            _logger.LogInformation("Executing simulation {SimulationId} for {Duration} seconds", 
-                simulationId, simulation.DurationSeconds);
+            _logger.LogInformation("Starting simulation {SimulationId} with {NodeCount} nodes for {MaxRounds} rounds", 
+                simulationId, simulation.NodeCount, simulation.MaxRounds);
 
-            var startTime = DateTime.UtcNow;
-            var endTime = startTime.AddSeconds(simulation.DurationSeconds ?? 300); // Default 5 minutes
-            var roundNumber = 1L;
+            // Update simulation status
+            simulation.Status = SimulationStatus.Running;
+            simulation.StartedAt = DateTime.UtcNow;
+            OnSimulationStatusChanged(simulation);
 
-            while (DateTime.UtcNow < endTime && !cancellationToken.IsCancellationRequested)
+            // Create genesis block if this is the first block
+            if (simulation.Blocks == null || !simulation.Blocks.Any())
             {
+                var genesisBlock = await CreateGenesisBlock(simulation);
+                simulation.Blocks = new List<Block> { genesisBlock };
+                _logger.LogInformation("Created genesis block {BlockHash} for simulation {SimulationId}", 
+                    genesisBlock.Hash, simulationId);
+            }
+
+            var roundNumber = 1L;
+            var maxRounds = simulation.MaxRounds ?? 100; // Default to 100 rounds if not specified
+            var blockTime = simulation.BlockTimeMs > 0 ? simulation.BlockTimeMs : 2000; // Default 2 seconds
+
+            while (roundNumber <= maxRounds && !cancellationToken.IsCancellationRequested)
+            {
+                _logger.LogDebug("Starting round {RoundNumber}/{MaxRounds} for simulation {SimulationId}", 
+                    roundNumber, maxRounds, simulationId);
+
                 // Create a new consensus round
                 var round = new ConsensusRound
                 {
@@ -269,7 +287,8 @@ public class SimulationService : ISimulationService
                     SimulationRunId = simulation.Id,
                     Algorithm = simulation.ConsensusAlgorithm,
                     ParticipatingNodes = simulation.Nodes.Count(n => !n.IsByzantine && n.Status == NodeStatus.Online),
-                    StartedAt = DateTime.UtcNow
+                    StartedAt = DateTime.UtcNow,
+                    Status = ConsensusRoundStatus.InProgress
                 };
 
                 try
@@ -277,19 +296,45 @@ public class SimulationService : ISimulationService
                     // Execute the consensus round
                     var result = await protocol.ExecuteRoundAsync(round, cancellationToken);
                     
+                    // Update round status
                     round.Status = result.Success ? ConsensusRoundStatus.Completed : ConsensusRoundStatus.Failed;
                     round.CompletedAt = DateTime.UtcNow;
                     round.LeaderId = result.LeaderId != null ? Guid.Parse(result.LeaderId) : null;
+
+                    // Create a block if consensus was successful
+                    Block? newBlock = null;
+                    if (result.Success && result.LeaderId != null)
+                    {
+                        newBlock = await CreateBlock(simulation, round, result);
+                        if (newBlock != null)
+                        {
+                            simulation.Blocks.Add(newBlock);
+                            _logger.LogInformation("Created block {BlockNumber} with hash {BlockHash} by leader {LeaderId}", 
+                                newBlock.BlockNumber, newBlock.Hash, result.LeaderId);
+                        }
+                    }
 
                     // Add the round to simulation
                     simulation.ConsensusRounds ??= new List<ConsensusRound>();
                     simulation.ConsensusRounds.Add(round);
 
-                    // Notify subscribers
+                    // Update simulation progress
+                    simulation.Progress = (double)roundNumber / maxRounds;
+
+                    // Notify subscribers about round completion
                     OnRoundCompleted(simulation, round, result);
 
-                    _logger.LogDebug("Round {RoundNumber} completed for simulation {SimulationId}: {Success}", 
-                        roundNumber, simulationId, result.Success);
+                    _logger.LogDebug("Round {RoundNumber} completed for simulation {SimulationId}: {Success} " +
+                                   "(Leader: {LeaderId}, Block: {HasBlock})", 
+                        roundNumber, simulationId, result.Success, result.LeaderId, newBlock != null);
+                }
+                catch (OperationCanceledException)
+                {
+                    _logger.LogInformation("Round {RoundNumber} cancelled for simulation {SimulationId}", 
+                        roundNumber, simulationId);
+                    round.Status = ConsensusRoundStatus.Cancelled;
+                    round.CompletedAt = DateTime.UtcNow;
+                    break;
                 }
                 catch (Exception ex)
                 {
@@ -298,12 +343,27 @@ public class SimulationService : ISimulationService
                     
                     round.Status = ConsensusRoundStatus.Failed;
                     round.CompletedAt = DateTime.UtcNow;
+                    round.ErrorMessage = ex.Message;
+
+                    // Add failed round to simulation
+                    simulation.ConsensusRounds ??= new List<ConsensusRound>();
+                    simulation.ConsensusRounds.Add(round);
+
+                    // Continue with next round unless it's a critical error
+                    if (ex is InvalidOperationException || ex is ArgumentException)
+                    {
+                        _logger.LogError("Critical error in simulation {SimulationId}, stopping execution", simulationId);
+                        break;
+                    }
                 }
 
                 roundNumber++;
 
                 // Wait for the next round (simulate block time)
-                await Task.Delay(simulation.BlockTimeMs, cancellationToken);
+                if (roundNumber <= maxRounds && !cancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(blockTime, cancellationToken);
+                }
             }
 
             // Mark simulation as completed
@@ -311,11 +371,19 @@ public class SimulationService : ISimulationService
                 ? SimulationStatus.Stopped 
                 : SimulationStatus.Completed;
             simulation.CompletedAt = DateTime.UtcNow;
+            simulation.Progress = 1.0;
+
+            // Calculate final metrics
+            var successfulRounds = simulation.ConsensusRounds?.Count(r => r.Status == ConsensusRoundStatus.Completed) ?? 0;
+            var totalRounds = simulation.ConsensusRounds?.Count ?? 0;
+            var finalBlockHeight = simulation.Blocks?.Count ?? 0;
+
+            _logger.LogInformation("Simulation {SimulationId} completed: {Status}, " +
+                                 "Successful rounds: {SuccessfulRounds}/{TotalRounds}, " +
+                                 "Final block height: {BlockHeight}", 
+                simulationId, simulation.Status, successfulRounds, totalRounds, finalBlockHeight);
 
             OnSimulationStatusChanged(simulation);
-
-            _logger.LogInformation("Simulation {SimulationId} completed after {Duration} with {Rounds} rounds", 
-                simulationId, DateTime.UtcNow - startTime, roundNumber - 1);
         }
         catch (Exception ex)
         {
@@ -324,9 +392,120 @@ public class SimulationService : ISimulationService
             var simulation = runtime.Simulation;
             simulation.Status = SimulationStatus.Failed;
             simulation.CompletedAt = DateTime.UtcNow;
+            simulation.ErrorMessage = ex.Message;
             
             OnSimulationStatusChanged(simulation);
         }
+        finally
+        {
+            // Clean up runtime
+            lock (_lock)
+            {
+                if (_activeSimulations.ContainsKey(simulationId))
+                {
+                    runtime.CancellationTokenSource.Dispose();
+                    _activeSimulations.Remove(simulationId);
+                }
+            }
+        }
+    }
+
+    private async Task<Block> CreateGenesisBlock(SimulationRun simulation)
+    {
+        var genesisBlock = new Block
+        {
+            Id = Guid.NewGuid(),
+            BlockNumber = 0,
+            Hash = GenerateBlockHash("GENESIS", null, DateTime.UtcNow, new Dictionary<string, object>()),
+            PreviousHash = null,
+            SimulationRunId = simulation.Id,
+            Timestamp = DateTime.UtcNow,
+            ProposerId = null, // Genesis has no proposer
+            Data = new Dictionary<string, object>
+            {
+                { "genesis", true },
+                { "protocol", simulation.ConsensusAlgorithm.ToString() },
+                { "nodeCount", simulation.NodeCount },
+                { "timestamp", DateTime.UtcNow.ToString("O") }
+            },
+            Nonce = 0,
+            Difficulty = 1,
+            Size = 512, // Genesis block size
+            TransactionCount = 0
+        };
+
+        return await Task.FromResult(genesisBlock);
+    }
+
+    private async Task<Block?> CreateBlock(SimulationRun simulation, ConsensusRound round, ConsensusResult result)
+    {
+        try
+        {
+            var previousBlock = simulation.Blocks.LastOrDefault();
+            if (previousBlock == null)
+            {
+                _logger.LogError("Cannot create block: no previous block found for simulation {SimulationId}", simulation.Id);
+                return null;
+            }
+
+            var blockData = new Dictionary<string, object>
+            {
+                { "round", round.RoundNumber },
+                { "algorithm", simulation.ConsensusAlgorithm.ToString() },
+                { "leader", result.LeaderId ?? "unknown" },
+                { "participatingNodes", result.ParticipatingNodes },
+                { "consensusDuration", result.Duration.TotalMilliseconds },
+                { "timestamp", DateTime.UtcNow.ToString("O") }
+            };
+
+            // Add protocol-specific metrics
+            foreach (var metric in result.Metrics)
+            {
+                blockData[$"metric_{metric.Key}"] = metric.Value;
+            }
+
+            var newBlock = new Block
+            {
+                Id = Guid.NewGuid(),
+                BlockNumber = previousBlock.BlockNumber + 1,
+                PreviousHash = previousBlock.Hash,
+                SimulationRunId = simulation.Id,
+                Timestamp = DateTime.UtcNow,
+                ProposerId = result.LeaderId != null ? Guid.Parse(result.LeaderId) : null,
+                Data = blockData,
+                Nonce = (int)(round.RoundNumber % int.MaxValue),
+                Difficulty = 1, // Simplified for simulation
+                Size = 1024 + (blockData.Count * 50), // Estimated size
+                TransactionCount = 1 // One consensus transaction per block
+            };
+
+            // Generate block hash
+            newBlock.Hash = GenerateBlockHash(
+                newBlock.BlockNumber.ToString(),
+                newBlock.PreviousHash,
+                newBlock.Timestamp,
+                newBlock.Data
+            );
+
+            return await Task.FromResult(newBlock);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating block for round {RoundNumber} in simulation {SimulationId}", 
+                round.RoundNumber, simulation.Id);
+            return null;
+        }
+    }
+
+    private string GenerateBlockHash(string blockData, string? previousHash, DateTime timestamp, Dictionary<string, object> data)
+    {
+        using var sha256 = System.Security.Cryptography.SHA256.Create();
+        
+        var combined = $"{blockData}:{previousHash ?? ""}:{timestamp:O}:{string.Join(",", data.Select(kv => $"{kv.Key}={kv.Value}"))}";
+        var bytes = System.Text.Encoding.UTF8.GetBytes(combined);
+        var hashBytes = sha256.ComputeHash(bytes);
+        
+        return Convert.ToHexString(hashBytes).ToLower();
     }
 
     private async Task<List<Node>> CreateNodesAsync(CreateSimulationRequest request)
@@ -358,6 +537,14 @@ public class SimulationService : ISimulationService
     {
         return algorithm switch
         {
+            ConsensusAlgorithm.ProofOfWork => new PowProtocol(_logger as ILogger<PowProtocol> ?? 
+                new Microsoft.Extensions.Logging.Abstractions.NullLogger<PowProtocol>()),
+            ConsensusAlgorithm.ProofOfStake => new PosProtocol(_logger as ILogger<PosProtocol> ?? 
+                new Microsoft.Extensions.Logging.Abstractions.NullLogger<PosProtocol>()),
+            ConsensusAlgorithm.DelegatedProofOfStake => new DposProtocol(_logger as ILogger<DposProtocol> ?? 
+                new Microsoft.Extensions.Logging.Abstractions.NullLogger<DposProtocol>()),
+            ConsensusAlgorithm.PracticalByzantineFaultTolerance => new PbftProtocol(_logger as ILogger<PbftProtocol> ?? 
+                new Microsoft.Extensions.Logging.Abstractions.NullLogger<PbftProtocol>()),
             ConsensusAlgorithm.ProofOfElapsedTime => new PoetProtocol(_logger as ILogger<PoetProtocol> ?? 
                 new Microsoft.Extensions.Logging.Abstractions.NullLogger<PoetProtocol>()),
             _ => throw new NotSupportedException($"Consensus algorithm {algorithm} is not yet implemented")
@@ -374,11 +561,30 @@ public class SimulationService : ISimulationService
 
     private void OnSimulationStatusChanged(SimulationRun simulation)
     {
-        SimulationStatusChanged?.Invoke(this, new SimulationStatusChangedEventArgs(simulation));
+        try
+        {
+            SimulationStatusChanged?.Invoke(this, new SimulationStatusChangedEventArgs(simulation));
+            _logger.LogDebug("Simulation status changed event fired for {SimulationId}: {Status}", 
+                simulation.Id, simulation.Status);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error firing simulation status changed event for {SimulationId}", simulation.Id);
+        }
     }
 
     private void OnRoundCompleted(SimulationRun simulation, ConsensusRound round, ConsensusResult result)
     {
-        RoundCompleted?.Invoke(this, new RoundCompletedEventArgs(simulation, round, result));
+        try
+        {
+            RoundCompleted?.Invoke(this, new RoundCompletedEventArgs(simulation, round, result));
+            _logger.LogDebug("Round completed event fired for simulation {SimulationId}, round {RoundNumber}", 
+                simulation.Id, round.RoundNumber);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error firing round completed event for simulation {SimulationId}, round {RoundNumber}", 
+                simulation.Id, round.RoundNumber);
+        }
     }
 }

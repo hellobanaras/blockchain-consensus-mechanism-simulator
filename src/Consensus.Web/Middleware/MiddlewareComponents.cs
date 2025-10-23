@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using Consensus.Web.Exceptions;
 
 namespace Consensus.Web.Middleware;
 
@@ -25,60 +26,128 @@ public class ExceptionHandlingMiddleware
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "An unhandled exception occurred");
+            _logger.LogError(ex, "An unhandled exception occurred. RequestPath: {RequestPath}, UserId: {UserId}",
+                context.Request.Path,
+                context.User?.Identity?.Name ?? "Anonymous");
             await HandleExceptionAsync(context, ex);
         }
     }
 
     private static async Task HandleExceptionAsync(HttpContext context, Exception exception)
     {
-        context.Response.ContentType = "application/json";
+        context.Response.ContentType = "application/problem+json";
 
-        var response = new
+        var (statusCode, problemDetails) = exception switch
         {
-            error = new
+            SimulationException simEx => (400, new ErrorResponse
             {
-                message = "An error occurred while processing your request.",
-                details = GetErrorDetails(exception),
-                timestamp = DateTime.UtcNow,
-                traceId = Activity.Current?.Id ?? context.TraceIdentifier
-            }
-        };
-
-        var statusCode = exception switch
-        {
-            ArgumentException => 400,
-            UnauthorizedAccessException => 401,
-            KeyNotFoundException => 404,
-            NotSupportedException => 405,
-            TimeoutException => 408,
-            InvalidOperationException => 409,
-            _ => 500
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+                Title = "Simulation Error",
+                Status = 400,
+                Detail = simEx.Message,
+                Instance = context.Request.Path,
+                TraceId = Activity.Current?.Id ?? context.TraceIdentifier,
+                Timestamp = DateTime.UtcNow,
+                Properties = new Dictionary<string, object>
+                {
+                    ["simulationId"] = simEx.SimulationId ?? "unknown",
+                    ["operationType"] = simEx.OperationType ?? "unknown",
+                    ["context"] = simEx.Context ?? new Dictionary<string, object>()
+                }
+            }),
+            ConsensusException consEx => (422, new ErrorResponse
+            {
+                Type = "https://tools.ietf.org/html/rfc4918#section-11.2",
+                Title = "Consensus Error",
+                Status = 422,
+                Detail = consEx.Message,
+                Instance = context.Request.Path,
+                TraceId = Activity.Current?.Id ?? context.TraceIdentifier,
+                Timestamp = DateTime.UtcNow,
+                Properties = new Dictionary<string, object>
+                {
+                    ["protocol"] = consEx.Protocol ?? "unknown",
+                    ["roundNumber"] = consEx.RoundNumber.ToString(),
+                    ["nodeId"] = consEx.NodeId ?? "unknown"
+                }
+            }),
+            ValidationException valEx => (400, new ErrorResponse
+            {
+                Type = "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+                Title = "Validation Error",
+                Status = 400,
+                Detail = valEx.Message,
+                Instance = context.Request.Path,
+                TraceId = Activity.Current?.Id ?? context.TraceIdentifier,
+                Timestamp = DateTime.UtcNow,
+                Properties = new Dictionary<string, object>
+                {
+                    ["validationErrors"] = valEx.ValidationErrors ?? new List<string>()
+                }
+            }),
+            ArgumentException => (400, CreateStandardErrorResponse(context, exception, 400, "Bad Request")),
+            UnauthorizedAccessException => (401, CreateStandardErrorResponse(context, exception, 401, "Unauthorized")),
+            KeyNotFoundException => (404, CreateStandardErrorResponse(context, exception, 404, "Not Found")),
+            NotSupportedException => (405, CreateStandardErrorResponse(context, exception, 405, "Method Not Allowed")),
+            TimeoutException => (408, CreateStandardErrorResponse(context, exception, 408, "Request Timeout")),
+            InvalidOperationException => (409, CreateStandardErrorResponse(context, exception, 409, "Conflict")),
+            _ => (500, CreateStandardErrorResponse(context, exception, 500, "Internal Server Error"))
         };
 
         context.Response.StatusCode = statusCode;
-        
-        var jsonResponse = JsonSerializer.Serialize(response, new JsonSerializerOptions
+
+        var jsonResponse = JsonSerializer.Serialize(problemDetails, new JsonSerializerOptions
         {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = true
         });
 
         await context.Response.WriteAsync(jsonResponse);
     }
 
-    private static string GetErrorDetails(Exception exception)
+    private static ErrorResponse CreateStandardErrorResponse(HttpContext context, Exception exception, int statusCode, string title)
     {
-        return exception switch
+        return new ErrorResponse
         {
-            ArgumentException => "Invalid argument provided",
-            UnauthorizedAccessException => "Access denied",
-            KeyNotFoundException => "Resource not found",
-            NotSupportedException => "Operation not supported",
-            TimeoutException => "Operation timed out",
-            InvalidOperationException => "Invalid operation",
-            _ => "Internal server error"
+            Type = GetProblemTypeUri(statusCode),
+            Title = title,
+            Status = statusCode,
+            Detail = exception.Message,
+            Instance = context.Request.Path,
+            TraceId = Activity.Current?.Id ?? context.TraceIdentifier,
+            Timestamp = DateTime.UtcNow
         };
     }
+
+    private static string GetProblemTypeUri(int statusCode)
+    {
+        return statusCode switch
+        {
+            400 => "https://tools.ietf.org/html/rfc7231#section-6.5.1",
+            401 => "https://tools.ietf.org/html/rfc7235#section-3.1",
+            404 => "https://tools.ietf.org/html/rfc7231#section-6.5.4",
+            405 => "https://tools.ietf.org/html/rfc7231#section-6.5.5",
+            408 => "https://tools.ietf.org/html/rfc7231#section-6.5.7",
+            409 => "https://tools.ietf.org/html/rfc7231#section-6.5.8",
+            422 => "https://tools.ietf.org/html/rfc4918#section-11.2",
+            _ => "https://tools.ietf.org/html/rfc7231#section-6.6.1"
+        };
+    }
+}
+
+/// <summary>
+/// RFC 7807 Problem Details response model
+/// </summary>
+public class ErrorResponse
+{
+    public string Type { get; set; } = string.Empty;
+    public string Title { get; set; } = string.Empty;
+    public int Status { get; set; }
+    public string Detail { get; set; } = string.Empty;
+    public string Instance { get; set; } = string.Empty;
+    public string TraceId { get; set; } = string.Empty;
+    public DateTime Timestamp { get; set; }
+    public Dictionary<string, object>? Properties { get; set; }
 }
 
 /// <summary>

@@ -140,7 +140,12 @@ public enum ConsensusRoundStatus
     /// <summary>
     /// Round timed out
     /// </summary>
-    TimedOut = 5
+    TimedOut = 5,
+
+    /// <summary>
+    /// Round was cancelled by user request
+    /// </summary>
+    Cancelled = 6
 }
 
 /// <summary>

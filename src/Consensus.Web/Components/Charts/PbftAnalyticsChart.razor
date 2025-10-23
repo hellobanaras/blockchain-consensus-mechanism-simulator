@@ -1,0 +1,845 @@
+@namespace Consensus.Web.Components.Charts
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<div class="pbft-analytics-container">
+    <div class="row g-4">
+        <!-- Phase Progression Timeline -->
+        <div class="col-12 col-xl-8">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-project-diagram me-2"></i>
+                        PBFT Phase Progression
+                    </h5>
+                    <div class="chart-actions">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <input type="radio" class="btn-check" name="phaseView" id="timeline" value="timeline" @onchange="UpdatePhaseView" checked="@(phaseViewType == "timeline")">
+                            <label class="btn btn-outline-danger" for="timeline">Timeline</label>
+                            
+                            <input type="radio" class="btn-check" name="phaseView" id="sequence" value="sequence" @onchange="UpdatePhaseView" checked="@(phaseViewType == "sequence")">
+                            <label class="btn btn-outline-danger" for="sequence">Sequence</label>
+                            
+                            <input type="radio" class="btn-check" name="phaseView" id="latency" value="latency" @onchange="UpdatePhaseView" checked="@(phaseViewType == "latency")">
+                            <label class="btn btn-outline-danger" for="latency">Latency</label>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="ExportPhaseData">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="pbftPhaseProgressionChart" width="800" height="400"></canvas>
+                </div>
+                <div class="phase-legend">
+                    <span class="legend-item pre-prepare">
+                        <span class="legend-color"></span>
+                        Pre-Prepare
+                    </span>
+                    <span class="legend-item prepare">
+                        <span class="legend-color"></span>
+                        Prepare
+                    </span>
+                    <span class="legend-item commit">
+                        <span class="legend-color"></span>
+                        Commit
+                    </span>
+                    <span class="legend-item view-change">
+                        <span class="legend-color"></span>
+                        View Change
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Current View Status -->
+        <div class="col-12 col-xl-4">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-crown me-2"></i>
+                        Current View Status
+                    </h5>
+                </div>
+                <div class="chart-body text-center">
+                    <div class="view-display">
+                        <div class="view-number">@currentView</div>
+                        <div class="view-label">View Number</div>
+                    </div>
+                    <div class="primary-info">
+                        <div class="primary-node">
+                            <i class="fas fa-server me-2"></i>
+                            Primary: Node @currentPrimaryIndex
+                        </div>
+                        <div class="sequence-info">
+                            Sequence: @currentSequence
+                        </div>
+                    </div>
+                    <div class="view-stats">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="stat-value text-success">@successfulRounds</div>
+                                <div class="stat-label">Successful</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="stat-value text-warning">@viewChanges</div>
+                                <div class="stat-label">View Changes</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Message Flow Analysis -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-network-wired me-2"></i>
+                        Message Flow Analysis
+                    </h5>
+                    <div class="chart-actions">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <input type="radio" class="btn-check" name="messageType" id="all" value="all" @onchange="UpdateMessageType" checked="@(messageFilterType == "all")">
+                            <label class="btn btn-outline-danger" for="all">All</label>
+                            
+                            <input type="radio" class="btn-check" name="messageType" id="preprep" value="preprep" @onchange="UpdateMessageType" checked="@(messageFilterType == "preprep")">
+                            <label class="btn btn-outline-danger" for="preprep">Pre-Prepare</label>
+                            
+                            <input type="radio" class="btn-check" name="messageType" id="prep" value="prep" @onchange="UpdateMessageType" checked="@(messageFilterType == "prep")">
+                            <label class="btn btn-outline-danger" for="prep">Prepare</label>
+                            
+                            <input type="radio" class="btn-check" name="messageType" id="comm" value="comm" @onchange="UpdateMessageType" checked="@(messageFilterType == "comm")">
+                            <label class="btn btn-outline-danger" for="comm">Commit</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="pbftMessageFlowChart" width="400" height="300"></canvas>
+                </div>
+                <div class="message-stats">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="stat-value">@totalMessages</div>
+                            <div class="stat-label">Total Messages</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-value">@messagesPerSecond.ToString("F1")</div>
+                            <div class="stat-label">Msg/Sec</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-value">@averageLatency.ToString("F0")ms</div>
+                            <div class="stat-label">Avg Latency</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Byzantine Fault Detection -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-shield-alt me-2"></i>
+                        Byzantine Fault Monitoring
+                    </h5>
+                    <div class="chart-actions">
+                        <button class="btn btn-sm btn-outline-danger" @onclick="SimulateByzantineFault">
+                            <i class="fas fa-bug me-1"></i>
+                            Simulate Fault
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="pbftByzantineFaultChart" width="400" height="300"></canvas>
+                </div>
+                <div class="fault-stats">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="stat-value text-danger">@byzantineNodes</div>
+                            <div class="stat-label">Faulty Nodes</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-value text-info">@maxByzantineNodes</div>
+                            <div class="stat-label">Max Tolerated</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-value @(safetyStatus == "Safe" ? "text-success" : "text-danger")">
+                                @safetyStatus
+                            </div>
+                            <div class="stat-label">Safety Status</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Safety & Liveness Metrics -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-check-double me-2"></i>
+                        Safety & Liveness Metrics
+                    </h5>
+                </div>
+                <div class="chart-body">
+                    <canvas id="pbftSafetyChart" width="400" height="300"></canvas>
+                </div>
+                <div class="safety-indicators">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="indicator-card safety">
+                                <div class="indicator-icon">
+                                    <i class="fas fa-lock @(safetyViolations == 0 ? "text-success" : "text-danger")"></i>
+                                </div>
+                                <div class="indicator-content">
+                                    <div class="indicator-value">@safetyViolations</div>
+                                    <div class="indicator-label">Safety Violations</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="indicator-card liveness">
+                                <div class="indicator-icon">
+                                    <i class="fas fa-heartbeat @(livenessViolations == 0 ? "text-success" : "text-warning")"></i>
+                                </div>
+                                <div class="indicator-content">
+                                    <div class="indicator-value">@livenessViolations</div>
+                                    <div class="indicator-label">Liveness Delays</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Consensus Latency Tracking -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-clock me-2"></i>
+                        Consensus Latency Tracking
+                    </h5>
+                    <div class="chart-actions">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <input type="radio" class="btn-check" name="latencyView" id="realtime" value="realtime" @onchange="UpdateLatencyView" checked="@(latencyViewType == "realtime")">
+                            <label class="btn btn-outline-danger" for="realtime">Real-time</label>
+                            
+                            <input type="radio" class="btn-check" name="latencyView" id="histogram" value="histogram" @onchange="UpdateLatencyView" checked="@(latencyViewType == "histogram")">
+                            <label class="btn btn-outline-danger" for="histogram">Histogram</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="pbftLatencyChart" width="400" height="300"></canvas>
+                </div>
+                <div class="latency-stats">
+                    <div class="row text-center">
+                        <div class="col-3">
+                            <div class="stat-value">@currentLatency.ToString("F0")ms</div>
+                            <div class="stat-label">Current</div>
+                        </div>
+                        <div class="col-3">
+                            <div class="stat-value">@averageLatency.ToString("F0")ms</div>
+                            <div class="stat-label">Average</div>
+                        </div>
+                        <div class="col-3">
+                            <div class="stat-value">@minLatency.ToString("F0")ms</div>
+                            <div class="stat-label">Minimum</div>
+                        </div>
+                        <div class="col-3">
+                            <div class="stat-value">@maxLatency.ToString("F0")ms</div>
+                            <div class="stat-label">Maximum</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string SimulationId { get; set; } = "";
+    [Parameter] public EventCallback<string> OnExportData { get; set; }
+
+    // Chart modules
+    private IJSObjectReference? phaseChartModule;
+    private IJSObjectReference? messageFlowModule;
+    private IJSObjectReference? byzantineModule;
+    private IJSObjectReference? safetyModule;
+    private IJSObjectReference? latencyModule;
+
+    // View state
+    private string phaseViewType = "timeline";
+    private string messageFilterType = "all";
+    private string latencyViewType = "realtime";
+
+    // PBFT metrics
+    private int currentView = 0;
+    private int currentSequence = 0;
+    private int currentPrimaryIndex = 1;
+    private int successfulRounds = 0;
+    private int viewChanges = 0;
+    private int totalMessages = 0;
+    private double messagesPerSecond = 0.0;
+    private double averageLatency = 0.0;
+    private int byzantineNodes = 0;
+    private int maxByzantineNodes = 1;
+    private string safetyStatus = "Safe";
+    private int safetyViolations = 0;
+    private int livenessViolations = 0;
+    private double currentLatency = 0.0;
+    private double minLatency = 0.0;
+    private double maxLatency = 0.0;
+
+    // Data collections
+    private List<PhaseData> phaseTimeline = new();
+    private List<MessageFlowData> messageFlow = new();
+    private List<ByzantineFaultData> byzantineFaults = new();
+    private List<LatencyData> latencyHistory = new();
+    private List<SafetyMetric> safetyMetrics = new();
+
+    // Timers
+    private Timer? updateTimer;
+    private Random random = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await GenerateInitialData();
+        
+        // Start real-time updates
+        updateTimer = new Timer(async _ => await UpdateCharts(), null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await LoadChartModules();
+            await InitializeCharts();
+        }
+    }
+
+    private async Task LoadChartModules()
+    {
+        try
+        {
+            phaseChartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/charts/pbft-phase-chart.js");
+            messageFlowModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/charts/pbft-message-flow.js");
+            byzantineModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/charts/pbft-byzantine-chart.js");
+            safetyModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/charts/pbft-safety-chart.js");
+            latencyModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/charts/pbft-latency-chart.js");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading PBFT chart modules: {ex.Message}");
+        }
+    }
+
+    private async Task InitializeCharts()
+    {
+        try
+        {
+            await UpdatePhaseChart();
+            await UpdateMessageFlowChart();
+            await UpdateByzantineChart();
+            await UpdateSafetyChart();
+            await UpdateLatencyChart();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing PBFT charts: {ex.Message}");
+        }
+    }
+
+    private async Task GenerateInitialData()
+    {
+        // Generate initial phase timeline data
+        var currentTime = DateTime.UtcNow;
+        for (int i = 0; i < 10; i++)
+        {
+            phaseTimeline.Add(new PhaseData
+            {
+                Sequence = i + 1,
+                View = currentView,
+                PrePrepareTime = currentTime.AddSeconds(i * 3),
+                PrepareTime = currentTime.AddSeconds(i * 3 + 1),
+                CommitTime = currentTime.AddSeconds(i * 3 + 2),
+                CompletionTime = currentTime.AddSeconds(i * 3 + 2.5),
+                Success = random.NextDouble() > 0.1,
+                Primary = (i % 4) + 1
+            });
+        }
+
+        // Generate message flow data
+        var messageTypes = new[] { "Pre-Prepare", "Prepare", "Commit" };
+        for (int i = 0; i < 50; i++)
+        {
+            messageFlow.Add(new MessageFlowData
+            {
+                Timestamp = currentTime.AddSeconds(i * 0.1),
+                Type = messageTypes[random.Next(messageTypes.Length)],
+                Sender = random.Next(1, 5),
+                Receiver = random.Next(1, 5),
+                Latency = random.Next(50, 300),
+                Size = random.Next(100, 1000)
+            });
+        }
+
+        // Generate Byzantine fault data
+        byzantineNodes = random.Next(0, 2);
+        maxByzantineNodes = 1; // For 4 nodes, f=1
+        safetyStatus = byzantineNodes <= maxByzantineNodes ? "Safe" : "Compromised";
+
+        // Generate latency history
+        for (int i = 0; i < 20; i++)
+        {
+            var latency = random.Next(100, 500);
+            latencyHistory.Add(new LatencyData
+            {
+                Timestamp = currentTime.AddSeconds(i * 2),
+                PhaseLatency = latency,
+                MessageLatency = latency * 0.3,
+                ViewChangeLatency = i % 5 == 0 ? latency * 2 : 0
+            });
+        }
+
+        // Update aggregate metrics
+        await UpdateMetrics();
+    }
+
+    private async Task UpdateMetrics()
+    {
+        successfulRounds = phaseTimeline.Count(p => p.Success);
+        viewChanges = phaseTimeline.Count(p => !p.Success);
+        totalMessages = messageFlow.Count;
+        messagesPerSecond = totalMessages / Math.Max(phaseTimeline.Count * 3.0, 1);
+        averageLatency = latencyHistory.Any() ? latencyHistory.Average(l => l.PhaseLatency) : 0;
+        currentLatency = latencyHistory.LastOrDefault()?.PhaseLatency ?? 0;
+        minLatency = latencyHistory.Any() ? latencyHistory.Min(l => l.PhaseLatency) : 0;
+        maxLatency = latencyHistory.Any() ? latencyHistory.Max(l => l.PhaseLatency) : 0;
+
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task UpdateCharts()
+    {
+        try
+        {
+            // Simulate new consensus round
+            var newSequence = currentSequence + 1;
+            var success = random.NextDouble() > 0.05; // 95% success rate
+            
+            if (!success)
+            {
+                // View change
+                currentView++;
+                viewChanges++;
+                currentPrimaryIndex = (currentPrimaryIndex % 4) + 1;
+            }
+            else
+            {
+                successfulRounds++;
+            }
+
+            currentSequence = newSequence;
+
+            // Add new phase data
+            var currentTime = DateTime.UtcNow;
+            phaseTimeline.Add(new PhaseData
+            {
+                Sequence = newSequence,
+                View = currentView,
+                PrePrepareTime = currentTime,
+                PrepareTime = currentTime.AddMilliseconds(200),
+                CommitTime = currentTime.AddMilliseconds(400),
+                CompletionTime = currentTime.AddMilliseconds(600),
+                Success = success,
+                Primary = currentPrimaryIndex
+            });
+
+            // Add new message data
+            var messageTypes = new[] { "Pre-Prepare", "Prepare", "Commit" };
+            for (int i = 0; i < 3; i++)
+            {
+                messageFlow.Add(new MessageFlowData
+                {
+                    Timestamp = currentTime.AddMilliseconds(i * 200),
+                    Type = messageTypes[i],
+                    Sender = currentPrimaryIndex,
+                    Receiver = random.Next(1, 5),
+                    Latency = random.Next(50, 300),
+                    Size = random.Next(100, 1000)
+                });
+            }
+
+            // Add new latency data
+            var newLatency = random.Next(100, 500);
+            latencyHistory.Add(new LatencyData
+            {
+                Timestamp = currentTime,
+                PhaseLatency = newLatency,
+                MessageLatency = newLatency * 0.3,
+                ViewChangeLatency = !success ? newLatency * 2 : 0
+            });
+
+            // Keep only recent data
+            if (phaseTimeline.Count > 20) phaseTimeline.RemoveAt(0);
+            if (messageFlow.Count > 100) messageFlow.RemoveAt(0);
+            if (latencyHistory.Count > 50) latencyHistory.RemoveAt(0);
+
+            await UpdateMetrics();
+            await UpdateAllCharts();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating PBFT charts: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateAllCharts()
+    {
+        await UpdatePhaseChart();
+        await UpdateMessageFlowChart();
+        await UpdateByzantineChart();
+        await UpdateSafetyChart();
+        await UpdateLatencyChart();
+    }
+
+    private async Task UpdatePhaseChart()
+    {
+        if (phaseChartModule != null)
+        {
+            var chartData = phaseViewType switch
+            {
+                "timeline" => PreparePhaseTimelineData(),
+                "sequence" => PreparePhaseSequenceData(),
+                "latency" => PreparePhaseLatencyData(),
+                _ => PreparePhaseTimelineData()
+            };
+
+            await phaseChartModule.InvokeVoidAsync("updateChart", "pbftPhaseProgressionChart", chartData);
+        }
+    }
+
+    private async Task UpdateMessageFlowChart()
+    {
+        if (messageFlowModule != null)
+        {
+            var filteredMessages = messageFilterType == "all" 
+                ? messageFlow 
+                : messageFlow.Where(m => m.Type.ToLower().Contains(messageFilterType.Replace("preprep", "pre-prepare").Replace("prep", "prepare").Replace("comm", "commit"))).ToList();
+
+            var chartData = PrepareMessageFlowData(filteredMessages);
+            await messageFlowModule.InvokeVoidAsync("updateChart", "pbftMessageFlowChart", chartData);
+        }
+    }
+
+    private async Task UpdateByzantineChart()
+    {
+        if (byzantineModule != null)
+        {
+            var chartData = PrepareByzantineData();
+            await byzantineModule.InvokeVoidAsync("updateChart", "pbftByzantineFaultChart", chartData);
+        }
+    }
+
+    private async Task UpdateSafetyChart()
+    {
+        if (safetyModule != null)
+        {
+            var chartData = PrepareSafetyData();
+            await safetyModule.InvokeVoidAsync("updateChart", "pbftSafetyChart", chartData);
+        }
+    }
+
+    private async Task UpdateLatencyChart()
+    {
+        if (latencyModule != null)
+        {
+            var chartData = latencyViewType == "realtime" 
+                ? PrepareLatencyTimelineData() 
+                : PrepareLatencyHistogramData();
+
+            await latencyModule.InvokeVoidAsync("updateChart", "pbftLatencyChart", chartData);
+        }
+    }
+
+    // Event handlers
+    private async Task UpdatePhaseView(ChangeEventArgs e)
+    {
+        phaseViewType = e.Value?.ToString() ?? "timeline";
+        await UpdatePhaseChart();
+    }
+
+    private async Task UpdateMessageType(ChangeEventArgs e)
+    {
+        messageFilterType = e.Value?.ToString() ?? "all";
+        await UpdateMessageFlowChart();
+    }
+
+    private async Task UpdateLatencyView(ChangeEventArgs e)
+    {
+        latencyViewType = e.Value?.ToString() ?? "realtime";
+        await UpdateLatencyChart();
+    }
+
+    private async Task SimulateByzantineFault()
+    {
+        byzantineNodes = Math.Min(byzantineNodes + 1, 4);
+        safetyStatus = byzantineNodes <= maxByzantineNodes ? "Safe" : "Compromised";
+        safetyViolations += byzantineNodes > maxByzantineNodes ? 1 : 0;
+        
+        await UpdateByzantineChart();
+        await UpdateSafetyChart();
+        StateHasChanged();
+    }
+
+    private async Task ExportPhaseData()
+    {
+        await OnExportData.InvokeAsync("pbft-phase-data");
+    }
+
+    // Data preparation methods
+    private object PreparePhaseTimelineData()
+    {
+        return new
+        {
+            labels = phaseTimeline.Select(p => p.Sequence.ToString()).ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Pre-Prepare",
+                    data = phaseTimeline.Select(p => new { x = p.Sequence, y = (p.PrepareTime - p.PrePrepareTime).TotalMilliseconds }).ToArray(),
+                    backgroundColor = "rgba(255, 99, 132, 0.7)",
+                    borderColor = "rgba(255, 99, 132, 1)"
+                },
+                new
+                {
+                    label = "Prepare",
+                    data = phaseTimeline.Select(p => new { x = p.Sequence, y = (p.CommitTime - p.PrepareTime).TotalMilliseconds }).ToArray(),
+                    backgroundColor = "rgba(54, 162, 235, 0.7)",
+                    borderColor = "rgba(54, 162, 235, 1)"
+                },
+                new
+                {
+                    label = "Commit",
+                    data = phaseTimeline.Select(p => new { x = p.Sequence, y = (p.CompletionTime - p.CommitTime).TotalMilliseconds }).ToArray(),
+                    backgroundColor = "rgba(75, 192, 192, 0.7)",
+                    borderColor = "rgba(75, 192, 192, 1)"
+                }
+            }
+        };
+    }
+
+    private object PreparePhaseSequenceData()
+    {
+        return new
+        {
+            labels = phaseTimeline.Select(p => $"Round {p.Sequence}").ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Successful Rounds",
+                    data = phaseTimeline.Select(p => p.Success ? 1 : 0).ToArray(),
+                    backgroundColor = "rgba(75, 192, 192, 0.7)"
+                },
+                new
+                {
+                    label = "View Changes",
+                    data = phaseTimeline.Select(p => p.Success ? 0 : 1).ToArray(),
+                    backgroundColor = "rgba(255, 159, 64, 0.7)"
+                }
+            }
+        };
+    }
+
+    private object PreparePhaseLatencyData()
+    {
+        return new
+        {
+            labels = phaseTimeline.Select(p => p.Sequence.ToString()).ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Total Latency (ms)",
+                    data = phaseTimeline.Select(p => (p.CompletionTime - p.PrePrepareTime).TotalMilliseconds).ToArray(),
+                    backgroundColor = "rgba(153, 102, 255, 0.7)",
+                    borderColor = "rgba(153, 102, 255, 1)",
+                    type = "line"
+                }
+            }
+        };
+    }
+
+    private object PrepareMessageFlowData(List<MessageFlowData> messages)
+    {
+        var groupedByType = messages.GroupBy(m => m.Type).ToDictionary(g => g.Key, g => g.Count());
+        
+        return new
+        {
+            labels = groupedByType.Keys.ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Message Count",
+                    data = groupedByType.Values.ToArray(),
+                    backgroundColor = new[] { "rgba(255, 99, 132, 0.7)", "rgba(54, 162, 235, 0.7)", "rgba(75, 192, 192, 0.7)" }
+                }
+            }
+        };
+    }
+
+    private object PrepareByzantineData()
+    {
+        return new
+        {
+            labels = new[] { "Honest Nodes", "Byzantine Nodes", "Tolerance Remaining" },
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Node Status",
+                    data = new[] { 4 - byzantineNodes, byzantineNodes, maxByzantineNodes - byzantineNodes },
+                    backgroundColor = new[] { "rgba(75, 192, 192, 0.7)", "rgba(255, 99, 132, 0.7)", "rgba(255, 205, 86, 0.7)" }
+                }
+            }
+        };
+    }
+
+    private object PrepareSafetyData()
+    {
+        return new
+        {
+            labels = new[] { "Safety", "Liveness" },
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Violations",
+                    data = new[] { safetyViolations, livenessViolations },
+                    backgroundColor = new[] { "rgba(255, 99, 132, 0.7)", "rgba(255, 159, 64, 0.7)" }
+                }
+            }
+        };
+    }
+
+    private object PrepareLatencyTimelineData()
+    {
+        return new
+        {
+            labels = latencyHistory.Select((_, i) => $"T{i}").ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Phase Latency",
+                    data = latencyHistory.Select(l => l.PhaseLatency).ToArray(),
+                    borderColor = "rgba(255, 99, 132, 1)",
+                    backgroundColor = "rgba(255, 99, 132, 0.1)"
+                },
+                new
+                {
+                    label = "Message Latency",
+                    data = latencyHistory.Select(l => l.MessageLatency).ToArray(),
+                    borderColor = "rgba(54, 162, 235, 1)",
+                    backgroundColor = "rgba(54, 162, 235, 0.1)"
+                }
+            }
+        };
+    }
+
+    private object PrepareLatencyHistogramData()
+    {
+        var buckets = new Dictionary<string, int>
+        {
+            ["0-100ms"] = latencyHistory.Count(l => l.PhaseLatency < 100),
+            ["100-200ms"] = latencyHistory.Count(l => l.PhaseLatency >= 100 && l.PhaseLatency < 200),
+            ["200-300ms"] = latencyHistory.Count(l => l.PhaseLatency >= 200 && l.PhaseLatency < 300),
+            ["300-400ms"] = latencyHistory.Count(l => l.PhaseLatency >= 300 && l.PhaseLatency < 400),
+            ["400+ms"] = latencyHistory.Count(l => l.PhaseLatency >= 400)
+        };
+
+        return new
+        {
+            labels = buckets.Keys.ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Frequency",
+                    data = buckets.Values.ToArray(),
+                    backgroundColor = "rgba(153, 102, 255, 0.7)"
+                }
+            }
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        updateTimer?.Dispose();
+        
+        if (phaseChartModule != null) await phaseChartModule.DisposeAsync();
+        if (messageFlowModule != null) await messageFlowModule.DisposeAsync();
+        if (byzantineModule != null) await byzantineModule.DisposeAsync();
+        if (safetyModule != null) await safetyModule.DisposeAsync();
+        if (latencyModule != null) await latencyModule.DisposeAsync();
+    }
+
+    // Data models
+    public class PhaseData
+    {
+        public int Sequence { get; set; }
+        public int View { get; set; }
+        public DateTime PrePrepareTime { get; set; }
+        public DateTime PrepareTime { get; set; }
+        public DateTime CommitTime { get; set; }
+        public DateTime CompletionTime { get; set; }
+        public bool Success { get; set; }
+        public int Primary { get; set; }
+    }
+
+    public class MessageFlowData
+    {
+        public DateTime Timestamp { get; set; }
+        public string Type { get; set; } = "";
+        public int Sender { get; set; }
+        public int Receiver { get; set; }
+        public double Latency { get; set; }
+        public int Size { get; set; }
+    }
+
+    public class ByzantineFaultData
+    {
+        public DateTime Timestamp { get; set; }
+        public int NodeId { get; set; }
+        public string FaultType { get; set; } = "";
+        public bool Detected { get; set; }
+    }
+
+    public class LatencyData
+    {
+        public DateTime Timestamp { get; set; }
+        public double PhaseLatency { get; set; }
+        public double MessageLatency { get; set; }
+        public double ViewChangeLatency { get; set; }
+    }
+
+    public class SafetyMetric
+    {
+        public DateTime Timestamp { get; set; }
+        public bool SafetyViolation { get; set; }
+        public bool LivenessViolation { get; set; }
+        public string Description { get; set; } = "";
+    }
+}
