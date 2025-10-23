@@ -20,6 +20,12 @@ public class ConsensusRound
     public long RoundNumber { get; set; }
 
     /// <summary>
+    /// Consensus algorithm used for this round
+    /// </summary>
+    [Required]
+    public ConsensusAlgorithm Algorithm { get; set; }
+
+    /// <summary>
     /// Current status of the consensus round
     /// </summary>
     [Required]

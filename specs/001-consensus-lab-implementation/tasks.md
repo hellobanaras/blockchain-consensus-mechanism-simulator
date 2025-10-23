@@ -48,23 +48,23 @@ Based on functional requirements from spec.md:
 
 - [x] T011 Create Entity Framework DbContext in src/Consensus.Data/ConsensusDbContext.cs
 - [x] T012 [P] Define core entities: Node in src/Consensus.Core/Entities/Node.cs (matches data-model.md Node entity)  
-- [ ] T013 [P] Define core entities: Round in src/Consensus.Core/Entities/Round.cs (matches data-model.md Round entity)
+- [x] T013 [P] Define core entities: Round in src/Consensus.Core/Entities/ConsensusRound.cs (matches data-model.md Round entity)
 - [x] T014 [P] Define core entities: Block in src/Consensus.Core/Entities/Block.cs (matches data-model.md Block entity)
-- [ ] T015 [P] Define core entities: Experiment in src/Consensus.Core/Entities/Experiment.cs (matches data-model.md Experiment entity)
+- [x] T015 [P] Define core entities: Experiment in src/Consensus.Core/Entities/SimulationRun.cs (matches data-model.md Experiment entity)
 - [x] T016 [P] Define core entities: EventLog in src/Consensus.Core/Entities/EventLog.cs (for audit trail and simulation events)
-- [ ] T017 Configure EF Core model configuration and relationships in src/Consensus.Data/Context/EntityConfigurations/
+- [x] T017 Configure EF Core model configuration and relationships in src/Consensus.Data/Context/EntityConfigurations/
 - [x] T018 [P] Create initial database migration with all entities
 - [x] T019 [P] Define core interfaces: IConsensusProtocol in src/Consensus.Core/Interfaces/IConsensusProtocol.cs
 - [x] T020 [P] Define core interfaces: ISimulationService in src/Consensus.Core/Interfaces/ISimulationService.cs
 - [x] T021 [P] Define core interfaces: IBlockValidator in src/Consensus.Core/Interfaces/IBlockValidator.cs
-- [ ] T022 [P] Create base SimContext class in src/Consensus.Core/Services/SimContext.cs
-- [ ] T023 Configure dependency injection in src/Consensus.Web/Program.cs
-- [ ] T024 [P] Setup SignalR hub base structure in src/Consensus.Web/Hubs/SimulationHub.cs
-- [ ] T025 [P] Configure PostgreSQL connection and environment settings in appsettings.json
-- [ ] T026 [P] Setup Serilog logging configuration in src/Consensus.Web/Program.cs
-- [ ] T027 [P] Create base repository pattern in src/Consensus.Data/Repositories/BaseRepository.cs
-- [ ] T028 [P] Setup API middleware pipeline: authentication, authorization, rate limiting in src/Consensus.Api/Program.cs
-- [ ] T029 [P] Configure Swagger/OpenAPI documentation in src/Consensus.Api/Program.cs
+- [x] T022 [P] Create base SimContext class in src/Consensus.Core/Services/SimContext.cs
+- [x] T023 Configure dependency injection in src/Consensus.Web/Program.cs
+- [x] T024 [P] Setup SignalR hub base structure in src/Consensus.Web/Hubs/SimulationHub.cs
+- [x] T025 [P] Configure PostgreSQL connection and environment settings in appsettings.json
+- [x] T026 [P] Setup Serilog logging configuration in src/Consensus.Web/Program.cs
+- [x] T027 [P] Create base repository pattern in src/Consensus.Core/Repositories/IRepositories.cs and src/Consensus.Data/Repositories/Repositories.cs
+- [x] T028 [P] Setup API middleware pipeline: authentication, authorization, rate limiting in src/Consensus.Web/Middleware/
+- [x] T029 [P] Configure Swagger/OpenAPI documentation in src/Consensus.Web/Program.cs
 
 **Checkpoint**: Foundation ready - user story implementation can now begin in parallel
 

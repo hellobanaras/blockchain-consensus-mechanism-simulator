@@ -1,0 +1,548 @@
+using Microsoft.Extensions.Logging;
+using Consensus.Core.Entities;
+using Consensus.Core.Enums;
+using Consensus.Core.Models;
+using System.Collections.Concurrent;
+
+namespace Consensus.Core.Services;
+
+/// <summary>
+/// Service for tracking and analyzing simulation metrics and performance data
+/// </summary>
+public class SimulationMetricsService : ISimulationMetricsService
+{
+    private readonly ILogger<SimulationMetricsService> _logger;
+    private readonly ConcurrentDictionary<Guid, DetailedSimulationMetrics> _simulationMetrics;
+    private readonly ConcurrentDictionary<Guid, List<RoundMetrics>> _roundMetrics;
+    private readonly ConcurrentDictionary<Guid, List<NodeMetrics>> _nodeMetrics;
+    private readonly ConcurrentDictionary<Guid, List<ConsensusEvent>> _consensusEvents;
+
+    public SimulationMetricsService(ILogger<SimulationMetricsService> logger)
+    {
+        _logger = logger;
+        _simulationMetrics = new ConcurrentDictionary<Guid, DetailedSimulationMetrics>();
+        _roundMetrics = new ConcurrentDictionary<Guid, List<RoundMetrics>>();
+        _nodeMetrics = new ConcurrentDictionary<Guid, List<NodeMetrics>>();
+        _consensusEvents = new ConcurrentDictionary<Guid, List<ConsensusEvent>>();
+    }
+
+    public async Task InitializeSimulationMetricsAsync(SimulationMetricsRequest request)
+    {
+        try
+        {
+            var metrics = new DetailedSimulationMetrics
+            {
+                SimulationId = request.SimulationId,
+                ConsensusAlgorithm = request.Algorithm,
+                NodeCount = request.NodeCount,
+                TargetRounds = request.TargetRounds,
+                StartTime = DateTime.UtcNow,
+                Status = SimulationStatus.Running,
+                TotalBlocks = 0,
+                TotalTransactions = 0,
+                SuccessfulRounds = 0,
+                FailedRounds = 0,
+                AverageBlockTime = TimeSpan.Zero,
+                ThroughputTps = 0.0,
+                ConsensusEfficiency = 0.0,
+                NetworkLatency = TimeSpan.Zero,
+                ForkCount = 0,
+                OrphanBlocks = 0
+            };
+
+            _simulationMetrics[request.SimulationId] = metrics;
+            _roundMetrics[request.SimulationId] = new List<RoundMetrics>();
+            _nodeMetrics[request.SimulationId] = new List<NodeMetrics>();
+            _consensusEvents[request.SimulationId] = new List<ConsensusEvent>();
+
+            _logger.LogInformation("Initialized metrics tracking for simulation {SimulationId}", request.SimulationId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to initialize metrics for simulation {SimulationId}", request.SimulationId);
+            throw;
+        }
+    }
+
+    public async Task RecordRoundMetricsAsync(RoundMetricsData roundData)
+    {
+        try
+        {
+            if (!_roundMetrics.ContainsKey(roundData.SimulationId))
+            {
+                _logger.LogWarning("No metrics container found for simulation {SimulationId}", roundData.SimulationId);
+                return;
+            }
+
+            var metrics = new RoundMetrics
+            {
+                RoundNumber = roundData.RoundNumber,
+                Duration = roundData.Duration,
+                ProposerNodeId = roundData.ProposerNodeId,
+                ProposerAlgorithm = roundData.ProposerAlgorithm,
+                BlocksProposed = roundData.BlocksProposed,
+                BlocksAccepted = roundData.BlocksAccepted,
+                BlocksRejected = roundData.BlocksRejected,
+                TransactionsProcessed = roundData.TransactionsProcessed,
+                ConsensusReached = roundData.ConsensusReached,
+                ParticipatingNodes = roundData.ParticipatingNodes,
+                VotesReceived = roundData.VotesReceived,
+                NetworkMessages = roundData.NetworkMessages,
+                AverageLatency = roundData.AverageLatency,
+                Success = roundData.Success,
+                FailureReason = roundData.FailureReason,
+                Timestamp = DateTime.UtcNow
+            };
+
+            _roundMetrics[roundData.SimulationId].Add(metrics);
+
+            // Update overall simulation metrics
+            await UpdateSimulationMetricsAsync(roundData.SimulationId, metrics);
+
+            _logger.LogDebug("Recorded round {RoundNumber} metrics for simulation {SimulationId}", 
+                roundData.RoundNumber, roundData.SimulationId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to record round metrics for simulation {SimulationId}", roundData.SimulationId);
+            throw;
+        }
+    }
+
+    public async Task RecordNodeMetricsAsync(NodeMetricsData nodeData)
+    {
+        try
+        {
+            if (!_nodeMetrics.ContainsKey(nodeData.SimulationId))
+            {
+                _logger.LogWarning("No metrics container found for simulation {SimulationId}", nodeData.SimulationId);
+                return;
+            }
+
+            var metrics = new NodeMetrics
+            {
+                NodeId = nodeData.NodeId,
+                NodeName = nodeData.NodeName,
+                BlocksProposed = nodeData.BlocksProposed,
+                BlocksAccepted = nodeData.BlocksAccepted,
+                VotesCast = nodeData.VotesCast,
+                MessagesReceived = nodeData.MessagesReceived,
+                MessagesSent = nodeData.MessagesSent,
+                AverageResponseTime = nodeData.AverageResponseTime,
+                NetworkLatency = nodeData.NetworkLatency,
+                Uptime = nodeData.Uptime,
+                Status = nodeData.Status,
+                LastActivity = nodeData.LastActivity,
+                ConsensusParticipation = nodeData.ConsensusParticipation,
+                StakeAmount = nodeData.StakeAmount,
+                ReputationScore = nodeData.ReputationScore,
+                Timestamp = DateTime.UtcNow
+            };
+
+            _nodeMetrics[nodeData.SimulationId].Add(metrics);
+
+            _logger.LogDebug("Recorded node metrics for node {NodeId} in simulation {SimulationId}", 
+                nodeData.NodeId, nodeData.SimulationId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to record node metrics for simulation {SimulationId}", nodeData.SimulationId);
+            throw;
+        }
+    }
+
+    public async Task RecordConsensusEventAsync(ConsensusEventData eventData)
+    {
+        try
+        {
+            if (!_consensusEvents.ContainsKey(eventData.SimulationId))
+            {
+                _logger.LogWarning("No events container found for simulation {SimulationId}", eventData.SimulationId);
+                return;
+            }
+
+            var consensusEvent = new ConsensusEvent
+            {
+                EventType = eventData.EventType,
+                RoundNumber = eventData.RoundNumber,
+                NodeId = eventData.NodeId,
+                Description = eventData.Description,
+                AdditionalData = eventData.AdditionalData,
+                Severity = eventData.Severity,
+                Timestamp = DateTime.UtcNow
+            };
+
+            _consensusEvents[eventData.SimulationId].Add(consensusEvent);
+
+            _logger.LogDebug("Recorded consensus event {EventType} for simulation {SimulationId}", 
+                eventData.EventType, eventData.SimulationId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to record consensus event for simulation {SimulationId}", eventData.SimulationId);
+            throw;
+        }
+    }
+
+    public async Task<SimulationSummary> GenerateSimulationSummaryAsync(Guid simulationId)
+    {
+        try
+        {
+            if (!_simulationMetrics.TryGetValue(simulationId, out var metrics))
+            {
+                throw new ArgumentException($"No metrics found for simulation {simulationId}");
+            }
+
+            var roundMetrics = _roundMetrics.GetValueOrDefault(simulationId, new List<RoundMetrics>());
+            var nodeMetrics = _nodeMetrics.GetValueOrDefault(simulationId, new List<NodeMetrics>());
+            var events = _consensusEvents.GetValueOrDefault(simulationId, new List<ConsensusEvent>());
+
+            var summary = new SimulationSummary
+            {
+                SimulationId = simulationId,
+                ConsensusAlgorithm = metrics.ConsensusAlgorithm,
+                Duration = metrics.EndTime.HasValue ? 
+                    metrics.EndTime.Value - metrics.StartTime : 
+                    DateTime.UtcNow - metrics.StartTime,
+                TotalRounds = roundMetrics.Count,
+                SuccessfulRounds = roundMetrics.Count(r => r.Success),
+                FailedRounds = roundMetrics.Count(r => !r.Success),
+                TotalBlocks = metrics.TotalBlocks,
+                TotalTransactions = metrics.TotalTransactions,
+                AverageBlockTime = CalculateAverageBlockTime(roundMetrics),
+                ThroughputTps = CalculateThroughput(roundMetrics, metrics.StartTime, metrics.EndTime),
+                ConsensusEfficiency = CalculateConsensusEfficiency(roundMetrics),
+                NetworkLatency = CalculateAverageNetworkLatency(roundMetrics),
+                NodeCount = metrics.NodeCount,
+                ForkCount = metrics.ForkCount,
+                OrphanBlocks = metrics.OrphanBlocks,
+                NodePerformance = CalculateNodePerformance(nodeMetrics),
+                RoundStatistics = CalculateRoundStatistics(roundMetrics),
+                ConsensusEvents = events.OrderBy(e => e.Timestamp).ToList(),
+                GeneratedAt = DateTime.UtcNow
+            };
+
+            _logger.LogInformation("Generated simulation summary for {SimulationId}: {Rounds} rounds, {Blocks} blocks", 
+                simulationId, summary.TotalRounds, summary.TotalBlocks);
+
+            return summary;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to generate simulation summary for {SimulationId}", simulationId);
+            throw;
+        }
+    }
+
+    public async Task<DetailedSimulationMetrics> GetCurrentMetricsAsync(Guid simulationId)
+    {
+        try
+        {
+            if (!_simulationMetrics.TryGetValue(simulationId, out var metrics))
+            {
+                throw new ArgumentException($"No metrics found for simulation {simulationId}");
+            }
+
+            // Update real-time metrics
+            var roundMetrics = _roundMetrics.GetValueOrDefault(simulationId, new List<RoundMetrics>());
+            if (roundMetrics.Any())
+            {
+                metrics.TotalBlocks = roundMetrics.Sum(r => r.BlocksAccepted);
+                metrics.TotalTransactions = roundMetrics.Sum(r => r.TransactionsProcessed);
+                metrics.SuccessfulRounds = roundMetrics.Count(r => r.Success);
+                metrics.FailedRounds = roundMetrics.Count(r => !r.Success);
+                metrics.AverageBlockTime = CalculateAverageBlockTime(roundMetrics);
+                metrics.ThroughputTps = CalculateThroughput(roundMetrics, metrics.StartTime, metrics.EndTime);
+                metrics.ConsensusEfficiency = CalculateConsensusEfficiency(roundMetrics);
+                metrics.NetworkLatency = CalculateAverageNetworkLatency(roundMetrics);
+            }
+
+            return metrics;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get current metrics for simulation {SimulationId}", simulationId);
+            throw;
+        }
+    }
+
+    public async Task<List<RoundMetrics>> GetRoundMetricsAsync(Guid simulationId, int? lastN = null)
+    {
+        try
+        {
+            var metrics = _roundMetrics.GetValueOrDefault(simulationId, new List<RoundMetrics>());
+            
+            if (lastN.HasValue && lastN.Value > 0)
+            {
+                return metrics.TakeLast(lastN.Value).ToList();
+            }
+
+            return metrics;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get round metrics for simulation {SimulationId}", simulationId);
+            throw;
+        }
+    }
+
+    public async Task<List<NodeMetrics>> GetNodeMetricsAsync(Guid simulationId)
+    {
+        try
+        {
+            return _nodeMetrics.GetValueOrDefault(simulationId, new List<NodeMetrics>());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to get node metrics for simulation {SimulationId}", simulationId);
+            throw;
+        }
+    }
+
+    public async Task FinalizeSimulationMetricsAsync(Guid simulationId, SimulationStatus finalStatus)
+    {
+        try
+        {
+            if (_simulationMetrics.TryGetValue(simulationId, out var metrics))
+            {
+                metrics.EndTime = DateTime.UtcNow;
+                metrics.Status = finalStatus;
+
+                // Calculate final metrics
+                var roundMetrics = _roundMetrics.GetValueOrDefault(simulationId, new List<RoundMetrics>());
+                if (roundMetrics.Any())
+                {
+                    metrics.TotalBlocks = roundMetrics.Sum(r => r.BlocksAccepted);
+                    metrics.TotalTransactions = roundMetrics.Sum(r => r.TransactionsProcessed);
+                    metrics.SuccessfulRounds = roundMetrics.Count(r => r.Success);
+                    metrics.FailedRounds = roundMetrics.Count(r => !r.Success);
+                    metrics.AverageBlockTime = CalculateAverageBlockTime(roundMetrics);
+                    metrics.ThroughputTps = CalculateThroughput(roundMetrics, metrics.StartTime, metrics.EndTime);
+                    metrics.ConsensusEfficiency = CalculateConsensusEfficiency(roundMetrics);
+                    metrics.NetworkLatency = CalculateAverageNetworkLatency(roundMetrics);
+                }
+
+                _logger.LogInformation("Finalized metrics for simulation {SimulationId} with status {Status}", 
+                    simulationId, finalStatus);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to finalize metrics for simulation {SimulationId}", simulationId);
+            throw;
+        }
+    }
+
+    public async Task CleanupSimulationMetricsAsync(Guid simulationId)
+    {
+        try
+        {
+            _simulationMetrics.TryRemove(simulationId, out _);
+            _roundMetrics.TryRemove(simulationId, out _);
+            _nodeMetrics.TryRemove(simulationId, out _);
+            _consensusEvents.TryRemove(simulationId, out _);
+
+            _logger.LogInformation("Cleaned up metrics for simulation {SimulationId}", simulationId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to cleanup metrics for simulation {SimulationId}", simulationId);
+            throw;
+        }
+    }
+
+    #region Private Helper Methods
+
+    private async Task UpdateSimulationMetricsAsync(Guid simulationId, RoundMetrics roundMetrics)
+    {
+        if (_simulationMetrics.TryGetValue(simulationId, out var metrics))
+        {
+            metrics.TotalBlocks += roundMetrics.BlocksAccepted;
+            metrics.TotalTransactions += roundMetrics.TransactionsProcessed;
+            
+            if (roundMetrics.Success)
+                metrics.SuccessfulRounds++;
+            else
+                metrics.FailedRounds++;
+
+            // Update real-time averages
+            var allRounds = _roundMetrics.GetValueOrDefault(simulationId, new List<RoundMetrics>());
+            if (allRounds.Any())
+            {
+                metrics.AverageBlockTime = CalculateAverageBlockTime(allRounds);
+                metrics.ThroughputTps = CalculateThroughput(allRounds, metrics.StartTime, metrics.EndTime);
+                metrics.ConsensusEfficiency = CalculateConsensusEfficiency(allRounds);
+                metrics.NetworkLatency = CalculateAverageNetworkLatency(allRounds);
+            }
+        }
+    }
+
+    private TimeSpan CalculateAverageBlockTime(List<RoundMetrics> rounds)
+    {
+        if (!rounds.Any()) return TimeSpan.Zero;
+        
+        var avgTicks = rounds.Where(r => r.Success && r.Duration > TimeSpan.Zero)
+            .Select(r => r.Duration.Ticks)
+            .DefaultIfEmpty(0)
+            .Average();
+            
+        return new TimeSpan((long)avgTicks);
+    }
+
+    private double CalculateThroughput(List<RoundMetrics> rounds, DateTime startTime, DateTime? endTime)
+    {
+        if (!rounds.Any()) return 0.0;
+
+        var totalTransactions = rounds.Sum(r => r.TransactionsProcessed);
+        var duration = (endTime ?? DateTime.UtcNow) - startTime;
+        
+        return duration.TotalSeconds > 0 ? totalTransactions / duration.TotalSeconds : 0.0;
+    }
+
+    private double CalculateConsensusEfficiency(List<RoundMetrics> rounds)
+    {
+        if (!rounds.Any()) return 0.0;
+        
+        var successfulRounds = rounds.Count(r => r.Success);
+        return (double)successfulRounds / rounds.Count * 100.0;
+    }
+
+    private TimeSpan CalculateAverageNetworkLatency(List<RoundMetrics> rounds)
+    {
+        if (!rounds.Any()) return TimeSpan.Zero;
+        
+        var avgTicks = rounds.Where(r => r.AverageLatency > TimeSpan.Zero)
+            .Select(r => r.AverageLatency.Ticks)
+            .DefaultIfEmpty(0)
+            .Average();
+            
+        return new TimeSpan((long)avgTicks);
+    }
+
+    private Dictionary<Guid, NodePerformanceMetrics> CalculateNodePerformance(List<NodeMetrics> nodeMetrics)
+    {
+        var performance = new Dictionary<Guid, NodePerformanceMetrics>();
+        
+        var nodeGroups = nodeMetrics.GroupBy(n => n.NodeId);
+        foreach (var group in nodeGroups)
+        {
+            var latestMetrics = group.OrderByDescending(n => n.Timestamp).FirstOrDefault();
+            if (latestMetrics != null)
+            {
+                performance[group.Key] = new NodePerformanceMetrics
+                {
+                    NodeId = group.Key,
+                    NodeName = latestMetrics.NodeName,
+                    TotalBlocksProposed = group.Sum(n => n.BlocksProposed),
+                    TotalBlocksAccepted = group.Sum(n => n.BlocksAccepted),
+                    TotalVotes = group.Sum(n => n.VotesCast),
+                    AverageResponseTime = TimeSpan.FromTicks((long)group.Average(n => n.AverageResponseTime.Ticks)),
+                    UptimePercentage = group.Average(n => n.Uptime.TotalSeconds) / 
+                        group.Max(n => n.Timestamp).Subtract(group.Min(n => n.Timestamp)).TotalSeconds * 100,
+                    ConsensusParticipation = group.Average(n => n.ConsensusParticipation),
+                    FinalStake = latestMetrics.StakeAmount,
+                    FinalReputation = latestMetrics.ReputationScore
+                };
+            }
+        }
+        
+        return performance;
+    }
+
+    private RoundStatistics CalculateRoundStatistics(List<RoundMetrics> rounds)
+    {
+        if (!rounds.Any())
+        {
+            return new RoundStatistics
+            {
+                TotalRounds = 0,
+                SuccessfulRounds = 0,
+                FailedRounds = 0,
+                AverageRoundDuration = TimeSpan.Zero,
+                MinRoundDuration = TimeSpan.Zero,
+                MaxRoundDuration = TimeSpan.Zero,
+                AverageBlocksPerRound = 0,
+                AverageTransactionsPerRound = 0,
+                AverageParticipatingNodes = 0
+            };
+        }
+
+        return new RoundStatistics
+        {
+            TotalRounds = rounds.Count,
+            SuccessfulRounds = rounds.Count(r => r.Success),
+            FailedRounds = rounds.Count(r => !r.Success),
+            AverageRoundDuration = TimeSpan.FromTicks((long)rounds.Average(r => r.Duration.Ticks)),
+            MinRoundDuration = rounds.Min(r => r.Duration),
+            MaxRoundDuration = rounds.Max(r => r.Duration),
+            AverageBlocksPerRound = rounds.Average(r => r.BlocksAccepted),
+            AverageTransactionsPerRound = rounds.Average(r => r.TransactionsProcessed),
+            AverageParticipatingNodes = rounds.Average(r => r.ParticipatingNodes)
+        };
+    }
+
+    #endregion
+}
+
+#region Supporting Models
+
+public record SimulationMetricsRequest
+{
+    public required Guid SimulationId { get; init; }
+    public required ConsensusAlgorithm Algorithm { get; init; }
+    public required int NodeCount { get; init; }
+    public required int TargetRounds { get; init; }
+}
+
+public record RoundMetricsData
+{
+    public required Guid SimulationId { get; init; }
+    public required int RoundNumber { get; init; }
+    public required TimeSpan Duration { get; init; }
+    public required Guid ProposerNodeId { get; init; }
+    public required ConsensusAlgorithm ProposerAlgorithm { get; init; }
+    public required int BlocksProposed { get; init; }
+    public required int BlocksAccepted { get; init; }
+    public required int BlocksRejected { get; init; }
+    public required int TransactionsProcessed { get; init; }
+    public required bool ConsensusReached { get; init; }
+    public required int ParticipatingNodes { get; init; }
+    public required int VotesReceived { get; init; }
+    public required int NetworkMessages { get; init; }
+    public required TimeSpan AverageLatency { get; init; }
+    public required bool Success { get; init; }
+    public string? FailureReason { get; init; }
+}
+
+public record NodeMetricsData
+{
+    public required Guid SimulationId { get; init; }
+    public required Guid NodeId { get; init; }
+    public required string NodeName { get; init; }
+    public required int BlocksProposed { get; init; }
+    public required int BlocksAccepted { get; init; }
+    public required int VotesCast { get; init; }
+    public required int MessagesReceived { get; init; }
+    public required int MessagesSent { get; init; }
+    public required TimeSpan AverageResponseTime { get; init; }
+    public required TimeSpan NetworkLatency { get; init; }
+    public required TimeSpan Uptime { get; init; }
+    public required NodeStatus Status { get; init; }
+    public required DateTime LastActivity { get; init; }
+    public required double ConsensusParticipation { get; init; }
+    public required decimal StakeAmount { get; init; }
+    public required decimal ReputationScore { get; init; }
+}
+
+public record ConsensusEventData
+{
+    public required Guid SimulationId { get; init; }
+    public required string EventType { get; init; }
+    public required int RoundNumber { get; init; }
+    public Guid? NodeId { get; init; }
+    public required string Description { get; init; }
+    public Dictionary<string, object> AdditionalData { get; init; } = new();
+    public required string Severity { get; init; }
+}
+
+#endregion

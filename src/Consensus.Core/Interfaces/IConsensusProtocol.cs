@@ -70,6 +70,36 @@ public record ConsensusResult
     public int ParticipatingNodes { get; init; }
     public Dictionary<string, object> Metrics { get; init; } = new();
     public Block? ProducedBlock { get; init; }
+    public string? LeaderId { get; init; }
+    public List<ConsensusEvent> Events { get; init; } = new();
+}
+
+/// <summary>
+/// Represents an event that occurred during consensus
+/// </summary>
+public record ConsensusEvent
+{
+    public DateTime Timestamp { get; init; }
+    public EventType Type { get; init; }
+    public string NodeId { get; init; } = string.Empty;
+    public string Message { get; init; } = string.Empty;
+    public Dictionary<string, object> Data { get; init; } = new();
+}
+
+/// <summary>
+/// Types of consensus events
+/// </summary>
+public enum EventType
+{
+    NodeParticipation,
+    LeaderSelection,
+    ProposalCreated,
+    VoteCast,
+    BlockCreated,
+    ConsensusReached,
+    ConsensusFailed,
+    NetworkPartition,
+    NodeFault
 }
 
 /// <summary>

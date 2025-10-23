@@ -1,0 +1,796 @@
+@page "/analytics-v3"
+@using Consensus.Core.Services
+@using Consensus.Core.Models
+@using Consensus.Web.Services
+@implements IAsyncDisposable
+@inject IAnalyticsService AnalyticsService
+@inject ChartJsService ChartService
+@inject IJSRuntime JSRuntime
+@inject ILogger<AnalyticsV3> Logger
+
+<PageTitle>Analytics Dashboard</PageTitle>
+
+<div class="analytics-container">
+    <div class="page-header">
+        <div class="header-content">
+            <div class="header-text">
+                <h1 class="page-title">
+                    <i class="fas fa-chart-line me-2"></i>
+                    Analytics Dashboard
+                </h1>
+                <p class="page-description">
+                    Comprehensive analysis of consensus simulation performance and metrics
+                </p>
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-primary" @onclick="RefreshData" disabled="@isLoading">
+                    @if (isLoading)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    }
+                    else
+                    {
+                        <i class="fas fa-sync-alt me-2"></i>
+                    }
+                    Refresh
+                </button>
+                <div class="dropdown">
+                    <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                        <i class="fas fa-download me-2"></i>
+                        Export
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li><a class="dropdown-item" href="#" @onclick='() => ExportData("csv")'>
+                            <i class="fas fa-file-csv me-2"></i>Export CSV
+                        </a></li>
+                        <li><a class="dropdown-item" href="#" @onclick='() => ExportData("json")'>
+                            <i class="fas fa-file-code me-2"></i>Export JSON
+                        </a></li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading && summary == null)
+    {
+        <div class="loading-container">
+            <div class="loading-spinner">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading analytics...</span>
+                </div>
+                <p class="mt-3">Loading analytics data...</p>
+            </div>
+        </div>
+    }
+    else if (errorMessage != null)
+    {
+        <div class="alert alert-danger" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            <strong>Error:</strong> @errorMessage
+            <button type="button" class="btn-close" @onclick="() => errorMessage = null"></button>
+        </div>
+    }
+    else if (summary != null)
+    {
+        <!-- Date Range and Filters -->
+        <div class="filters-section mb-4">
+            <div class="row">
+                <div class="col-md-3">
+                    <label for="startDate" class="form-label">Start Date</label>
+                    <input type="datetime-local" class="form-control" id="startDate" @bind="startDate" />
+                </div>
+                <div class="col-md-3">
+                    <label for="endDate" class="form-label">End Date</label>
+                    <input type="datetime-local" class="form-control" id="endDate" @bind="endDate" />
+                </div>
+                <div class="col-md-3">
+                    <label for="algorithmFilter" class="form-label">Algorithm</label>
+                    <select class="form-select" id="algorithmFilter" @bind="selectedAlgorithm">
+                        <option value="">All Algorithms</option>
+                        <option value="ProofOfWork">Proof of Work</option>
+                        <option value="ProofOfStake">Proof of Stake</option>
+                        <option value="DelegatedProofOfStake">Delegated Proof of Stake</option>
+                        <option value="ProofOfElapsedTime">Proof of Elapsed Time</option>
+                        <option value="PracticalByzantineFaultTolerance">PBFT</option>
+                        <option value="Tendermint">Tendermint</option>
+                        <option value="HoneyBadgerBFT">HoneyBadger BFT</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex align-items-end">
+                    <button class="btn btn-secondary" @onclick="ApplyFilters" disabled="@isLoading">
+                        <i class="fas fa-filter me-2"></i>Apply Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="stats-card-header">
+                        <i class="fas fa-play-circle text-primary"></i>
+                        <span>Total Simulations</span>
+                    </div>
+                    <div class="stats-card-body">
+                        <span class="stats-value">@summary.TotalSimulations</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="stats-card-header">
+                        <i class="fas fa-cubes text-success"></i>
+                        <span>Total Blocks</span>
+                    </div>
+                    <div class="stats-card-body">
+                        <span class="stats-value">@summary.TotalBlocks.ToString("N0")</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="stats-card-header">
+                        <i class="fas fa-server text-info"></i>
+                        <span>Total Nodes</span>
+                    </div>
+                    <div class="stats-card-body">
+                        <span class="stats-value">@summary.TotalNodes</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="stats-card">
+                    <div class="stats-card-header">
+                        <i class="fas fa-clock text-warning"></i>
+                        <span>Avg Duration</span>
+                    </div>
+                    <div class="stats-card-body">
+                        <span class="stats-value">@FormatDuration(summary.AverageSimulationDuration)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Interactive Charts Section -->
+        <div class="row mb-4">
+            <div class="col-lg-6 mb-4">
+                <div class="chart-card">
+                    <div class="chart-card-header">
+                        <h5 class="chart-title">
+                            <i class="fas fa-chart-bar me-2"></i>
+                            Winner Distribution
+                        </h5>
+                    </div>
+                    <div class="chart-card-body">
+                        <div class="chart-container">
+                            <canvas id="winnerDistributionChart" width="400" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-6 mb-4">
+                <div class="chart-card">
+                    <div class="chart-card-header">
+                        <h5 class="chart-title">
+                            <i class="fas fa-chart-pie me-2"></i>
+                            Algorithm Distribution
+                        </h5>
+                    </div>
+                    <div class="chart-card-body">
+                        <div class="chart-container">
+                            <canvas id="algorithmDistributionChart" width="400" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="chart-card">
+                    <div class="chart-card-header">
+                        <h5 class="chart-title">
+                            <i class="fas fa-chart-line me-2"></i>
+                            Performance Trends Over Time
+                        </h5>
+                    </div>
+                    <div class="chart-card-body">
+                        <div class="chart-container" style="height: 400px;">
+                            <canvas id="performanceTrendChart" width="800" height="400"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Performance Summary -->
+        @if (summary.AlgorithmPerformance?.Any() == true)
+        {
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="stats-table-card">
+                        <div class="stats-table-header">
+                            <h5 class="table-title">Algorithm Performance Summary</h5>
+                        </div>
+                        <div class="stats-table-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Algorithm</th>
+                                            <th>Simulations</th>
+                                            <th>Avg Blocks/Sim</th>
+                                            <th>Block Rate</th>
+                                            <th>Success Rate</th>
+                                            <th>Efficiency</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var alg in summary.AlgorithmPerformance.OrderByDescending(a => a.Value.SuccessRate))
+                                        {
+                                            <tr>
+                                                <td><strong>@alg.Key</strong></td>
+                                                <td>@alg.Value.TotalSimulations</td>
+                                                <td>@alg.Value.AverageBlocksPerSimulation.ToString("F1")</td>
+                                                <td>@alg.Value.AverageBlockRate.ToString("F2") blocks/s</td>
+                                                <td>
+                                                    <div class="progress-container">
+                                                        <div class="progress">
+                                                            <div class="progress-bar bg-success" style="width: @(alg.Value.SuccessRate)%"></div>
+                                                        </div>
+                                                        <span class="progress-text">@alg.Value.SuccessRate.ToString("F1")%</span>
+                                                    </div>
+                                                </td>
+                                                <td>@alg.Value.NetworkEfficiency.ToString("F2")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        @if (summary.NodeStats?.Any() == true)
+        {
+            <div class="row">
+                <div class="col-12">
+                    <div class="stats-table-card">
+                        <div class="stats-table-header">
+                            <h5 class="table-title">Top Node Performance</h5>
+                        </div>
+                        <div class="stats-table-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>Node ID</th>
+                                            <th>Blocks Produced</th>
+                                            <th>Win Rate</th>
+                                            <th>Avg Block Time</th>
+                                            <th>Efficiency Score</th>
+                                            <th>Rank</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var node in summary.NodeStats.OrderBy(n => n.Value.PerformanceRank).Take(10))
+                                        {
+                                            <tr>
+                                                <td><strong>@node.Key.Substring(0, Math.Min(8, node.Key.Length))...</strong></td>
+                                                <td><span class="badge bg-primary">@node.Value.BlocksProduced</span></td>
+                                                <td>
+                                                    <div class="progress-container">
+                                                        <div class="progress">
+                                                            <div class="progress-bar" style="width: @(node.Value.WinRate)%"></div>
+                                                        </div>
+                                                        <span class="progress-text">@node.Value.WinRate.ToString("F1")%</span>
+                                                    </div>
+                                                </td>
+                                                <td>@node.Value.AverageBlockTime.ToString("F2")s</td>
+                                                <td>@node.Value.EfficiencyScore.ToString("F2")</td>
+                                                <td>
+                                                    @if (node.Value.PerformanceRank == 1)
+                                                    {
+                                                        <span class="badge bg-success">
+                                                            <i class="fas fa-crown me-1"></i>#@node.Value.PerformanceRank
+                                                        </span>
+                                                    }
+                                                    else if (node.Value.PerformanceRank <= 3)
+                                                    {
+                                                        <span class="badge bg-info">#@node.Value.PerformanceRank</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="badge bg-secondary">#@node.Value.PerformanceRank</span>
+                                                    }
+                                                </td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="text-center py-5">
+            <i class="fas fa-chart-line fa-3x text-muted mb-3"></i>
+            <h3 class="text-muted">No Analytics Data Available</h3>
+            <p class="text-muted">Run some simulations to see analytics here.</p>
+        </div>
+    }
+</div>
+
+@code {
+    private AnalyticsSummary? summary;
+    private bool isLoading = true;
+    private string? errorMessage;
+    private DateTime? startDate = DateTime.Now.AddDays(-7);
+    private DateTime? endDate = DateTime.Now;
+    private string? selectedAlgorithm;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAnalytics();
+    }
+
+    private async Task LoadAnalytics()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var request = new AnalyticsRequest
+            {
+                StartDate = startDate,
+                EndDate = endDate,
+                IncludeNodeStats = true,
+                IncludeTimeSeriesData = true,
+                AlgorithmFilter = !string.IsNullOrEmpty(selectedAlgorithm) ? new List<string> { selectedAlgorithm } : null
+            };
+
+            summary = await AnalyticsService.GenerateAnalyticsSummaryAsync(request);
+            Logger.LogInformation("Loaded analytics for {SimulationCount} simulations", summary.TotalSimulations);
+
+            // Create charts after data is loaded
+            await CreateChartsAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading analytics data");
+            errorMessage = $"Failed to load analytics data: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadAnalytics();
+    }
+
+    private async Task ApplyFilters()
+    {
+        await LoadAnalytics();
+    }
+
+    private async Task ExportData(string format)
+    {
+        try
+        {
+            var request = new AnalyticsRequest
+            {
+                StartDate = startDate,
+                EndDate = endDate,
+                IncludeNodeStats = true,
+                IncludeTimeSeriesData = false,
+                AlgorithmFilter = !string.IsNullOrEmpty(selectedAlgorithm) ? new List<string> { selectedAlgorithm } : null
+            };
+
+            var data = await AnalyticsService.ExportAnalyticsAsync(request, format);
+            var fileName = $"analytics-export-{DateTime.Now:yyyyMMdd-HHmmss}.{format}";
+            
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, Convert.ToBase64String(data));
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error exporting analytics data in format {Format}", format);
+            errorMessage = $"Failed to export data: {ex.Message}";
+        }
+    }
+
+    private async Task CreateChartsAsync()
+    {
+        if (summary == null) return;
+
+        try
+        {
+            // Create Winner Distribution Chart (Bar Chart)
+            if (summary.NodeStats?.Any() == true)
+            {
+                var winnerData = summary.NodeStats
+                    .OrderByDescending(n => n.Value.BlocksProduced)
+                    .Take(10)
+                    .ToDictionary(
+                        n => n.Key.Length > 8 ? n.Key.Substring(0, 8) + "..." : n.Key,
+                        n => n.Value.BlocksProduced
+                    );
+
+                await ChartService.CreateWinnerDistributionChartAsync("winnerDistributionChart", winnerData);
+            }
+
+            // Create Algorithm Distribution Chart (Doughnut Chart)
+            if (summary.AlgorithmPerformance?.Any() == true)
+            {
+                var algorithmData = summary.AlgorithmPerformance.ToDictionary(
+                    a => a.Key,
+                    a => a.Value.TotalSimulations
+                );
+
+                await ChartService.CreateAlgorithmDistributionChartAsync("algorithmDistributionChart", algorithmData);
+            }
+
+            // Create Performance Trend Chart (Line Chart)
+            if (summary.TimeSeriesData?.Any() == true)
+            {
+                // Create a simplified version using available data
+                var timeSeriesPoints = summary.TimeSeriesData.Select(ts => new
+                {
+                    Timestamp = ts.Timestamp,
+                    BlockRate = ts.AverageBlockRate,
+                    ActiveSimulations = (double)ts.ActiveSimulations,
+                    ActiveNodes = (double)ts.ActiveNodes,
+                    BlocksCreated = (double)ts.BlocksCreated
+                }).ToList();
+
+                // Create custom chart configuration for available data
+                var labels = timeSeriesPoints.Select(ts => ts.Timestamp.ToString("MM/dd HH:mm")).ToArray();
+                
+                var config = new
+                {
+                    type = "line",
+                    data = new
+                    {
+                        labels = labels,
+                        datasets = new object[]
+                        {
+                            new
+                            {
+                                label = "Block Rate (blocks/s)",
+                                data = timeSeriesPoints.Select(ts => ts.BlockRate).ToArray(),
+                                borderColor = "#2ecc71",
+                                backgroundColor = "rgba(46, 204, 113, 0.1)",
+                                fill = false
+                            },
+                            new
+                            {
+                                label = "Active Simulations",
+                                data = timeSeriesPoints.Select(ts => ts.ActiveSimulations).ToArray(),
+                                borderColor = "#3498db",
+                                backgroundColor = "rgba(52, 152, 219, 0.1)",
+                                fill = false,
+                                yAxisID = "y1"
+                            }
+                        }
+                    },
+                    options = new
+                    {
+                        responsive = true,
+                        maintainAspectRatio = false,
+                        plugins = new
+                        {
+                            title = new
+                            {
+                                display = true,
+                                text = "Performance Trends Over Time",
+                                font = new { size = 16, weight = "bold" }
+                            },
+                            legend = new
+                            {
+                                position = "bottom"
+                            }
+                        },
+                        scales = new
+                        {
+                            y = new
+                            {
+                                type = "linear",
+                                display = true,
+                                position = "left",
+                                title = new { display = true, text = "Block Rate (blocks/s)" },
+                                beginAtZero = true
+                            },
+                            y1 = new
+                            {
+                                type = "linear",
+                                display = true,
+                                position = "right",
+                                title = new { display = true, text = "Active Count" },
+                                grid = new { drawOnChartArea = false },
+                                beginAtZero = true
+                            },
+                            x = new
+                            {
+                                title = new { display = true, text = "Time" }
+                            }
+                        }
+                    }
+                };
+
+                await ChartService.CreateChartAsync("performanceTrendChart", config);
+            }
+
+            Logger.LogDebug("Charts created successfully");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error creating charts");
+        }
+    }
+
+    private string FormatDuration(double seconds)
+    {
+        var timeSpan = TimeSpan.FromSeconds(seconds);
+        if (timeSpan.TotalDays >= 1)
+            return $"{timeSpan.TotalDays:F1}d";
+        if (timeSpan.TotalHours >= 1)
+            return $"{timeSpan.TotalHours:F1}h";
+        if (timeSpan.TotalMinutes >= 1)
+            return $"{timeSpan.TotalMinutes:F1}m";
+        return $"{timeSpan.TotalSeconds:F1}s";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try
+        {
+            // Clean up charts when component is disposed
+            await ChartService.DestroyChartAsync("winnerDistributionChart");
+            await ChartService.DestroyChartAsync("algorithmDistributionChart");
+            await ChartService.DestroyChartAsync("performanceTrendChart");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Error disposing charts");
+        }
+    }
+}
+
+<style>
+.analytics-container {
+    padding: 1.5rem;
+}
+
+.page-header {
+    margin-bottom: 2rem;
+}
+
+.header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.header-text {
+    flex: 1;
+    min-width: 200px;
+}
+
+.page-title {
+    margin: 0;
+    font-size: 2rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.page-description {
+    margin: 0.5rem 0 0 0;
+    color: #6c757d;
+    font-size: 1rem;
+}
+
+.header-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.loading-container {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 300px;
+}
+
+.loading-spinner {
+    text-align: center;
+}
+
+.stats-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    height: 100%;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stats-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.stats-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.stats-card-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.stats-value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.stats-table-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    height: 100%;
+}
+
+.stats-table-header {
+    padding: 1.25rem 1.25rem 0.5rem 1.25rem;
+    border-bottom: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+    border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.table-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+}
+
+.stats-table-body {
+    padding: 1.25rem;
+}
+
+.filters-section {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 1.25rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.progress-container {
+    position: relative;
+    width: 100%;
+}
+
+.progress {
+    height: 1.5rem;
+    background-color: #e9ecef;
+}
+
+.progress-bar {
+    background-color: #007bff;
+}
+
+.progress-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #2c3e50;
+}
+
+.table th {
+    font-weight: 600;
+    color: #495057;
+    background-color: #f8f9fa;
+}
+
+.table-hover tbody tr:hover {
+    background-color: #f5f5f5;
+}
+
+@@media (max-width: 768px) {
+    .header-content {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .header-actions {
+        justify-content: center;
+    }
+
+    .stats-value {
+        font-size: 2rem;
+    }
+}
+
+/* Chart Styles */
+.chart-card {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 0.5rem;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    height: 100%;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.chart-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+.chart-card-header {
+    padding: 1.25rem 1.25rem 0.5rem 1.25rem;
+    border-bottom: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+    border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.chart-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #2c3e50;
+    display: flex;
+    align-items: center;
+}
+
+.chart-card-body {
+    padding: 1.25rem;
+}
+
+.chart-container {
+    position: relative;
+    width: 100%;
+    height: 300px;
+    min-height: 250px;
+}
+
+.chart-container canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+@@media (max-width: 768px) {
+    .chart-container {
+        height: 250px;
+        min-height: 200px;
+    }
+}
+</style>

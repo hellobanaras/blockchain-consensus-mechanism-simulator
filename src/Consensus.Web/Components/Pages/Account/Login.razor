@@ -1,0 +1,197 @@
+@page "/Account/Login"
+@using Microsoft.AspNetCore.Antiforgery
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using System.ComponentModel.DataAnnotations
+@using Consensus.Core.Entities
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Mvc
+@attribute [AllowAnonymous]
+@attribute [IgnoreAntiforgeryToken]
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager Navigation
+@inject ILogger<Login> Logger
+
+<PageTitle>Login - Consensus Simulator</PageTitle>
+
+<div class="container-fluid p-0">
+    <div class="row min-vh-100 g-0">
+        <div class="col-md-6 d-flex align-items-center justify-content-center bg-light">
+            <div class="w-100" style="max-width: 400px;">
+                <div class="text-center mb-4">
+                    <h1 class="display-6 fw-bold text-primary">
+                        <i class="fas fa-cube me-2"></i>
+                        Consensus Lab
+                    </h1>
+                    <p class="text-muted">Blockchain Consensus Mechanism Simulator</p>
+                </div>
+
+                <div class="card shadow">
+                    <div class="card-body p-4">
+                        <h3 class="card-title text-center mb-4">Welcome Back</h3>
+
+                        @if (!string.IsNullOrEmpty(ErrorMessage))
+                        {
+                            <div class="alert alert-danger" role="alert">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                @ErrorMessage
+                            </div>
+                        }
+
+                        <EditForm Model="Input" method="post" OnValidSubmit="LoginUser" FormName="login" data-enhance="false">
+                            <DataAnnotationsValidator />
+                            
+                            <div class="mb-3">
+                                <label for="email" class="form-label">Email</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="fas fa-envelope"></i>
+                                    </span>
+                                    <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="Enter your email" />
+                                </div>
+                                <ValidationMessage For="() => Input.Email" class="text-danger" />
+                            </div>
+
+                            <div class="mb-3">
+                                <label for="password" class="form-label">Password</label>
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="fas fa-lock"></i>
+                                    </span>
+                                    <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="Enter your password" />
+                                </div>
+                                <ValidationMessage For="() => Input.Password" class="text-danger" />
+                            </div>
+
+                            <div class="mb-3 form-check">
+                                <InputCheckbox @bind-Value="Input.RememberMe" class="form-check-input" />
+                                <label class="form-check-label" for="Input_RememberMe">
+                                    Remember me
+                                </label>
+                            </div>
+
+                            <div class="d-grid">
+                                <button type="submit" class="btn btn-primary btn-lg">
+                                    <i class="fas fa-sign-in-alt me-2"></i>
+                                    Sign In
+                                </button>
+                            </div>
+                        </EditForm>
+
+                        <hr class="my-4">
+
+                        <div class="text-center">
+                            <p class="mb-0">
+                                Don't have an account? 
+                                <a href="@($"/Account/Register{(string.IsNullOrEmpty(ReturnUrl) ? "" : $"?returnUrl={ReturnUrl}")}")" class="text-decoration-none">
+                                    Create one
+                                </a>
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 bg-primary d-none d-md-flex align-items-center justify-content-center">
+            <div class="text-white text-center p-5">
+                <i class="fas fa-network-wired fa-5x mb-4 opacity-75"></i>
+                <h2 class="fw-bold mb-3">Explore Consensus Algorithms</h2>
+                <p class="fs-5 opacity-75">
+                    Simulate and analyze different blockchain consensus mechanisms 
+                    including PoW, PoS, PBFT, and more in a controlled environment.
+                </p>
+                <div class="row mt-5 text-start">
+                    <div class="col-12 mb-3">
+                        <i class="fas fa-check-circle me-3"></i>
+                        Real-time simulation monitoring
+                    </div>
+                    <div class="col-12 mb-3">
+                        <i class="fas fa-check-circle me-3"></i>
+                        Advanced analytics dashboard
+                    </div>
+                    <div class="col-12 mb-3">
+                        <i class="fas fa-check-circle me-3"></i>
+                        Multiple consensus protocols
+                    </div>
+                    <div class="col-12">
+                        <i class="fas fa-check-circle me-3"></i>
+                        Byzantine fault tolerance testing
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string? ErrorMessage;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (HttpContext.User?.Identity?.IsAuthenticated == true)
+        {
+            Navigation.NavigateTo(ReturnUrl ?? "/");
+        }
+    }
+
+    public async Task LoginUser()
+    {
+        try
+        {
+            var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+            
+            if (result.Succeeded)
+            {
+                Logger.LogInformation("User {Email} logged in successfully.", Input.Email);
+                
+                // Use JavaScript to handle navigation to avoid NavigationException
+                await Task.Delay(100); // Small delay to ensure state is updated
+                Navigation.NavigateTo(ReturnUrl ?? "/");
+            }
+            else if (result.RequiresTwoFactor)
+            {
+                Navigation.NavigateTo($"/Account/LoginWith2fa?returnUrl={ReturnUrl}");
+            }
+            else if (result.IsLockedOut)
+            {
+                Logger.LogWarning("User account locked out: {Email}", Input.Email);
+                ErrorMessage = "This account has been locked out, please try again later.";
+            }
+            else
+            {
+                Logger.LogWarning("Invalid login attempt for {Email}", Input.Email);
+                ErrorMessage = "Invalid login attempt. Please check your email and password.";
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during login for {Email}", Input.Email);
+            ErrorMessage = "An error occurred while processing your request. Please try again.";
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [EmailAddress]
+        public string Email { get; set; } = "";
+
+        [Required]
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+
+        [Display(Name = "Remember me?")]
+        public bool RememberMe { get; set; }
+    }
+}

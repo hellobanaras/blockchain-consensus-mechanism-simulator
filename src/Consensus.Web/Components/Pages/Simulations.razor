@@ -1,9 +1,15 @@
 @page "/simulations"
 @using Consensus.Core.Entities
 @using Consensus.Core.Enums
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web
+@rendermode InteractiveServer
 @inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+@attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
-<PageTitle>Simulations - Consensus Simulator</PageTitle>
+@* Simulations Page *@
 
 <div class="container-fluid">
     <div class="row mb-4">
@@ -14,9 +20,18 @@
                     <p class="lead">Create, manage, and analyze consensus protocol simulations</p>
                 </div>
                 <div>
-                    <button class="btn btn-primary btn-lg" @onclick="ShowCreateSimulationModal">
-                        <i class="bi bi-plus-circle"></i> New Simulation
-                    </button>
+                    <AuthorizeView Roles="Admin,Operator">
+                        <Authorized>
+                            <button class="btn btn-primary btn-lg" @onclick="ShowCreateSimulationModal">
+                                <i class="bi bi-plus-circle"></i> New Simulation
+                            </button>
+                        </Authorized>
+                        <NotAuthorized>
+                            <button class="btn btn-secondary btn-lg" disabled title="Insufficient permissions">
+                                <i class="bi bi-lock"></i> New Simulation (Admin/Operator Only)
+                            </button>
+                        </NotAuthorized>
+                    </AuthorizeView>
                 </div>
             </div>
         </div>
@@ -359,8 +374,10 @@
         StateHasChanged();
     }
 
-    private void ShowCreateSimulationModal()
+    private async Task ShowCreateSimulationModal()
     {
+        Console.WriteLine("ShowCreateSimulationModal called");
+        await JSRuntime.InvokeVoidAsync("console.log", "ShowCreateSimulationModal called from Blazor");
         showCreateModal = true;
         // Reset form
         newSimulationName = "";
@@ -370,11 +387,13 @@
         newSimulationRounds = 100;
         newSimulationFaultyNodes = 0;
         newSimulationTopology = NetworkTopologyType.FullMesh;
+        StateHasChanged();
     }
 
     private void HideCreateSimulationModal()
     {
         showCreateModal = false;
+        StateHasChanged();
     }
 
     private async Task CreateSimulation()
@@ -392,11 +411,15 @@
 
     private async Task ViewSimulation(Guid simulationId)
     {
-        await JSRuntime.InvokeVoidAsync("alert", $"Viewing simulation details for {simulationId}... (Feature coming soon!)");
+        Console.WriteLine($"ViewSimulation called for {simulationId}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"ViewSimulation called for {simulationId}");
+        Navigation.NavigateTo($"/simulation/{simulationId}");
     }
 
     private async Task PauseSimulation(Guid simulationId)
     {
+        Console.WriteLine($"PauseSimulation called for {simulationId}");
+        await JSRuntime.InvokeVoidAsync("console.log", $"PauseSimulation called for {simulationId}");
         await JSRuntime.InvokeVoidAsync("alert", $"Pausing simulation {simulationId}... (Feature coming soon!)");
     }
 

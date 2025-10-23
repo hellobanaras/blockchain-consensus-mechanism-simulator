@@ -1,0 +1,446 @@
+@using Consensus.Core.Models.Payloads
+@using Consensus.Core.Enums
+@using System.Text.Json
+
+<div class="supply-chain-card">
+    @if (Payload != null)
+    {
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <i class="fas @GetEventIcon(Payload.EventType) me-2 text-primary"></i>
+                    <h6 class="mb-0">Supply Chain Event</h6>
+                </div>
+                <span class="badge @GetEventBadgeClass(Payload.EventType)">
+                    @GetEventDisplayName(Payload.EventType)
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="info-item">
+                            <label>Product ID</label>
+                            <div class="info-value">
+                                <i class="fas fa-barcode me-1"></i>
+                                <code>@Payload.ProductId</code>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <label>Batch Number</label>
+                            <div class="info-value">
+                                <i class="fas fa-layer-group me-1"></i>
+                                <code>@Payload.BatchNumber</code>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <label>Actor</label>
+                            <div class="info-value">
+                                <i class="fas fa-building me-1"></i>
+                                @Payload.Actor
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <label>Location</label>
+                            <div class="info-value">
+                                <i class="fas fa-map-marker-alt me-1"></i>
+                                @Payload.Location
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="info-item">
+                            <label>Timestamp</label>
+                            <div class="info-value">
+                                <i class="fas fa-clock me-1"></i>
+                                @Payload.Timestamp.ToString("yyyy-MM-dd HH:mm:ss UTC")
+                            </div>
+                        </div>
+                        
+                        @if (Payload.Temperature.HasValue)
+                        {
+                            <div class="info-item">
+                                <label>Temperature</label>
+                                <div class="info-value">
+                                    <i class="fas fa-thermometer-half me-1"></i>
+                                    <span class="@GetTemperatureClass(Payload.Temperature.Value)">
+                                        @Payload.Temperature.Value.ToString("F1")°C
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                        
+                        @if (Payload.Humidity.HasValue)
+                        {
+                            <div class="info-item">
+                                <label>Humidity</label>
+                                <div class="info-value">
+                                    <i class="fas fa-tint me-1"></i>
+                                    <span class="@GetHumidityClass(Payload.Humidity.Value)">
+                                        @Payload.Humidity.Value.ToString("F1")%
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                        
+                        @if (!string.IsNullOrEmpty(Payload.VerificationSignature))
+                        {
+                            <div class="info-item">
+                                <label>Verification</label>
+                                <div class="info-value">
+                                    <i class="fas fa-shield-alt me-1 text-success"></i>
+                                    <small class="text-success">Verified</small>
+                                    <small class="text-muted d-block">@Payload.VerificationSignature[..16]...</small>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @if (Payload.EventData?.Any() == true)
+                {
+                    <div class="event-details mt-3">
+                        <h6 class="mb-2">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Event Details
+                        </h6>
+                        <div class="event-data">
+                            @foreach (var kvp in Payload.EventData)
+                            {
+                                <div class="event-data-item">
+                                    <span class="key">@FormatKey(kvp.Key):</span>
+                                    <span class="value">@FormatValue(kvp.Value)</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (ShowTraceability)
+                {
+                    <div class="traceability-section mt-3">
+                        <h6 class="mb-2">
+                            <i class="fas fa-route me-1"></i>
+                            Supply Chain Traceability
+                        </h6>
+                        <div class="supply-chain-flow">
+                            @foreach (var step in GetSupplyChainFlow())
+                            {
+                                <div class="flow-step @(step.IsCompleted ? "completed" : "") @(step.IsCurrent ? "current" : "")">
+                                    <div class="step-icon">
+                                        <i class="fas @step.Icon"></i>
+                                    </div>
+                                    <div class="step-label">@step.Label</div>
+                                </div>
+                                @if (step != GetSupplyChainFlow().Last())
+                                {
+                                    <div class="flow-arrow">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            No supply chain data available.
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public SupplyChainPayload? Payload { get; set; }
+    [Parameter] public bool ShowTraceability { get; set; } = true;
+
+    private class FlowStep
+    {
+        public string Label { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+        public bool IsCompleted { get; set; }
+        public bool IsCurrent { get; set; }
+    }
+
+    private string GetEventIcon(SupplyChainEventType eventType)
+    {
+        return eventType switch
+        {
+            SupplyChainEventType.Manufactured => "fa-industry",
+            SupplyChainEventType.QualityChecked => "fa-check-circle",
+            SupplyChainEventType.Packaged => "fa-box",
+            SupplyChainEventType.Shipped => "fa-shipping-fast",
+            SupplyChainEventType.InTransit => "fa-truck-moving",
+            SupplyChainEventType.Delivered => "fa-truck",
+            SupplyChainEventType.Received => "fa-clipboard-check",
+            SupplyChainEventType.Audited => "fa-search",
+            _ => "fa-circle"
+        };
+    }
+
+    private string GetEventBadgeClass(SupplyChainEventType eventType)
+    {
+        return eventType switch
+        {
+            SupplyChainEventType.Manufactured => "bg-primary",
+            SupplyChainEventType.QualityChecked => "bg-success",
+            SupplyChainEventType.Packaged => "bg-info",
+            SupplyChainEventType.Shipped => "bg-warning text-dark",
+            SupplyChainEventType.InTransit => "bg-warning text-dark",
+            SupplyChainEventType.Delivered => "bg-success",
+            SupplyChainEventType.Received => "bg-success",
+            SupplyChainEventType.Audited => "bg-secondary",
+            _ => "bg-light text-dark"
+        };
+    }
+
+    private string GetEventDisplayName(SupplyChainEventType eventType)
+    {
+        return eventType switch
+        {
+            SupplyChainEventType.QualityChecked => "Quality Checked",
+            SupplyChainEventType.InTransit => "In Transit",
+            _ => eventType.ToString()
+        };
+    }
+
+    private string GetTemperatureClass(double temperature)
+    {
+        if (temperature < 0) return "text-primary"; // Cold
+        if (temperature < 10) return "text-info"; // Cool  
+        if (temperature < 25) return "text-success"; // Normal
+        if (temperature < 35) return "text-warning"; // Warm
+        return "text-danger"; // Hot
+    }
+
+    private string GetHumidityClass(double humidity)
+    {
+        if (humidity < 30) return "text-warning"; // Too dry
+        if (humidity < 70) return "text-success"; // Normal
+        return "text-danger"; // Too humid
+    }
+
+    private string FormatKey(string key)
+    {
+        return key.Replace("_", " ").Replace("-", " ")
+            .Split(' ')
+            .Select(word => char.ToUpper(word[0]) + (word.Length > 1 ? word[1..] : ""))
+            .Aggregate((a, b) => a + " " + b);
+    }
+
+    private string FormatValue(object value)
+    {
+        return value switch
+        {
+            DateTime dt => dt.ToString("yyyy-MM-dd HH:mm:ss"),
+            double d => d.ToString("F2"),
+            decimal dec => dec.ToString("F2"),
+            _ => value.ToString() ?? "N/A"
+        };
+    }
+
+    private List<FlowStep> GetSupplyChainFlow()
+    {
+        var steps = new List<FlowStep>();
+        steps.Add(new FlowStep { Label = "Manufactured", Icon = "fa-industry" });
+        steps.Add(new FlowStep { Label = "Quality Check", Icon = "fa-check-circle" });
+        steps.Add(new FlowStep { Label = "Packaged", Icon = "fa-box" });
+        steps.Add(new FlowStep { Label = "Shipped", Icon = "fa-shipping-fast" });
+        steps.Add(new FlowStep { Label = "In Transit", Icon = "fa-truck-moving" });
+        steps.Add(new FlowStep { Label = "Delivered", Icon = "fa-truck" });
+        steps.Add(new FlowStep { Label = "Received", Icon = "fa-clipboard-check" });
+        steps.Add(new FlowStep { Label = "Audited", Icon = "fa-search" });
+
+        if (Payload != null)
+        {
+            var currentEventIndex = (int)Payload.EventType;
+            for (int i = 0; i < steps.Count; i++)
+            {
+                if (i < currentEventIndex)
+                    steps[i].IsCompleted = true;
+                else if (i == currentEventIndex)
+                    steps[i].IsCurrent = true;
+            }
+        }
+
+        return steps;
+    }
+}
+
+<style>
+.supply-chain-card .card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.supply-chain-card .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 0.75rem 1rem;
+}
+
+.supply-chain-card .info-item {
+    margin-bottom: 0.75rem;
+}
+
+.supply-chain-card .info-item label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+    display: block;
+}
+
+.supply-chain-card .info-value {
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.supply-chain-card .info-value code {
+    background-color: #f8f9fa;
+    color: #495057;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.85rem;
+}
+
+.supply-chain-card .event-details {
+    border-top: 1px solid #e9ecef;
+    padding-top: 1rem;
+}
+
+.supply-chain-card .event-data {
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+    border: 1px solid #e9ecef;
+}
+
+.supply-chain-card .event-data-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.875rem;
+}
+
+.supply-chain-card .event-data-item:last-child {
+    border-bottom: none;
+}
+
+.supply-chain-card .event-data-item .key {
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.supply-chain-card .event-data-item .value {
+    font-family: 'SF Mono', Consolas, monospace;
+    background-color: white;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    border: 1px solid #dee2e6;
+    font-size: 0.8rem;
+}
+
+.supply-chain-card .traceability-section {
+    border-top: 1px solid #e9ecef;
+    padding-top: 1rem;
+}
+
+.supply-chain-card .supply-chain-flow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.supply-chain-card .flow-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    min-width: 70px;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+}
+
+.supply-chain-card .flow-step.completed {
+    opacity: 1;
+    color: #198754;
+}
+
+.supply-chain-card .flow-step.current {
+    opacity: 1;
+    color: #0d6efd;
+    font-weight: 600;
+}
+
+.supply-chain-card .flow-step .step-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid currentColor;
+    margin-bottom: 0.5rem;
+    font-size: 1rem;
+}
+
+.supply-chain-card .flow-step.completed .step-icon {
+    background-color: #198754;
+    color: white;
+    border-color: #198754;
+}
+
+.supply-chain-card .flow-step.current .step-icon {
+    background-color: #0d6efd;
+    color: white;
+    border-color: #0d6efd;
+}
+
+.supply-chain-card .flow-step .step-label {
+    font-size: 0.75rem;
+    line-height: 1.2;
+}
+
+.supply-chain-card .flow-arrow {
+    color: #6c757d;
+    font-size: 0.8rem;
+    margin: 0 0.25rem;
+}
+
+@@media (max-width: 768px) {
+    .supply-chain-card .supply-chain-flow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .supply-chain-card .flow-step {
+        flex-direction: row;
+        justify-content: flex-start;
+        min-width: auto;
+        text-align: left;
+        gap: 1rem;
+    }
+    
+    .supply-chain-card .flow-step .step-icon {
+        width: 30px;
+        height: 30px;
+        margin-bottom: 0;
+    }
+    
+    .supply-chain-card .flow-arrow {
+        transform: rotate(90deg);
+        align-self: center;
+        margin: 0.25rem 0;
+    }
+}
+</style>

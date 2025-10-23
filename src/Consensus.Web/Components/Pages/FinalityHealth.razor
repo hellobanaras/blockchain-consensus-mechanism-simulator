@@ -1,0 +1,625 @@
+@page "/finality-health"
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@inject NavigationManager Navigation
+
+<link href="~/css/finality-health.css" rel="stylesheet" />
+<link href="~/css/finality-health-page.css" rel="stylesheet" />
+
+<div class="finality-health-page">
+    <!-- Page Header -->
+    <div class="page-header mb-4">
+        <div class="row align-items-center">
+            <div class="col">
+                <h2 class="page-title mb-1">
+                    <i class="fas fa-shield-alt me-2"></i>
+                    Finality & Health Monitoring
+                </h2>
+                <p class="page-subtitle mb-0">
+                    Real-time monitoring of consensus finality, fork resolution, and network health metrics
+                </p>
+            </div>
+            <div class="col-auto">
+                <div class="btn-group" role="group">
+                    <button class="btn btn-outline-primary" @onclick="() => NavigateToAnalytics()">
+                        <i class="fas fa-arrow-left me-1"></i>
+                        Analytics Dashboard
+                    </button>
+                    <button class="btn btn-outline-success" @onclick="() => NavigateToSpecialized()">
+                        <i class="fas fa-microscope me-1"></i>
+                        Specialized Analytics
+                    </button>
+                    <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                        <i class="fas fa-cog me-1"></i>
+                        Settings
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <label class="dropdown-item">
+                                <input type="checkbox" @bind="enableRealTimeUpdates" class="form-check-input me-2">
+                                Real-time Updates
+                            </label>
+                        </li>
+                        <li>
+                            <label class="dropdown-item">
+                                <input type="checkbox" @bind="enableAlerts" class="form-check-input me-2">
+                                Network Alerts
+                            </label>
+                        </li>
+                        <li>
+                            <label class="dropdown-item">
+                                <input type="checkbox" @bind="enableAutoRefresh" class="form-check-input me-2">
+                                Auto Refresh (15s)
+                            </label>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="#" @onclick="ExportAllData">
+                                <i class="fas fa-download me-2"></i>
+                                Export Health Data
+                            </a>
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="#" @onclick="ResetAlerts">
+                                <i class="fas fa-trash me-2"></i>
+                                Clear Alerts
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Health Overview -->
+    <div class="health-overview mb-4">
+        <div class="row g-3">
+            <div class="col-md-3">
+                <div class="overview-card finality-card">
+                    <div class="overview-icon">
+                        <i class="fas fa-clock"></i>
+                    </div>
+                    <div class="overview-content">
+                        <div class="overview-title">Finality Time</div>
+                        <div class="overview-value">@quickStats.AvgFinalityTime.ToString("F1")s</div>
+                        <div class="overview-change @(quickStats.FinalityTrend >= 0 ? "positive" : "negative")">
+                            <i class="fas @(quickStats.FinalityTrend >= 0 ? "fa-arrow-up" : "fa-arrow-down")"></i>
+                            @Math.Abs(quickStats.FinalityTrend).ToString("F1")%
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="overview-card fork-card">
+                    <div class="overview-icon">
+                        <i class="fas fa-code-branch"></i>
+                    </div>
+                    <div class="overview-content">
+                        <div class="overview-title">Active Forks</div>
+                        <div class="overview-value">@quickStats.ActiveForks</div>
+                        <div class="overview-status @(quickStats.ActiveForks <= 2 ? "good" : "warning")">
+                            @(quickStats.ActiveForks <= 2 ? "Normal" : "Elevated")
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="overview-card health-card">
+                    <div class="overview-icon">
+                        <i class="fas fa-heartbeat"></i>
+                    </div>
+                    <div class="overview-content">
+                        <div class="overview-title">Network Health</div>
+                        <div class="overview-value">@quickStats.NetworkHealth</div>
+                        <div class="overview-status @GetHealthStatusClass(quickStats.NetworkHealth)">
+                            @GetHealthStatusText(quickStats.NetworkHealth)
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="overview-card stability-card">
+                    <div class="overview-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <div class="overview-content">
+                        <div class="overview-title">Consensus Uptime</div>
+                        <div class="overview-value">@quickStats.ConsensusUptime.ToString("P2")</div>
+                        <div class="overview-status @(quickStats.ConsensusUptime >= 0.99 ? "excellent" : "good")">
+                            @(quickStats.ConsensusUptime >= 0.99 ? "Excellent" : "Good")
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Monitoring Tabs -->
+    <div class="monitoring-tabs mb-4">
+        <ul class="nav nav-tabs" id="monitoringTabs" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "overview" ? "active" : "")" 
+                        @onclick='() => SetActiveTab("overview")' type="button">
+                    <i class="fas fa-tachometer-alt me-2"></i>
+                    Overview
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "finality" ? "active" : "")" 
+                        @onclick='() => SetActiveTab("finality")' type="button">
+                    <i class="fas fa-clock me-2"></i>
+                    Finality Tracking
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "forks" ? "active" : "")" 
+                        @onclick='() => SetActiveTab("forks")' type="button">
+                    <i class="fas fa-code-branch me-2"></i>
+                    Fork Analysis
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "health" ? "active" : "")" 
+                        @onclick='() => SetActiveTab("health")' type="button">
+                    <i class="fas fa-heartbeat me-2"></i>
+                    Network Health
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link @(activeTab == "alerts" ? "active" : "")" 
+                        @onclick='() => SetActiveTab("alerts")' type="button">
+                    <i class="fas fa-bell me-2"></i>
+                    Alerts
+                    @if (alertCount > 0)
+                    {
+                        <span class="badge bg-danger ms-1">@alertCount</span>
+                    }
+                </button>
+            </li>
+        </ul>
+    </div>
+
+    <!-- Tab Content -->
+    <div class="tab-content">
+        @if (activeTab == "overview")
+        {
+            <!-- Overview Tab - Complete Dashboard -->
+            <div class="tab-pane active">
+                <FinalityHealthChart 
+                    EnableRealTimeUpdates="@enableRealTimeUpdates"
+                    OnDataExported="@HandleDataExported" />
+            </div>
+        }
+        else if (activeTab == "finality")
+        {
+            <!-- Finality Tracking Tab -->
+            <div class="tab-pane active">
+                <div class="section-header mb-4">
+                    <h4 class="section-title">
+                        <i class="fas fa-clock me-2"></i>
+                        Consensus Finality Analysis
+                    </h4>
+                    <p class="section-subtitle">
+                        Monitor transaction finality times and confidence levels across the network
+                    </p>
+                </div>
+                
+                <div class="row g-4">
+                    <div class="col-12">
+                        <div class="finality-detailed-metrics">
+                            <div class="row">
+                                <div class="col-md-2">
+                                    <div class="metric-card">
+                                        <div class="metric-value">@detailedMetrics.AvgFinalityTime.ToString("F2")s</div>
+                                        <div class="metric-label">Average Finality</div>
+                                        <div class="metric-description">Mean time to finality</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="metric-card">
+                                        <div class="metric-value">@detailedMetrics.MedianFinalityTime.ToString("F2")s</div>
+                                        <div class="metric-label">Median Finality</div>
+                                        <div class="metric-description">50th percentile</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="metric-card">
+                                        <div class="metric-value">@detailedMetrics.P95FinalityTime.ToString("F2")s</div>
+                                        <div class="metric-label">95th Percentile</div>
+                                        <div class="metric-description">P95 finality time</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="metric-card">
+                                        <div class="metric-value">@detailedMetrics.P99FinalityTime.ToString("F2")s</div>
+                                        <div class="metric-label">99th Percentile</div>
+                                        <div class="metric-description">P99 finality time</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="metric-card">
+                                        <div class="metric-value">@detailedMetrics.FinalityVariance.ToString("F3")</div>
+                                        <div class="metric-label">Variance</div>
+                                        <div class="metric-description">Time variance</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="metric-card">
+                                        <div class="metric-value">@detailedMetrics.ConfidenceLevel.ToString("P1")</div>
+                                        <div class="metric-label">Confidence</div>
+                                        <div class="metric-description">Avg confidence</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (activeTab == "forks")
+        {
+            <!-- Fork Analysis Tab -->
+            <div class="tab-pane active">
+                <div class="section-header mb-4">
+                    <h4 class="section-title">
+                        <i class="fas fa-code-branch me-2"></i>
+                        Fork Resolution Analysis
+                    </h4>
+                    <p class="section-subtitle">
+                        Track blockchain forks, their resolution patterns, and impact on network stability
+                    </p>
+                </div>
+                
+                <div class="fork-analysis-grid">
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <div class="metric-card">
+                                <div class="metric-value">@detailedMetrics.TotalForksToday</div>
+                                <div class="metric-label">Forks Today</div>
+                                <div class="metric-description">Total fork events</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="metric-card">
+                                <div class="metric-value">@detailedMetrics.AvgForkResolutionTime.ToString("F1")s</div>
+                                <div class="metric-label">Avg Resolution</div>
+                                <div class="metric-description">Mean resolution time</div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="metric-card">
+                                <div class="metric-value">@detailedMetrics.LongestForkLength</div>
+                                <div class="metric-label">Longest Fork</div>
+                                <div class="metric-description">Max fork depth</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (activeTab == "health")
+        {
+            <!-- Network Health Tab -->
+            <div class="tab-pane active">
+                <div class="section-header mb-4">
+                    <h4 class="section-title">
+                        <i class="fas fa-heartbeat me-2"></i>
+                        Network Health Dashboard
+                    </h4>
+                    <p class="section-subtitle">
+                        Comprehensive health monitoring including connectivity, throughput, and stability metrics
+                    </p>
+                </div>
+                
+                <div class="health-dashboard-grid">
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="health-category-card">
+                                <h6 class="category-title">Connectivity Health</h6>
+                                <div class="health-metrics">
+                                    <div class="metric-row">
+                                        <span class="metric-name">Node Connectivity</span>
+                                        <span class="metric-value">@detailedMetrics.NodeConnectivity.ToString("P0")</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-name">Peer Count</span>
+                                        <span class="metric-value">@detailedMetrics.ActivePeers</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-name">Network Latency</span>
+                                        <span class="metric-value">@detailedMetrics.NetworkLatency.ToString("F0")ms</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="health-category-card">
+                                <h6 class="category-title">Performance Health</h6>
+                                <div class="health-metrics">
+                                    <div class="metric-row">
+                                        <span class="metric-name">Throughput</span>
+                                        <span class="metric-value">@detailedMetrics.ThroughputTPS.ToString("F0") TPS</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-name">Block Time</span>
+                                        <span class="metric-value">@detailedMetrics.AvgBlockTime.ToString("F1")s</span>
+                                    </div>
+                                    <div class="metric-row">
+                                        <span class="metric-name">Memory Usage</span>
+                                        <span class="metric-value">@detailedMetrics.MemoryUsage.ToString("P0")</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (activeTab == "alerts")
+        {
+            <!-- Alerts Tab -->
+            <div class="tab-pane active">
+                <div class="section-header mb-4">
+                    <h4 class="section-title">
+                        <i class="fas fa-bell me-2"></i>
+                        Network Alert Center
+                    </h4>
+                    <p class="section-subtitle">
+                        Monitor critical network events, warnings, and system notifications
+                    </p>
+                </div>
+                
+                <div class="alerts-dashboard">
+                    @if (alertCount > 0)
+                    {
+                        <div class="alert-filters mb-3">
+                            <div class="btn-group" role="group">
+                                <input type="radio" class="btn-check" name="alertFilter" id="allAlerts" value="all" 
+                                       checked="@(alertFilter == "all")" @onchange="UpdateAlertFilter">
+                                <label class="btn btn-outline-secondary" for="allAlerts">All (@alertCount)</label>
+                                
+                                <input type="radio" class="btn-check" name="alertFilter" id="criticalAlerts" value="critical" 
+                                       checked="@(alertFilter == "critical")" @onchange="UpdateAlertFilter">
+                                <label class="btn btn-outline-danger" for="criticalAlerts">Critical (@criticalAlertCount)</label>
+                                
+                                <input type="radio" class="btn-check" name="alertFilter" id="warningAlerts" value="warning" 
+                                       checked="@(alertFilter == "warning")" @onchange="UpdateAlertFilter">
+                                <label class="btn btn-outline-warning" for="warningAlerts">Warning (@warningAlertCount)</label>
+                                
+                                <input type="radio" class="btn-check" name="alertFilter" id="infoAlerts" value="info" 
+                                       checked="@(alertFilter == "info")" @onchange="UpdateAlertFilter">
+                                <label class="btn btn-outline-info" for="infoAlerts">Info (@infoAlertCount)</label>
+                            </div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="no-alerts-message">
+                            <i class="fas fa-check-circle text-success fa-3x mb-3"></i>
+                            <h5>All Systems Operating Normally</h5>
+                            <p class="text-muted">No active alerts detected. Network is running smoothly.</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Export Status Toast -->
+    @if (showExportToast)
+    {
+        <div class="toast-container position-fixed bottom-0 end-0 p-3">
+            <div class="toast show" role="alert">
+                <div class="toast-header">
+                    <i class="fas fa-download me-2"></i>
+                    <strong class="me-auto">Data Export</strong>
+                    <button type="button" class="btn-close" @onclick="() => showExportToast = false"></button>
+                </div>
+                <div class="toast-body">
+                    @exportMessage
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string activeTab = "overview";
+    private string alertFilter = "all";
+    private bool enableRealTimeUpdates = true;
+    private bool enableAlerts = true;
+    private bool enableAutoRefresh = true;
+    private bool showExportToast = false;
+    private string exportMessage = "";
+    private Timer? autoRefreshTimer;
+    
+    // Quick stats
+    private QuickHealthStats quickStats = new();
+    private DetailedHealthMetrics detailedMetrics = new();
+    
+    // Alert counts
+    private int alertCount = 0;
+    private int criticalAlertCount = 0;
+    private int warningAlertCount = 0;
+    private int infoAlertCount = 0;
+
+    protected override void OnInitialized()
+    {
+        LoadQuickStats();
+        LoadDetailedMetrics();
+        UpdateAlertCounts();
+        
+        if (enableAutoRefresh)
+        {
+            StartAutoRefresh();
+        }
+    }
+
+    private void LoadQuickStats()
+    {
+        quickStats = new QuickHealthStats
+        {
+            AvgFinalityTime = Random.Shared.NextDouble() * 3 + 2, // 2-5 seconds
+            FinalityTrend = (Random.Shared.NextDouble() - 0.5) * 10, // -5% to +5%
+            ActiveForks = Random.Shared.Next(0, 5),
+            NetworkHealth = Random.Shared.Next(75, 100),
+            ConsensusUptime = Random.Shared.NextDouble() * 0.05 + 0.95 // 95-100%
+        };
+    }
+
+    private void LoadDetailedMetrics()
+    {
+        detailedMetrics = new DetailedHealthMetrics
+        {
+            AvgFinalityTime = quickStats.AvgFinalityTime,
+            MedianFinalityTime = quickStats.AvgFinalityTime * 0.9,
+            P95FinalityTime = quickStats.AvgFinalityTime * 1.5,
+            P99FinalityTime = quickStats.AvgFinalityTime * 2.2,
+            FinalityVariance = Random.Shared.NextDouble() * 0.5,
+            ConfidenceLevel = Random.Shared.NextDouble() * 0.1 + 0.9,
+            
+            TotalForksToday = Random.Shared.Next(8, 25),
+            AvgForkResolutionTime = Random.Shared.NextDouble() * 120 + 30,
+            LongestForkLength = Random.Shared.Next(3, 12),
+            
+            NodeConnectivity = Random.Shared.NextDouble() * 0.15 + 0.85,
+            ActivePeers = Random.Shared.Next(15, 35),
+            NetworkLatency = Random.Shared.NextDouble() * 50 + 20,
+            ThroughputTPS = Random.Shared.NextDouble() * 200 + 300,
+            AvgBlockTime = Random.Shared.NextDouble() * 2 + 8,
+            MemoryUsage = Random.Shared.NextDouble() * 0.3 + 0.4
+        };
+    }
+
+    private void UpdateAlertCounts()
+    {
+        criticalAlertCount = Random.Shared.Next(0, 3);
+        warningAlertCount = Random.Shared.Next(2, 8);
+        infoAlertCount = Random.Shared.Next(5, 15);
+        alertCount = criticalAlertCount + warningAlertCount + infoAlertCount;
+    }
+
+    private void SetActiveTab(string tab)
+    {
+        activeTab = tab;
+    }
+
+    private void NavigateToAnalytics()
+    {
+        Navigation.NavigateTo("/analytics-dashboard");
+    }
+
+    private void NavigateToSpecialized()
+    {
+        Navigation.NavigateTo("/specialized-analytics");
+    }
+
+    private async Task HandleDataExported(string dataType)
+    {
+        exportMessage = $"Successfully exported {dataType}";
+        showExportToast = true;
+        StateHasChanged();
+
+        await Task.Delay(3000);
+        showExportToast = false;
+        StateHasChanged();
+    }
+
+    private async Task ExportAllData()
+    {
+        await HandleDataExported("finality and health monitoring data");
+    }
+
+    private async Task ResetAlerts()
+    {
+        alertCount = 0;
+        criticalAlertCount = 0;
+        warningAlertCount = 0;
+        infoAlertCount = 0;
+        StateHasChanged();
+        
+        exportMessage = "All alerts cleared";
+        showExportToast = true;
+        StateHasChanged();
+
+        await Task.Delay(2000);
+        showExportToast = false;
+        StateHasChanged();
+    }
+
+    private void UpdateAlertFilter(ChangeEventArgs e)
+    {
+        alertFilter = e.Value?.ToString() ?? "all";
+    }
+
+    private string GetHealthStatusClass(int healthScore)
+    {
+        return healthScore switch
+        {
+            >= 90 => "excellent",
+            >= 75 => "good",
+            >= 60 => "fair",
+            _ => "poor"
+        };
+    }
+
+    private string GetHealthStatusText(int healthScore)
+    {
+        return healthScore switch
+        {
+            >= 90 => "Excellent",
+            >= 75 => "Good",
+            >= 60 => "Fair",
+            _ => "Poor"
+        };
+    }
+
+    private void StartAutoRefresh()
+    {
+        autoRefreshTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                LoadQuickStats();
+                LoadDetailedMetrics();
+                StateHasChanged();
+            });
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(15));
+    }
+
+    public void Dispose()
+    {
+        autoRefreshTimer?.Dispose();
+    }
+
+    // Data models
+    public class QuickHealthStats
+    {
+        public double AvgFinalityTime { get; set; }
+        public double FinalityTrend { get; set; }
+        public int ActiveForks { get; set; }
+        public int NetworkHealth { get; set; }
+        public double ConsensusUptime { get; set; }
+    }
+
+    public class DetailedHealthMetrics
+    {
+        public double AvgFinalityTime { get; set; }
+        public double MedianFinalityTime { get; set; }
+        public double P95FinalityTime { get; set; }
+        public double P99FinalityTime { get; set; }
+        public double FinalityVariance { get; set; }
+        public double ConfidenceLevel { get; set; }
+        
+        public int TotalForksToday { get; set; }
+        public double AvgForkResolutionTime { get; set; }
+        public int LongestForkLength { get; set; }
+        
+        public double NodeConnectivity { get; set; }
+        public int ActivePeers { get; set; }
+        public double NetworkLatency { get; set; }
+        public double ThroughputTPS { get; set; }
+        public double AvgBlockTime { get; set; }
+        public double MemoryUsage { get; set; }
+    }
+}

@@ -1,0 +1,701 @@
+@using Consensus.Core.Enums
+@using Consensus.Core.Interfaces
+@using Consensus.Web.Models
+@using Microsoft.AspNetCore.SignalR.Client
+@implements IAsyncDisposable
+@inject ISimulationService SimulationService
+@inject IJSRuntime JSRuntime
+@inject ILogger<Dashboard> Logger
+
+<div class="container-fluid p-4">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="display-6 mb-1">Consensus Simulator Dashboard</h1>
+            <p class="text-muted">Real-time monitoring of blockchain consensus protocols</p>
+        </div>
+        <div class="col-auto">
+            <div class="d-flex align-items-center gap-2">
+                <div class="badge @(isConnected ? "bg-success" : "bg-danger") px-3 py-2">
+                    <i class="bi @(isConnected ? "bi-wifi" : "bi-wifi-off")"></i>
+                    @(isConnected ? "Connected" : "Disconnected")
+                </div>
+                <button class="btn btn-outline-primary" @onclick="RefreshData">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Active Simulations</h6>
+                            <h3 class="text-primary mb-0">@activeSimulations.Count</h3>
+                        </div>
+                        <div class="text-primary">
+                            <i class="bi bi-play-circle-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Total Simulations</h6>
+                            <h3 class="text-info mb-0">@allSimulations.Count</h3>
+                        </div>
+                        <div class="text-info">
+                            <i class="bi bi-collection-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Total Rounds</h6>
+                            <h3 class="text-success mb-0">@totalRounds</h3>
+                        </div>
+                        <div class="text-success">
+                            <i class="bi bi-arrow-repeat fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body">
+                    <div class="d-flex align-items-center">
+                        <div class="flex-grow-1">
+                            <h6 class="card-title text-muted mb-1">Uptime</h6>
+                            <h3 class="text-warning mb-0">@uptime</h3>
+                        </div>
+                        <div class="text-warning">
+                            <i class="bi bi-clock-fill fs-1"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Active Simulations -->
+    @if (activeSimulations.Any())
+    {
+        <div class="row mb-4">
+            <div class="col">
+                <div class="card border-0 shadow-sm">
+                    <div class="card-header bg-transparent border-0 pt-3">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-activity text-primary me-2"></i>
+                            Active Simulations
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Algorithm</th>
+                                        <th>Status</th>
+                                        <th>Progress</th>
+                                        <th>Nodes</th>
+                                        <th>Duration</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var simulation in activeSimulations)
+                                    {
+                                        var progress = GetProgress(simulation);
+                                        <tr class="@(simulation.Status == SimulationStatus.Running ? "table-success" : "")">
+                                            <td>
+                                                <div class="fw-medium">@simulation.Name</div>
+                                                <small class="text-muted">@simulation.Id.ToString()[..8]...</small>
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-primary">@simulation.ConsensusAlgorithm</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge @GetStatusBadgeClass(simulation.Status)">
+                                                    <i class="bi @GetStatusIcon(simulation.Status) me-1"></i>
+                                                    @simulation.Status
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div class="d-flex align-items-center">
+                                                    <div class="progress flex-grow-1 me-2" style="height: 8px;">
+                                                        <div class="progress-bar bg-success" 
+                                                             style="width: @(progress)%"></div>
+                                                    </div>
+                                                    <small class="text-muted">@progress.ToString("F1")%</small>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span class="text-muted">@simulation.NodeCount nodes</span>
+                                                @if (simulation.ByzantineNodeCount > 0)
+                                                {
+                                                    <br><small class="text-danger">@simulation.ByzantineNodeCount Byzantine</small>
+                                                }
+                                            </td>
+                                            <td>
+                                                @if (simulation.StartedAt.HasValue)
+                                                {
+                                                    var elapsed = GetElapsedTime(simulation);
+                                                    <span class="text-muted">@elapsed</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted">Not started</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-outline-primary" 
+                                                            @onclick="() => ViewSimulation(simulation.Id)">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    @if (simulation.Status == SimulationStatus.Running)
+                                                    {
+                                                        <button class="btn btn-outline-warning"
+                                                                @onclick="() => StopSimulation(simulation.Id)">
+                                                            <i class="bi bi-stop-circle"></i>
+                                                        </button>
+                                                    }
+                                                    else if (simulation.Status == SimulationStatus.Created)
+                                                    {
+                                                        <button class="btn btn-outline-success"
+                                                                @onclick="() => StartSimulation(simulation.Id)">
+                                                            <i class="bi bi-play-circle"></i>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- All Simulations -->
+    <div class="row">
+        <div class="col">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-transparent border-0 pt-3">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-list text-primary me-2"></i>
+                            All Simulations
+                        </h5>
+                        <div class="d-flex gap-2">
+                            <select class="form-select form-select-sm" @bind="selectedStatus" @bind:after="FilterSimulations">
+                                <option value="">All Status</option>
+                                @foreach (var status in Enum.GetValues<SimulationStatus>())
+                                {
+                                    <option value="@status">@status</option>
+                                }
+                            </select>
+                            <select class="form-select form-select-sm" @bind="selectedAlgorithm" @bind:after="FilterSimulations">
+                                <option value="">All Algorithms</option>
+                                @foreach (var algorithm in Enum.GetValues<ConsensusAlgorithm>())
+                                {
+                                    <option value="@algorithm">@algorithm</option>
+                                }
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-body">
+                    @if (isLoading)
+                    {
+                        <div class="text-center p-4">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Loading...</span>
+                            </div>
+                            <div class="mt-2">Loading simulations...</div>
+                        </div>
+                    }
+                    else if (!filteredSimulations.Any())
+                    {
+                        <div class="text-center p-4">
+                            <i class="bi bi-inbox text-muted" style="font-size: 3rem;"></i>
+                            <h5 class="text-muted mt-3">No simulations found</h5>
+                            <p class="text-muted">Create a new simulation to get started.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th @onclick="() => SortBy(nameof(Core.Entities.SimulationRun.Name))" 
+                                            class="sortable">
+                                            Name @GetSortIcon(nameof(Core.Entities.SimulationRun.Name))
+                                        </th>
+                                        <th @onclick="() => SortBy(nameof(Core.Entities.SimulationRun.ConsensusAlgorithm))" 
+                                            class="sortable">
+                                            Algorithm @GetSortIcon(nameof(Core.Entities.SimulationRun.ConsensusAlgorithm))
+                                        </th>
+                                        <th @onclick="() => SortBy(nameof(Core.Entities.SimulationRun.Status))" 
+                                            class="sortable">
+                                            Status @GetSortIcon(nameof(Core.Entities.SimulationRun.Status))
+                                        </th>
+                                        <th>Configuration</th>
+                                        <th @onclick="() => SortBy(nameof(Core.Entities.SimulationRun.CreatedAt))" 
+                                            class="sortable">
+                                            Created @GetSortIcon(nameof(Core.Entities.SimulationRun.CreatedAt))
+                                        </th>
+                                        <th>Duration</th>
+                                        <th>Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var simulation in filteredSimulations.Take(pageSize))
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="fw-medium">@simulation.Name</div>
+                                                @if (!string.IsNullOrEmpty(simulation.Description))
+                                                {
+                                                    <small class="text-muted">@simulation.Description</small>
+                                                }
+                                            </td>
+                                            <td>
+                                                <span class="badge bg-primary">@simulation.ConsensusAlgorithm</span>
+                                            </td>
+                                            <td>
+                                                <span class="badge @GetStatusBadgeClass(simulation.Status)">
+                                                    <i class="bi @GetStatusIcon(simulation.Status) me-1"></i>
+                                                    @simulation.Status
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <div class="small">
+                                                    <div>@simulation.NodeCount nodes</div>
+                                                    @if (simulation.ByzantineNodeCount > 0)
+                                                    {
+                                                        <div class="text-danger">@simulation.ByzantineNodeCount Byzantine</div>
+                                                    }
+                                                    @if (simulation.DurationSeconds.HasValue)
+                                                    {
+                                                        <div>@simulation.DurationSeconds.Value s duration</div>
+                                                    }
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div class="small text-muted">
+                                                    @simulation.CreatedAt.ToString("yyyy-MM-dd HH:mm")
+                                                </div>
+                                            </td>
+                                            <td>
+                                                @if (simulation.Status == SimulationStatus.Completed && simulation.StartedAt.HasValue && simulation.CompletedAt.HasValue)
+                                                {
+                                                    var duration = simulation.CompletedAt.Value - simulation.StartedAt.Value;
+                                                    <span class="small text-muted">@duration.ToString(@"mm\:ss")</span>
+                                                }
+                                                else if (simulation.Status == SimulationStatus.Running && simulation.StartedAt.HasValue)
+                                                {
+                                                    <span class="small text-success">Running...</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="small text-muted">-</span>
+                                                }
+                                            </td>
+                                            <td>
+                                                <div class="btn-group btn-group-sm">
+                                                    <button class="btn btn-outline-primary" 
+                                                            @onclick="() => ViewSimulation(simulation.Id)">
+                                                        <i class="bi bi-eye"></i>
+                                                    </button>
+                                                    @if (simulation.Status == SimulationStatus.Running)
+                                                    {
+                                                        <button class="btn btn-outline-warning"
+                                                                @onclick="() => StopSimulation(simulation.Id)">
+                                                            <i class="bi bi-stop-circle"></i>
+                                                        </button>
+                                                    }
+                                                    else if (simulation.Status == SimulationStatus.Created)
+                                                    {
+                                                        <button class="btn btn-outline-success"
+                                                                @onclick="() => StartSimulation(simulation.Id)">
+                                                            <i class="bi bi-play-circle"></i>
+                                                        </button>
+                                                    }
+                                                    @if (simulation.Status != SimulationStatus.Running)
+                                                    {
+                                                        <button class="btn btn-outline-danger"
+                                                                @onclick="() => DeleteSimulation(simulation.Id)"
+                                                                data-bs-toggle="tooltip" title="Delete simulation">
+                                                            <i class="bi bi-trash"></i>
+                                                        </button>
+                                                    }
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                        
+                        @if (filteredSimulations.Count() > pageSize)
+                        {
+                            <div class="d-flex justify-content-center mt-3">
+                                <button class="btn btn-outline-primary" @onclick="LoadMore">
+                                    Load More (@(filteredSimulations.Count() - pageSize) remaining)
+                                </button>
+                            </div>
+                        }
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .sortable {
+        cursor: pointer;
+        user-select: none;
+    }
+    
+    .sortable:hover {
+        background-color: rgba(0, 0, 0, 0.05);
+    }
+    
+    .card {
+        transition: box-shadow 0.15s ease-in-out;
+    }
+    
+    .card:hover {
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15)!important;
+    }
+    
+    .progress {
+        border-radius: 10px;
+    }
+    
+    .badge {
+        font-weight: 500;
+    }
+</style>
+
+@code {
+    private List<Core.Entities.SimulationRun> allSimulations = new();
+    private List<Core.Entities.SimulationRun> activeSimulations = new();
+    private IEnumerable<Core.Entities.SimulationRun> filteredSimulations = new List<Core.Entities.SimulationRun>();
+    
+    private bool isLoading = true;
+    private bool isConnected = false;
+    private string? selectedStatus = null;
+    private string? selectedAlgorithm = null;
+    private int pageSize = 10;
+    
+    private string sortColumn = nameof(Core.Entities.SimulationRun.CreatedAt);
+    private bool sortAscending = false;
+    
+    private int totalRounds = 0;
+    private string uptime = "00:00:00";
+    private DateTime startTime = DateTime.Now;
+    
+    private HubConnection? hubConnection;
+    private System.Timers.Timer? uptimeTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        startTime = DateTime.Now;
+        await InitializeSignalR();
+        await LoadData();
+        StartUptimeTimer();
+    }
+
+    private async Task InitializeSignalR()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl("/simulationHub")
+                .Build();
+
+            hubConnection.On<object>("AllSimulationsUpdate", (update) =>
+            {
+                InvokeAsync(async () =>
+                {
+                    await LoadData();
+                    StateHasChanged();
+                });
+            });
+
+            hubConnection.On<object>("GlobalSimulationUpdate", (update) =>
+            {
+                InvokeAsync(async () =>
+                {
+                    await LoadData();
+                    StateHasChanged();
+                });
+            });
+
+            await hubConnection.StartAsync();
+            await hubConnection.InvokeAsync("SubscribeToAllSimulations");
+            isConnected = true;
+            
+            Logger.LogInformation("Connected to SignalR hub");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to connect to SignalR hub");
+            isConnected = false;
+        }
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            isLoading = true;
+            StateHasChanged();
+
+            allSimulations = (await SimulationService.GetSimulationsAsync()).ToList();
+            activeSimulations = allSimulations
+                .Where(s => s.Status == SimulationStatus.Running || s.Status == SimulationStatus.Starting)
+                .ToList();
+            
+            totalRounds = allSimulations.Sum(s => s.ConsensusRounds?.Count ?? 0);
+            
+            FilterSimulations();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load simulation data");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void FilterSimulations()
+    {
+        filteredSimulations = allSimulations.AsEnumerable();
+
+        if (!string.IsNullOrEmpty(selectedStatus) && Enum.TryParse<SimulationStatus>(selectedStatus, out var status))
+        {
+            filteredSimulations = filteredSimulations.Where(s => s.Status == status);
+        }
+
+        if (!string.IsNullOrEmpty(selectedAlgorithm) && Enum.TryParse<ConsensusAlgorithm>(selectedAlgorithm, out var algorithm))
+        {
+            filteredSimulations = filteredSimulations.Where(s => s.ConsensusAlgorithm == algorithm);
+        }
+
+        // Apply sorting
+        filteredSimulations = sortColumn switch
+        {
+            nameof(Core.Entities.SimulationRun.Name) => sortAscending ? 
+                filteredSimulations.OrderBy(s => s.Name) : 
+                filteredSimulations.OrderByDescending(s => s.Name),
+            nameof(Core.Entities.SimulationRun.ConsensusAlgorithm) => sortAscending ? 
+                filteredSimulations.OrderBy(s => s.ConsensusAlgorithm) : 
+                filteredSimulations.OrderByDescending(s => s.ConsensusAlgorithm),
+            nameof(Core.Entities.SimulationRun.Status) => sortAscending ? 
+                filteredSimulations.OrderBy(s => s.Status) : 
+                filteredSimulations.OrderByDescending(s => s.Status),
+            nameof(Core.Entities.SimulationRun.CreatedAt) => sortAscending ? 
+                filteredSimulations.OrderBy(s => s.CreatedAt) : 
+                filteredSimulations.OrderByDescending(s => s.CreatedAt),
+            _ => filteredSimulations.OrderByDescending(s => s.CreatedAt)
+        };
+
+        StateHasChanged();
+    }
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortAscending = !sortAscending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortAscending = true;
+        }
+        FilterSimulations();
+    }
+
+    private string GetSortIcon(string column)
+    {
+        if (sortColumn != column) return "bi-chevron-expand";
+        return sortAscending ? "bi-chevron-up" : "bi-chevron-down";
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+
+    private void LoadMore()
+    {
+        pageSize += 10;
+        StateHasChanged();
+    }
+
+    private async Task ViewSimulation(Guid simulationId)
+    {
+        // Navigate to simulation details page
+        await JSRuntime.InvokeVoidAsync("window.open", $"/simulation/{simulationId}", "_blank");
+    }
+
+    private async Task StartSimulation(Guid simulationId)
+    {
+        try
+        {
+            await SimulationService.StartSimulationAsync(simulationId);
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to start simulation {SimulationId}", simulationId);
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to start simulation");
+        }
+    }
+
+    private async Task StopSimulation(Guid simulationId)
+    {
+        try
+        {
+            await SimulationService.StopSimulationAsync(simulationId);
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to stop simulation {SimulationId}", simulationId);
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to stop simulation");
+        }
+    }
+
+    private async Task DeleteSimulation(Guid simulationId)
+    {
+        try
+        {
+            var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", "Are you sure you want to delete this simulation?");
+            if (confirmed)
+            {
+                await SimulationService.DeleteSimulationAsync(simulationId);
+                await LoadData();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to delete simulation {SimulationId}", simulationId);
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to delete simulation");
+        }
+    }
+
+    private void StartUptimeTimer()
+    {
+        uptimeTimer = new System.Timers.Timer(1000);
+        uptimeTimer.Elapsed += (sender, e) =>
+        {
+            var elapsed = DateTime.Now - startTime;
+            uptime = elapsed.ToString(@"hh\:mm\:ss");
+            InvokeAsync(StateHasChanged);
+        };
+        uptimeTimer.Start();
+    }
+
+    private static string GetStatusBadgeClass(SimulationStatus status)
+    {
+        return status switch
+        {
+            SimulationStatus.Created => "bg-secondary",
+            SimulationStatus.Starting => "bg-warning",
+            SimulationStatus.Running => "bg-success",
+            SimulationStatus.Paused => "bg-info",
+            SimulationStatus.Completed => "bg-primary",
+            SimulationStatus.Failed => "bg-danger",
+            SimulationStatus.Stopped => "bg-dark",
+            _ => "bg-secondary"
+        };
+    }
+
+    private static string GetStatusIcon(SimulationStatus status)
+    {
+        return status switch
+        {
+            SimulationStatus.Created => "bi-circle",
+            SimulationStatus.Starting => "bi-hourglass",
+            SimulationStatus.Running => "bi-play-circle-fill",
+            SimulationStatus.Paused => "bi-pause-circle-fill",
+            SimulationStatus.Completed => "bi-check-circle-fill",
+            SimulationStatus.Failed => "bi-x-circle-fill",
+            SimulationStatus.Stopped => "bi-stop-circle-fill",
+            _ => "bi-question-circle"
+        };
+    }
+
+    private static double GetProgress(Core.Entities.SimulationRun simulation)
+    {
+        if (simulation.Status == SimulationStatus.Completed) return 100;
+        if (simulation.Status != SimulationStatus.Running || !simulation.StartedAt.HasValue) return 0;
+
+        var elapsed = DateTime.UtcNow - simulation.StartedAt.Value;
+        if (simulation.DurationSeconds.HasValue)
+        {
+            var progress = elapsed.TotalSeconds / simulation.DurationSeconds.Value * 100;
+            return Math.Min(100, Math.Max(0, progress));
+        }
+
+        // For unlimited duration, show progress based on rounds
+        var currentRounds = simulation.ConsensusRounds?.Count ?? 0;
+        if (currentRounds > 0)
+        {
+            // Estimate progress based on some heuristic
+            return Math.Min(95, currentRounds * 2); // Arbitrary progress calculation
+        }
+
+        return 5; // Small progress for running simulations
+    }
+
+    private static string GetElapsedTime(Core.Entities.SimulationRun simulation)
+    {
+        if (!simulation.StartedAt.HasValue) return "-";
+
+        var end = simulation.CompletedAt ?? DateTime.UtcNow;
+        var elapsed = end - simulation.StartedAt.Value;
+        
+        return elapsed.TotalHours >= 1 
+            ? elapsed.ToString(@"h\:mm\:ss")
+            : elapsed.ToString(@"mm\:ss");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        uptimeTimer?.Stop();
+        uptimeTimer?.Dispose();
+
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

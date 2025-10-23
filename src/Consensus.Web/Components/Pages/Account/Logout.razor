@@ -1,0 +1,23 @@
+@page "/Account/Logout"
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager Navigation
+@inject ILogger<Logout> Logger
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await SignInManager.SignOutAsync();
+            Logger.LogInformation("User logged out successfully.");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error during logout");
+        }
+        finally
+        {
+            Navigation.NavigateTo("/");
+        }
+    }
+}

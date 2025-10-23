@@ -1,0 +1,934 @@
+@namespace Consensus.Web.Components.Charts
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<div class="dpos-analytics-container">
+    <div class="row g-4">
+        <!-- Witness Performance Analysis -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-users-crown me-2"></i>
+                        Witness Performance
+                    </h5>
+                    <div class="chart-actions">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <input type="radio" class="btn-check" name="witnessMetric" id="blocks" value="blocks" @onchange="UpdateWitnessMetric" checked="@(witnessMetricType == "blocks")">
+                            <label class="btn btn-outline-primary" for="blocks">Blocks</label>
+                            
+                            <input type="radio" class="btn-check" name="witnessMetric" id="efficiency" value="efficiency" @onchange="UpdateWitnessMetric" checked="@(witnessMetricType == "efficiency")">
+                            <label class="btn btn-outline-primary" for="efficiency">Efficiency</label>
+                            
+                            <input type="radio" class="btn-check" name="witnessMetric" id="uptime" value="uptime" @onchange="UpdateWitnessMetric" checked="@(witnessMetricType == "uptime")">
+                            <label class="btn btn-outline-primary" for="uptime">Uptime</label>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="ExportWitnessData">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="dposWitnessPerformanceChart" width="400" height="300"></canvas>
+                </div>
+                <div class="witness-stats">
+                    <div class="row text-center">
+                        <div class="col-3">
+                            <div class="stat-value">@activeWitnesses</div>
+                            <div class="stat-label">Active Witnesses</div>
+                        </div>
+                        <div class="col-3">
+                            <div class="stat-value">@currentWitnessIndex</div>
+                            <div class="stat-label">Current Witness</div>
+                        </div>
+                        <div class="col-3">
+                            <div class="stat-value">@totalBlocksProduced</div>
+                            <div class="stat-label">Blocks Produced</div>
+                        </div>
+                        <div class="col-3">
+                            <div class="stat-value">@averageUptime.ToString("P1")</div>
+                            <div class="stat-label">Avg Uptime</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delegation & Voting Analysis -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-vote-yea me-2"></i>
+                        Delegation & Voting
+                    </h5>
+                    <div class="chart-subtitle">
+                        Vote distribution and delegation patterns
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="dposDelegationChart" width="400" height="300"></canvas>
+                </div>
+                <div class="delegation-metrics mt-3">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <div class="metric-value">@votingParticipation.ToString("P1")</div>
+                                <div class="metric-label">Voting Participation</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <div class="metric-value">@totalVotes.ToString("N0")</div>
+                                <div class="metric-label">Total Votes</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Round-Robin Timeline -->
+        <div class="col-12">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-clock me-2"></i>
+                        Round-Robin Timeline
+                    </h5>
+                    <div class="chart-actions">
+                        <div class="time-range-selector">
+                            <button class="btn btn-sm @(timeRange == "1h" ? "btn-primary" : "btn-outline-primary")" @onclick="@(() => UpdateTimeRange("1h"))">1H</button>
+                            <button class="btn btn-sm @(timeRange == "6h" ? "btn-primary" : "btn-outline-primary")" @onclick="@(() => UpdateTimeRange("6h"))">6H</button>
+                            <button class="btn btn-sm @(timeRange == "24h" ? "btn-primary" : "btn-outline-primary")" @onclick="@(() => UpdateTimeRange("24h"))">24H</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="dposTimelineChart" width="800" height="200"></canvas>
+                </div>
+                <div class="timeline-stats mt-3">
+                    <div class="row text-center">
+                        <div class="col-2">
+                            <div class="stat-value">@currentRound</div>
+                            <div class="stat-label">Current Round</div>
+                        </div>
+                        <div class="col-2">
+                            <div class="stat-value">@averageRoundTime.ToString("F1")ms</div>
+                            <div class="stat-label">Avg Round Time</div>
+                        </div>
+                        <div class="col-2">
+                            <div class="stat-value">@missedBlocks</div>
+                            <div class="stat-label">Missed Blocks</div>
+                        </div>
+                        <div class="col-2">
+                            <div class="stat-value">@blockTimeMs ms</div>
+                            <div class="stat-label">Target Block Time</div>
+                        </div>
+                        <div class="col-2">
+                            <div class="stat-value">@(witnessRotationInterval)s</div>
+                            <div class="stat-label">Witness Rotation</div>
+                        </div>
+                        <div class="col-2">
+                            <div class="stat-value">@nextElection</div>
+                            <div class="stat-label">Next Election</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stake Distribution -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-coins me-2"></i>
+                        Stake Distribution
+                    </h5>
+                    <div class="chart-actions">
+                        <button class="btn btn-sm btn-outline-info" @onclick="ToggleStakeDetails">
+                            <i class="fas @(showStakeDetails ? "fa-eye-slash" : "fa-eye")"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="dposStakeDistributionChart" width="400" height="300"></canvas>
+                </div>
+                @if (showStakeDetails)
+                {
+                    <div class="stake-details mt-3">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value">@totalStake.ToString("N0")</div>
+                                    <div class="metric-label">Total Stake</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value">@averageStake.ToString("N0")</div>
+                                    <div class="metric-label">Average Stake</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value">@minimumStake.ToString("N0")</div>
+                                    <div class="metric-label">Minimum Stake</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value">@nakamotoCoefficient</div>
+                                    <div class="metric-label">Nakamoto Coefficient</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Governance Metrics -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-balance-scale me-2"></i>
+                        Governance Metrics
+                    </h5>
+                    <div class="chart-subtitle">
+                        Decentralization and democratic participation
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="dposGovernanceChart" width="400" height="300"></canvas>
+                </div>
+                <div class="governance-metrics mt-3">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="metric-card">
+                                <div class="metric-value">@herfindahlIndex.ToString("F3")</div>
+                                <div class="metric-label">Herfindahl Index</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="metric-card">
+                                <div class="metric-value">@giniCoefficient.ToString("F3")</div>
+                                <div class="metric-label">Gini Coefficient</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .dpos-analytics-container {
+        min-height: 800px;
+    }
+
+    .chart-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        overflow: hidden;
+        height: 100%;
+    }
+
+    .chart-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .chart-title {
+        margin: 0;
+        font-size: 1.1rem;
+        font-weight: 600;
+    }
+
+    .chart-subtitle {
+        font-size: 0.85rem;
+        opacity: 0.9;
+        margin-top: 0.25rem;
+    }
+
+    .chart-actions {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .chart-body {
+        padding: 1.5rem;
+        position: relative;
+    }
+
+    .witness-stats, .delegation-metrics, .timeline-stats, .stake-details, .governance-metrics {
+        padding: 1rem;
+        background: #f8f9fa;
+        border-top: 1px solid #e9ecef;
+    }
+
+    .stat-value {
+        font-size: 1.4rem;
+        font-weight: bold;
+        color: #495057;
+    }
+
+    .stat-label {
+        font-size: 0.8rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .metric-card {
+        text-align: center;
+        padding: 0.75rem;
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .metric-value {
+        font-size: 1.2rem;
+        font-weight: 600;
+        color: #495057;
+    }
+
+    .metric-label {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+
+    .time-range-selector {
+        display: flex;
+        gap: 0.25rem;
+    }
+
+    .time-range-selector .btn {
+        min-width: 45px;
+    }
+
+    .btn-group-sm .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.8rem;
+    }
+
+    .fa-users-crown { color: #ffc107; }
+    .fa-vote-yea { color: #28a745; }
+    .fa-clock { color: #17a2b8; }
+    .fa-coins { color: #fd7e14; }
+    .fa-balance-scale { color: #6f42c1; }
+</style>
+
+@code {
+    [Parameter] public Guid? SimulationId { get; set; }
+    [Parameter] public EventCallback<string> OnExportRequest { get; set; }
+
+    // Chart instances
+    private IJSObjectReference? chartModule;
+    private IJSObjectReference? witnessPerformanceChartInstance;
+    private IJSObjectReference? delegationChartInstance;
+    private IJSObjectReference? timelineChartInstance;
+    private IJSObjectReference? stakeDistributionChartInstance;
+    private IJSObjectReference? governanceChartInstance;
+
+    // Data
+    private DposAnalyticsData? dposData;
+    
+    // UI State
+    private string witnessMetricType = "blocks";
+    private string timeRange = "6h";
+    private bool showStakeDetails = false;
+
+    // Metrics
+    private int activeWitnesses = 0;
+    private int currentWitnessIndex = 0;
+    private int totalBlocksProduced = 0;
+    private double averageUptime = 0.0;
+    private decimal votingParticipation = 0m;
+    private decimal totalVotes = 0m;
+    private long currentRound = 0;
+    private double averageRoundTime = 0.0;
+    private int missedBlocks = 0;
+    private int blockTimeMs = 3000;
+    private int witnessRotationInterval = 15;
+    private string nextElection = "21 rounds";
+    private decimal totalStake = 0m;
+    private decimal averageStake = 0m;
+    private decimal minimumStake = 50m;
+    private int nakamotoCoefficient = 0;
+    private double herfindahlIndex = 0.0;
+    private double giniCoefficient = 0.0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadChartModules();
+        await LoadDposData();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && dposData != null)
+        {
+            await InitializeCharts();
+            await RefreshAllCharts();
+        }
+    }
+
+    private async Task LoadChartModules()
+    {
+        try
+        {
+            chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/charts/chartUtils.js");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading chart modules: {ex.Message}");
+        }
+    }
+
+    private async Task LoadDposData()
+    {
+        try
+        {
+            if (SimulationId.HasValue)
+            {
+                // In a real implementation, this would call an API to get actual DPoS data
+                // For now, generate realistic sample data
+                dposData = GenerateSampleDposData();
+                UpdateMetrics();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading DPoS data: {ex.Message}");
+        }
+    }
+
+    private async Task InitializeCharts()
+    {
+        if (chartModule == null) return;
+
+        try
+        {
+            // Initialize witness performance chart
+            witnessPerformanceChartInstance = await chartModule.InvokeAsync<IJSObjectReference>(
+                "createBarChart", "dposWitnessPerformanceChart",
+                new { responsive = true, maintainAspectRatio = false });
+
+            // Initialize delegation chart
+            delegationChartInstance = await chartModule.InvokeAsync<IJSObjectReference>(
+                "createDoughnutChart", "dposDelegationChart",
+                new { responsive = true, maintainAspectRatio = false });
+
+            // Initialize timeline chart
+            timelineChartInstance = await chartModule.InvokeAsync<IJSObjectReference>(
+                "createLineChart", "dposTimelineChart",
+                new { responsive = true, maintainAspectRatio = false });
+
+            // Initialize stake distribution chart
+            stakeDistributionChartInstance = await chartModule.InvokeAsync<IJSObjectReference>(
+                "createPieChart", "dposStakeDistributionChart",
+                new { responsive = true, maintainAspectRatio = false });
+
+            // Initialize governance chart
+            governanceChartInstance = await chartModule.InvokeAsync<IJSObjectReference>(
+                "createRadarChart", "dposGovernanceChart",
+                new { responsive = true, maintainAspectRatio = false });
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing charts: {ex.Message}");
+        }
+    }
+
+    private async Task RefreshAllCharts()
+    {
+        await Task.WhenAll(
+            UpdateWitnessPerformanceChart(),
+            UpdateDelegationChart(),
+            UpdateTimelineChart(),
+            UpdateStakeDistributionChart(),
+            UpdateGovernanceChart()
+        );
+    }
+
+    private async Task UpdateWitnessPerformanceChart()
+    {
+        if (witnessPerformanceChartInstance == null || dposData?.WitnessPerformance == null) return;
+
+        try
+        {
+            var chartData = witnessMetricType switch
+            {
+                "blocks" => GenerateWitnessBlocksData(),
+                "efficiency" => GenerateWitnessEfficiencyData(),
+                "uptime" => GenerateWitnessUptimeData(),
+                _ => GenerateWitnessBlocksData()
+            };
+
+            await witnessPerformanceChartInstance.InvokeVoidAsync("updateChart", chartData);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating witness performance chart: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateDelegationChart()
+    {
+        if (delegationChartInstance == null || dposData?.DelegationData == null) return;
+
+        try
+        {
+            var chartData = GenerateDelegationChartData();
+            await delegationChartInstance.InvokeVoidAsync("updateChart", chartData);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating delegation chart: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateTimelineChart()
+    {
+        if (timelineChartInstance == null || dposData?.RoundTimeline == null) return;
+
+        try
+        {
+            var chartData = GenerateTimelineChartData();
+            await timelineChartInstance.InvokeVoidAsync("updateChart", chartData);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating timeline chart: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateStakeDistributionChart()
+    {
+        if (stakeDistributionChartInstance == null || dposData?.StakeDistribution == null) return;
+
+        try
+        {
+            var chartData = GenerateStakeDistributionData();
+            await stakeDistributionChartInstance.InvokeVoidAsync("updateChart", chartData);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating stake distribution chart: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateGovernanceChart()
+    {
+        if (governanceChartInstance == null || dposData?.GovernanceMetrics == null) return;
+
+        try
+        {
+            var chartData = GenerateGovernanceChartData();
+            await governanceChartInstance.InvokeVoidAsync("updateChart", chartData);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating governance chart: {ex.Message}");
+        }
+    }
+
+    // Event handlers
+    private async Task UpdateWitnessMetric(ChangeEventArgs e)
+    {
+        witnessMetricType = e.Value?.ToString() ?? "blocks";
+        await UpdateWitnessPerformanceChart();
+    }
+
+    private async Task UpdateTimeRange(string range)
+    {
+        timeRange = range;
+        await UpdateTimelineChart();
+        StateHasChanged();
+    }
+
+    private void ToggleStakeDetails()
+    {
+        showStakeDetails = !showStakeDetails;
+        StateHasChanged();
+    }
+
+    private async Task ExportWitnessData()
+    {
+        if (OnExportRequest.HasDelegate)
+        {
+            await OnExportRequest.InvokeAsync("dpos-witness-performance");
+        }
+    }
+
+    // Data generation methods
+    private DposAnalyticsData GenerateSampleDposData()
+    {
+        var random = new Random();
+        var witnessCount = 5;
+        var nodeCount = 10;
+
+        var witnessPerformance = Enumerable.Range(1, witnessCount)
+            .Select(i => new WitnessPerformance
+            {
+                WitnessId = $"Witness{i}",
+                BlocksProduced = random.Next(50, 200),
+                MissedBlocks = random.Next(0, 5),
+                UptimePercentage = 0.85 + random.NextDouble() * 0.14,
+                EfficiencyScore = 0.7 + random.NextDouble() * 0.3,
+                VotesReceived = random.Next(1000, 5000)
+            }).ToList();
+
+        var delegationData = Enumerable.Range(1, witnessCount)
+            .Select(i => new DelegationData
+            {
+                WitnessId = $"Witness{i}",
+                SelfStake = random.Next(500, 2000),
+                DelegatedAmount = random.Next(2000, 8000),
+                DelegatorCount = random.Next(10, 50),
+                VoteWeight = (decimal)random.Next(3000, 10000)
+            }).ToList();
+
+        var stakeDistribution = Enumerable.Range(1, nodeCount)
+            .Select(i => new StakeDistribution
+            {
+                NodeId = $"Node{i}",
+                Stake = random.Next(100, 1500),
+                IsWitness = i <= witnessCount
+            }).ToList();
+
+        var roundTimeline = Enumerable.Range(1, 100)
+            .Select(i => new RoundData
+            {
+                Round = i,
+                Timestamp = DateTime.UtcNow.AddMinutes(-100 + i),
+                WitnessId = $"Witness{(i % witnessCount) + 1}",
+                RoundTime = 2500 + random.Next(-500, 1000),
+                BlockProduced = random.NextDouble() > 0.05 // 95% success rate
+            }).ToList();
+
+        return new DposAnalyticsData
+        {
+            WitnessPerformance = witnessPerformance,
+            DelegationData = delegationData,
+            StakeDistribution = stakeDistribution,
+            RoundTimeline = roundTimeline,
+            GovernanceMetrics = new GovernanceMetrics
+            {
+                HerfindahlIndex = 0.05 + random.NextDouble() * 0.15,
+                GiniCoefficient = 0.3 + random.NextDouble() * 0.4,
+                NakamotoCoefficient = random.Next(3, 8),
+                VotingParticipation = (decimal)(0.6 + random.NextDouble() * 0.3)
+            }
+        };
+    }
+
+    private void UpdateMetrics()
+    {
+        if (dposData == null) return;
+
+        activeWitnesses = dposData.WitnessPerformance.Count;
+        currentWitnessIndex = (int)(currentRound % activeWitnesses) + 1;
+        totalBlocksProduced = dposData.WitnessPerformance.Sum(w => w.BlocksProduced);
+        averageUptime = dposData.WitnessPerformance.Average(w => w.UptimePercentage);
+        
+        votingParticipation = dposData.GovernanceMetrics.VotingParticipation;
+        totalVotes = dposData.DelegationData.Sum(d => d.VoteWeight);
+        
+        currentRound = dposData.RoundTimeline.LastOrDefault()?.Round ?? 0;
+        averageRoundTime = dposData.RoundTimeline.Average(r => r.RoundTime);
+        missedBlocks = dposData.WitnessPerformance.Sum(w => w.MissedBlocks);
+        
+        totalStake = dposData.StakeDistribution.Sum(s => s.Stake);
+        averageStake = totalStake / dposData.StakeDistribution.Count;
+        nakamotoCoefficient = dposData.GovernanceMetrics.NakamotoCoefficient;
+        herfindahlIndex = dposData.GovernanceMetrics.HerfindahlIndex;
+        giniCoefficient = dposData.GovernanceMetrics.GiniCoefficient;
+    }
+
+    private object GenerateWitnessBlocksData()
+    {
+        var witnesses = dposData?.WitnessPerformance ?? new List<WitnessPerformance>();
+        
+        return new
+        {
+            labels = witnesses.Select(w => w.WitnessId).ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Blocks Produced",
+                    data = witnesses.Select(w => w.BlocksProduced).ToArray(),
+                    backgroundColor = "rgba(54, 162, 235, 0.8)",
+                    borderColor = "rgba(54, 162, 235, 1)",
+                    borderWidth = 1
+                },
+                new
+                {
+                    label = "Missed Blocks",
+                    data = witnesses.Select(w => w.MissedBlocks).ToArray(),
+                    backgroundColor = "rgba(255, 99, 132, 0.8)",
+                    borderColor = "rgba(255, 99, 132, 1)",
+                    borderWidth = 1
+                }
+            }
+        };
+    }
+
+    private object GenerateWitnessEfficiencyData()
+    {
+        var witnesses = dposData?.WitnessPerformance ?? new List<WitnessPerformance>();
+        
+        return new
+        {
+            labels = witnesses.Select(w => w.WitnessId).ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Efficiency Score",
+                    data = witnesses.Select(w => w.EfficiencyScore * 100).ToArray(),
+                    backgroundColor = "rgba(75, 192, 192, 0.8)",
+                    borderColor = "rgba(75, 192, 192, 1)",
+                    borderWidth = 1
+                }
+            }
+        };
+    }
+
+    private object GenerateWitnessUptimeData()
+    {
+        var witnesses = dposData?.WitnessPerformance ?? new List<WitnessPerformance>();
+        
+        return new
+        {
+            labels = witnesses.Select(w => w.WitnessId).ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Uptime %",
+                    data = witnesses.Select(w => w.UptimePercentage * 100).ToArray(),
+                    backgroundColor = "rgba(153, 102, 255, 0.8)",
+                    borderColor = "rgba(153, 102, 255, 1)",
+                    borderWidth = 1
+                }
+            }
+        };
+    }
+
+    private object GenerateDelegationChartData()
+    {
+        var delegations = dposData?.DelegationData ?? new List<DelegationData>();
+        
+        return new
+        {
+            labels = delegations.Select(d => d.WitnessId).ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    data = delegations.Select(d => d.VoteWeight).ToArray(),
+                    backgroundColor = new[]
+                    {
+                        "rgba(255, 99, 132, 0.8)",
+                        "rgba(54, 162, 235, 0.8)",
+                        "rgba(255, 205, 86, 0.8)",
+                        "rgba(75, 192, 192, 0.8)",
+                        "rgba(153, 102, 255, 0.8)"
+                    },
+                    borderWidth = 2
+                }
+            }
+        };
+    }
+
+    private object GenerateTimelineChartData()
+    {
+        var timeline = dposData?.RoundTimeline ?? new List<RoundData>();
+        var hoursBack = timeRange switch
+        {
+            "1h" => 1,
+            "6h" => 6,
+            "24h" => 24,
+            _ => 6
+        };
+        
+        var filteredData = timeline
+            .Where(r => r.Timestamp >= DateTime.UtcNow.AddHours(-hoursBack))
+            .OrderBy(r => r.Round)
+            .ToList();
+        
+        return new
+        {
+            labels = filteredData.Select(r => r.Timestamp.ToString("HH:mm")).ToArray(),
+            datasets = new[]
+            {
+                new
+                {
+                    label = "Round Time (ms)",
+                    data = filteredData.Select(r => r.RoundTime).ToArray(),
+                    borderColor = "rgba(54, 162, 235, 1)",
+                    backgroundColor = "rgba(54, 162, 235, 0.2)",
+                    tension = 0.1,
+                    fill = true
+                }
+            }
+        };
+    }
+
+    private object GenerateStakeDistributionData()
+    {
+        var stakes = dposData?.StakeDistribution ?? new List<StakeDistribution>();
+        var witnessStakes = stakes.Where(s => s.IsWitness).ToList();
+        var nonWitnessStakes = stakes.Where(s => !s.IsWitness).Sum(s => s.Stake);
+        
+        var labels = witnessStakes.Select(s => s.NodeId).Concat(new[] { "Other Nodes" }).ToArray();
+        var data = witnessStakes.Select(s => (decimal)s.Stake).Concat(new[] { nonWitnessStakes }).ToArray();
+        
+        return new
+        {
+            labels = labels,
+            datasets = new[]
+            {
+                new
+                {
+                    data = data,
+                    backgroundColor = new[]
+                    {
+                        "rgba(255, 99, 132, 0.8)",
+                        "rgba(54, 162, 235, 0.8)",
+                        "rgba(255, 205, 86, 0.8)",
+                        "rgba(75, 192, 192, 0.8)",
+                        "rgba(153, 102, 255, 0.8)",
+                        "rgba(255, 159, 64, 0.8)"
+                    },
+                    borderWidth = 2
+                }
+            }
+        };
+    }
+
+    private object GenerateGovernanceChartData()
+    {
+        var metrics = dposData?.GovernanceMetrics ?? new GovernanceMetrics();
+        
+        return new
+        {
+            labels = new[] { "Decentralization", "Participation", "Efficiency", "Security", "Transparency" },
+            datasets = new[]
+            {
+                new
+                {
+                    label = "DPoS Governance Score",
+                    data = new double[]
+                    {
+                        (1 - metrics.HerfindahlIndex) * 100, // Decentralization (inverted HHI)
+                        (double)metrics.VotingParticipation * 100,   // Participation
+                        85.0,                                 // Efficiency (high for DPoS)
+                        75.0,                                 // Security (moderate for DPoS)
+                        90.0                                  // Transparency (high for DPoS)
+                    },
+                    backgroundColor = "rgba(54, 162, 235, 0.2)",
+                    borderColor = "rgba(54, 162, 235, 1)",
+                    borderWidth = 2
+                }
+            }
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        var instances = new[] { witnessPerformanceChartInstance, delegationChartInstance, 
+                               timelineChartInstance, stakeDistributionChartInstance, governanceChartInstance };
+        
+        foreach (var instance in instances)
+        {
+            if (instance != null)
+            {
+                try
+                {
+                    await instance.InvokeVoidAsync("destroy");
+                    await instance.DisposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error disposing chart: {ex.Message}");
+                }
+            }
+        }
+
+        if (chartModule != null)
+        {
+            await chartModule.DisposeAsync();
+        }
+    }
+
+    // Data models
+    public class DposAnalyticsData
+    {
+        public List<WitnessPerformance> WitnessPerformance { get; set; } = new();
+        public List<DelegationData> DelegationData { get; set; } = new();
+        public List<StakeDistribution> StakeDistribution { get; set; } = new();
+        public List<RoundData> RoundTimeline { get; set; } = new();
+        public GovernanceMetrics GovernanceMetrics { get; set; } = new();
+    }
+
+    public class WitnessPerformance
+    {
+        public string WitnessId { get; set; } = "";
+        public int BlocksProduced { get; set; }
+        public int MissedBlocks { get; set; }
+        public double UptimePercentage { get; set; }
+        public double EfficiencyScore { get; set; }
+        public int VotesReceived { get; set; }
+    }
+
+    public class DelegationData
+    {
+        public string WitnessId { get; set; } = "";
+        public decimal SelfStake { get; set; }
+        public decimal DelegatedAmount { get; set; }
+        public int DelegatorCount { get; set; }
+        public decimal VoteWeight { get; set; }
+    }
+
+    public class StakeDistribution
+    {
+        public string NodeId { get; set; } = "";
+        public decimal Stake { get; set; }
+        public bool IsWitness { get; set; }
+    }
+
+    public class RoundData
+    {
+        public long Round { get; set; }
+        public DateTime Timestamp { get; set; }
+        public string WitnessId { get; set; } = "";
+        public double RoundTime { get; set; }
+        public bool BlockProduced { get; set; }
+    }
+
+    public class GovernanceMetrics
+    {
+        public double HerfindahlIndex { get; set; }
+        public double GiniCoefficient { get; set; }
+        public int NakamotoCoefficient { get; set; }
+        public decimal VotingParticipation { get; set; }
+    }
+}

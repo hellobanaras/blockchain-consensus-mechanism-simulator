@@ -1,0 +1,531 @@
+@using Consensus.Core.Models.Payloads
+@using Consensus.Core.Enums
+@using System.Text.Json
+
+<div class="federated-learning-card">
+    @if (Payload != null)
+    {
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center">
+                    <i class="fas @GetUpdateIcon(Payload.UpdateType) me-2 text-primary"></i>
+                    <h6 class="mb-0">Federated Learning Update</h6>
+                </div>
+                <span class="badge @GetUpdateBadgeClass(Payload.UpdateType)">
+                    @GetUpdateDisplayName(Payload.UpdateType)
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="info-item">
+                            <label>Model ID</label>
+                            <div class="info-value">
+                                <i class="fas fa-brain me-1"></i>
+                                <code>@Payload.ModelId</code>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <label>Round</label>
+                            <div class="info-value">
+                                <i class="fas fa-sync me-1"></i>
+                                <span class="badge bg-info">Round @Payload.Round</span>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <label>Client ID</label>
+                            <div class="info-value">
+                                <i class="fas fa-desktop me-1"></i>
+                                <code>@Payload.ClientId</code>
+                            </div>
+                        </div>
+                        <div class="info-item">
+                            <label>Timestamp</label>
+                            <div class="info-value">
+                                <i class="fas fa-clock me-1"></i>
+                                @Payload.Timestamp.ToString("yyyy-MM-dd HH:mm:ss UTC")
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        @if (Payload.Accuracy.HasValue)
+                        {
+                            <div class="info-item">
+                                <label>Accuracy</label>
+                                <div class="info-value">
+                                    <i class="fas fa-bullseye me-1"></i>
+                                    <span class="@GetAccuracyClass(Payload.Accuracy.Value)">
+                                        @((Payload.Accuracy.Value * 100).ToString("F2"))%
+                                    </span>
+                                    <div class="progress mt-1" style="height: 8px;">
+                                        <div class="progress-bar @GetAccuracyProgressClass(Payload.Accuracy.Value)" 
+                                             style="width: @((Payload.Accuracy.Value * 100).ToString("F1"))%"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        
+                        @if (Payload.Loss.HasValue)
+                        {
+                            <div class="info-item">
+                                <label>Loss</label>
+                                <div class="info-value">
+                                    <i class="fas fa-chart-line me-1"></i>
+                                    <span class="@GetLossClass(Payload.Loss.Value)">
+                                        @Payload.Loss.Value.ToString("F4")
+                                    </span>
+                                </div>
+                            </div>
+                        }
+                        
+                        @if (Payload.SampleCount.HasValue)
+                        {
+                            <div class="info-item">
+                                <label>Sample Count</label>
+                                <div class="info-value">
+                                    <i class="fas fa-database me-1"></i>
+                                    @Payload.SampleCount.Value.ToString("N0") samples
+                                </div>
+                            </div>
+                        }
+                        
+                        @if (Payload.LearningRate.HasValue)
+                        {
+                            <div class="info-item">
+                                <label>Learning Rate</label>
+                                <div class="info-value">
+                                    <i class="fas fa-tachometer-alt me-1"></i>
+                                    <code>@Payload.LearningRate.Value.ToString("F4")</code>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrEmpty(Payload.ModelData))
+                {
+                    <div class="model-data-section mt-3">
+                        <h6 class="mb-2">
+                            <i class="fas fa-code me-1"></i>
+                            Model Data
+                        </h6>
+                        <div class="model-data-info">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span class="text-muted">Data Size:</span>
+                                <span class="badge bg-secondary">@FormatDataSize(Payload.ModelData.Length)</span>
+                            </div>
+                            <div class="model-data-preview mt-2">
+                                <small class="text-muted font-monospace">
+                                    @(Payload.ModelData.Length > 50 ? Payload.ModelData[..50] + "..." : Payload.ModelData)
+                                </small>
+                            </div>
+                        </div>
+                    </div>
+                }
+
+                @if (Payload.TrainingMetadata?.Any() == true)
+                {
+                    <div class="training-metadata-section mt-3">
+                        <h6 class="mb-2">
+                            <i class="fas fa-cogs me-1"></i>
+                            Training Metadata
+                        </h6>
+                        <div class="training-metadata">
+                            @foreach (var kvp in Payload.TrainingMetadata)
+                            {
+                                <div class="metadata-item">
+                                    <span class="key">@FormatKey(kvp.Key):</span>
+                                    <span class="value">@FormatValue(kvp.Value)</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (ShowPerformanceChart && Payload.Accuracy.HasValue)
+                {
+                    <div class="performance-chart-section mt-3">
+                        <h6 class="mb-2">
+                            <i class="fas fa-chart-area me-1"></i>
+                            Performance Visualization
+                        </h6>
+                        <div class="performance-chart">
+                            <canvas id="flPerformanceChart-@Payload.ModelId.Replace(".", "-")" width="400" height="200"></canvas>
+                        </div>
+                    </div>
+                }
+
+                @if (ShowFederatedProcess)
+                {
+                    <div class="federated-process-section mt-3">
+                        <h6 class="mb-2">
+                            <i class="fas fa-network-wired me-1"></i>
+                            Federated Learning Process
+                        </h6>
+                        <div class="fl-process-flow">
+                            @foreach (var step in GetFederatedLearningFlow())
+                            {
+                                <div class="process-step @(step.IsCompleted ? "completed" : "") @(step.IsCurrent ? "current" : "")">
+                                    <div class="step-icon">
+                                        <i class="fas @step.Icon"></i>
+                                    </div>
+                                    <div class="step-label">@step.Label</div>
+                                </div>
+                                @if (step != GetFederatedLearningFlow().Last())
+                                {
+                                    <div class="process-arrow">
+                                        <i class="fas fa-chevron-right"></i>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            No federated learning data available.
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public FederatedLearningPayload? Payload { get; set; }
+    [Parameter] public bool ShowPerformanceChart { get; set; } = true;
+    [Parameter] public bool ShowFederatedProcess { get; set; } = true;
+
+    private class ProcessStep
+    {
+        public string Label { get; set; } = string.Empty;
+        public string Icon { get; set; } = string.Empty;
+        public bool IsCompleted { get; set; }
+        public bool IsCurrent { get; set; }
+    }
+
+    private string GetUpdateIcon(FedLearningUpdateType updateType)
+    {
+        return updateType switch
+        {
+            FedLearningUpdateType.ModelWeights => "fa-weight",
+            FedLearningUpdateType.Gradient => "fa-chart-line",
+            FedLearningUpdateType.ModelAggregation => "fa-layer-group",
+            FedLearningUpdateType.ValidationMetrics => "fa-chart-bar",
+            FedLearningUpdateType.TrainingComplete => "fa-check-circle",
+            _ => "fa-brain"
+        };
+    }
+
+    private string GetUpdateBadgeClass(FedLearningUpdateType updateType)
+    {
+        return updateType switch
+        {
+            FedLearningUpdateType.ModelWeights => "bg-primary",
+            FedLearningUpdateType.Gradient => "bg-info",
+            FedLearningUpdateType.ModelAggregation => "bg-success",
+            FedLearningUpdateType.ValidationMetrics => "bg-warning text-dark",
+            FedLearningUpdateType.TrainingComplete => "bg-success",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetUpdateDisplayName(FedLearningUpdateType updateType)
+    {
+        return updateType switch
+        {
+            FedLearningUpdateType.ModelWeights => "Model Weights",
+            FedLearningUpdateType.Gradient => "Gradient Update",
+            FedLearningUpdateType.ModelAggregation => "Model Aggregation",
+            FedLearningUpdateType.ValidationMetrics => "Validation Metrics",
+            FedLearningUpdateType.TrainingComplete => "Training Complete",
+            _ => updateType.ToString()
+        };
+    }
+
+    private string GetAccuracyClass(double accuracy)
+    {
+        if (accuracy >= 0.9) return "text-success fw-bold";
+        if (accuracy >= 0.8) return "text-success";
+        if (accuracy >= 0.7) return "text-warning";
+        return "text-danger";
+    }
+
+    private string GetAccuracyProgressClass(double accuracy)
+    {
+        if (accuracy >= 0.9) return "bg-success";
+        if (accuracy >= 0.8) return "bg-info";
+        if (accuracy >= 0.7) return "bg-warning";
+        return "bg-danger";
+    }
+
+    private string GetLossClass(double loss)
+    {
+        if (loss <= 0.1) return "text-success";
+        if (loss <= 0.5) return "text-info";
+        if (loss <= 1.0) return "text-warning";
+        return "text-danger";
+    }
+
+    private string FormatDataSize(int length)
+    {
+        if (length > 1024 * 1024) return $"{length / 1024.0 / 1024.0:F1} MB";
+        if (length > 1024) return $"{length / 1024.0:F1} KB";
+        return $"{length} bytes";
+    }
+
+    private string FormatKey(string key)
+    {
+        return key.Replace("_", " ").Replace("-", " ")
+            .Split(' ')
+            .Select(word => char.ToUpper(word[0]) + (word.Length > 1 ? word[1..] : ""))
+            .Aggregate((a, b) => a + " " + b);
+    }
+
+    private string FormatValue(object value)
+    {
+        return value switch
+        {
+            bool b => b ? "Yes" : "No",
+            DateTime dt => dt.ToString("HH:mm:ss"),
+            double d => d.ToString("F2"),
+            decimal dec => dec.ToString("F2"),
+            int i => i.ToString("N0"),
+            _ => value.ToString() ?? "N/A"
+        };
+    }
+
+    private List<ProcessStep> GetFederatedLearningFlow()
+    {
+        var steps = new List<ProcessStep>();
+        steps.Add(new ProcessStep { Label = "Local Training", Icon = "fa-laptop-code" });
+        steps.Add(new ProcessStep { Label = "Model Update", Icon = "fa-upload" });
+        steps.Add(new ProcessStep { Label = "Aggregation", Icon = "fa-layer-group" });
+        steps.Add(new ProcessStep { Label = "Global Model", Icon = "fa-globe" });
+        steps.Add(new ProcessStep { Label = "Distribution", Icon = "fa-share-alt" });
+        steps.Add(new ProcessStep { Label = "Validation", Icon = "fa-check-circle" });
+
+        if (Payload != null)
+        {
+            var currentStepIndex = Payload.UpdateType switch
+            {
+                FedLearningUpdateType.ModelWeights => 1,
+                FedLearningUpdateType.Gradient => 1,
+                FedLearningUpdateType.ModelAggregation => 2,
+                FedLearningUpdateType.ValidationMetrics => 5,
+                FedLearningUpdateType.TrainingComplete => 5,
+                _ => 0
+            };
+
+            for (int i = 0; i < steps.Count; i++)
+            {
+                if (i < currentStepIndex)
+                    steps[i].IsCompleted = true;
+                else if (i == currentStepIndex)
+                    steps[i].IsCurrent = true;
+            }
+        }
+
+        return steps;
+    }
+}
+
+<style>
+.federated-learning-card .card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.federated-learning-card .card-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-bottom: 1px solid #dee2e6;
+    padding: 0.75rem 1rem;
+}
+
+.federated-learning-card .info-item {
+    margin-bottom: 0.75rem;
+}
+
+.federated-learning-card .info-item label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+    display: block;
+}
+
+.federated-learning-card .info-value {
+    font-size: 0.9rem;
+    color: #495057;
+}
+
+.federated-learning-card .info-value code {
+    background-color: #f8f9fa;
+    color: #495057;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    font-size: 0.85rem;
+}
+
+.federated-learning-card .model-data-section,
+.federated-learning-card .training-metadata-section,
+.federated-learning-card .performance-chart-section,
+.federated-learning-card .federated-process-section {
+    border-top: 1px solid #e9ecef;
+    padding-top: 1rem;
+}
+
+.federated-learning-card .model-data-info {
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+    border: 1px solid #e9ecef;
+}
+
+.federated-learning-card .model-data-preview {
+    background-color: white;
+    border-radius: 0.25rem;
+    padding: 0.5rem;
+    border: 1px solid #dee2e6;
+    font-family: 'SF Mono', Consolas, monospace;
+    word-break: break-all;
+}
+
+.federated-learning-card .training-metadata {
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 0.75rem;
+    border: 1px solid #e9ecef;
+}
+
+.federated-learning-card .metadata-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.875rem;
+}
+
+.federated-learning-card .metadata-item:last-child {
+    border-bottom: none;
+}
+
+.federated-learning-card .metadata-item .key {
+    font-weight: 500;
+    color: #6c757d;
+}
+
+.federated-learning-card .metadata-item .value {
+    font-family: 'SF Mono', Consolas, monospace;
+    background-color: white;
+    padding: 0.2rem 0.4rem;
+    border-radius: 0.25rem;
+    border: 1px solid #dee2e6;
+    font-size: 0.8rem;
+}
+
+.federated-learning-card .performance-chart {
+    background-color: #f8f9fa;
+    border-radius: 0.375rem;
+    padding: 1rem;
+    border: 1px solid #e9ecef;
+    text-align: center;
+}
+
+.federated-learning-card .fl-process-flow {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+}
+
+.federated-learning-card .process-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    min-width: 80px;
+    opacity: 0.4;
+    transition: opacity 0.2s;
+}
+
+.federated-learning-card .process-step.completed {
+    opacity: 1;
+    color: #198754;
+}
+
+.federated-learning-card .process-step.current {
+    opacity: 1;
+    color: #667eea;
+    font-weight: 600;
+}
+
+.federated-learning-card .process-step .step-icon {
+    width: 45px;
+    height: 45px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid currentColor;
+    margin-bottom: 0.5rem;
+    font-size: 1.1rem;
+}
+
+.federated-learning-card .process-step.completed .step-icon {
+    background-color: #198754;
+    color: white;
+    border-color: #198754;
+}
+
+.federated-learning-card .process-step.current .step-icon {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-color: #667eea;
+}
+
+.federated-learning-card .process-step .step-label {
+    font-size: 0.75rem;
+    line-height: 1.2;
+}
+
+.federated-learning-card .process-arrow {
+    color: #6c757d;
+    font-size: 0.8rem;
+    margin: 0 0.25rem;
+}
+
+@@media (max-width: 768px) {
+    .federated-learning-card .fl-process-flow {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    
+    .federated-learning-card .process-step {
+        flex-direction: row;
+        justify-content: flex-start;
+        min-width: auto;
+        text-align: left;
+        gap: 1rem;
+    }
+    
+    .federated-learning-card .process-step .step-icon {
+        width: 35px;
+        height: 35px;
+        margin-bottom: 0;
+    }
+    
+    .federated-learning-card .process-arrow {
+        transform: rotate(90deg);
+        align-self: center;
+        margin: 0.25rem 0;
+    }
+}
+</style>

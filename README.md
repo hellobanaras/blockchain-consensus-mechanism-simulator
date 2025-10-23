@@ -63,6 +63,13 @@ The Consensus Lab provides an interactive environment for:
   - System alerts and diagnostics
   - Performance trend analysis
 
+- **🔐 Authentication & Authorization**: Secure user management system
+  - ASP.NET Core Identity integration with role-based access control
+  - Three-tier permission system (Admin, Operator, Viewer)
+  - Secure login/logout with antiforgery token protection
+  - Session management and authentication state handling
+  - Default admin account for immediate system access
+
 #### **Backend - Data Layer**
 - **Core Entities**: Node, Block, Transaction, SimulationRun, EventLog
 - **Enum Definitions**: ConsensusAlgorithm, NodeStatus, SimulationStatus, etc.
@@ -156,6 +163,22 @@ The Consensus Lab provides an interactive environment for:
    - Web UI: http://localhost:3000
    - API Documentation: http://localhost:3000/swagger
 
+### **Authentication**
+
+The application includes a secure authentication system with role-based access control. Use the following default credentials to access the system:
+
+#### **Default Admin Account**
+- **Email**: `admin@consensus-lab.dev`
+- **Password**: `Admin@123!`
+- **Role**: Admin (Full system access)
+
+#### **Available Roles**
+- **Admin**: Full system access including user management and system administration
+- **Operator**: Can run simulations, export data, and modify protocol settings  
+- **Viewer**: Read-only access to simulations, analytics, and block explorer
+
+> **⚠️ Security Note**: Please change the default admin password immediately after first login in a production environment. Additional user accounts can be created through the user management interface available to Admin users.
+
 ### **Development Setup**
 
 1. **Restore dependencies**
@@ -173,6 +196,10 @@ The Consensus Lab provides an interactive environment for:
    ```bash
    dotnet run --project src/Consensus.Web
    ```
+
+4. **Access the application**
+   - Web UI: http://localhost:5027
+   - Login with: `admin@consensus-lab.dev` / `Admin@123!`
 
 ## 📖 **Documentation**
 

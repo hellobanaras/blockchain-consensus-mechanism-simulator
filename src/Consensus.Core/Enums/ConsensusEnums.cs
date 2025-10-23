@@ -99,7 +99,12 @@ public enum ConsensusAlgorithm
     /// <summary>
     /// FedCoin consensus (simplified for testing)
     /// </summary>
-    FedCoin = 9
+    FedCoin = 9,
+
+    /// <summary>
+    /// Proof of Elapsed Time consensus algorithm
+    /// </summary>
+    ProofOfElapsedTime = 10
 }
 
 /// <summary>
@@ -135,7 +140,53 @@ public enum ConsensusRoundStatus
     /// <summary>
     /// Round timed out
     /// </summary>
-    TimedOut = 5
+    TimedOut = 5,
+
+    /// <summary>
+    /// Round was cancelled by user request
+    /// </summary>
+    Cancelled = 6
+}
+
+/// <summary>
+/// Simplified round status for UI components
+/// </summary>
+public enum RoundStatus
+{
+    /// <summary>
+    /// Round has been initiated but not started
+    /// </summary>
+    Pending = 0,
+
+    /// <summary>
+    /// Round is starting up
+    /// </summary>
+    Starting = 1,
+
+    /// <summary>
+    /// Round is currently in progress
+    /// </summary>
+    InProgress = 2,
+
+    /// <summary>
+    /// Round completed successfully with consensus
+    /// </summary>
+    Completed = 3,
+
+    /// <summary>
+    /// Round failed to reach consensus
+    /// </summary>
+    Failed = 4,
+
+    /// <summary>
+    /// Round was aborted due to network issues
+    /// </summary>
+    Aborted = 5,
+
+    /// <summary>
+    /// Round timed out
+    /// </summary>
+    TimedOut = 6
 }
 
 /// <summary>
@@ -221,44 +272,54 @@ public enum TransactionStatus
 public enum SimulationStatus
 {
     /// <summary>
+    /// Simulation has been created but not initialized
+    /// </summary>
+    Created = -1,
+
+    /// <summary>
     /// Simulation is being set up
     /// </summary>
     Initializing = 0,
 
     /// <summary>
+    /// Simulation is starting up
+    /// </summary>
+    Starting = 1,
+
+    /// <summary>
     /// Simulation is ready to start
     /// </summary>
-    Ready = 1,
+    Ready = 2,
 
     /// <summary>
     /// Simulation is currently running
     /// </summary>
-    Running = 2,
+    Running = 3,
 
     /// <summary>
     /// Simulation is paused
     /// </summary>
-    Paused = 3,
+    Paused = 4,
 
     /// <summary>
     /// Simulation completed successfully
     /// </summary>
-    Completed = 4,
+    Completed = 5,
 
     /// <summary>
     /// Simulation was stopped by user
     /// </summary>
-    Stopped = 5,
+    Stopped = 6,
 
     /// <summary>
     /// Simulation failed due to error
     /// </summary>
-    Failed = 6,
+    Failed = 7,
 
     /// <summary>
     /// Simulation is being cleaned up
     /// </summary>
-    Cleanup = 7
+    Cleanup = 8
 }
 
 /// <summary>

@@ -54,9 +54,49 @@ public class SimulationRun
     public int? TargetBlockCount { get; set; }
 
     /// <summary>
+    /// Maximum number of consensus rounds to execute
+    /// </summary>
+    public int? MaxRounds { get; set; }
+
+    /// <summary>
+    /// Current progress of the simulation (0.0 to 1.0)
+    /// </summary>
+    public double Progress { get; set; } = 0.0;
+
+    /// <summary>
+    /// Error message if the simulation failed
+    /// </summary>
+    public string? ErrorMessage { get; set; }
+
+    /// <summary>
     /// Duration of the simulation in seconds (null for unlimited)
     /// </summary>
     public int? DurationSeconds { get; set; }
+
+    /// <summary>
+    /// Network topology type used in the simulation
+    /// </summary>
+    public NetworkTopologyType NetworkTopology { get; set; } = NetworkTopologyType.FullMesh;
+
+    /// <summary>
+    /// Target block time in milliseconds
+    /// </summary>
+    public int BlockTimeMs { get; set; } = 5000;
+
+    /// <summary>
+    /// Number of transactions per block
+    /// </summary>
+    public int TransactionsPerBlock { get; set; } = 10;
+
+    /// <summary>
+    /// Network latency in milliseconds
+    /// </summary>
+    public int NetworkLatencyMs { get; set; } = 100;
+
+    /// <summary>
+    /// Total number of transactions processed
+    /// </summary>
+    public int TotalTransactions { get; set; } = 0;
 
     /// <summary>
     /// Network latency simulation settings and other configuration
@@ -88,7 +128,16 @@ public class SimulationRun
     /// </summary>
     public DateTime UpdatedAt { get; set; } = DateTime.UtcNow;
 
+    /// <summary>
+    /// ID of the user who created this simulation
+    /// </summary>
+    public string? CreatedById { get; set; }
+
     // Navigation properties
+    /// <summary>
+    /// User who created this simulation
+    /// </summary>
+    public virtual ApplicationUser? CreatedBy { get; set; }
     public virtual ICollection<Node> Nodes { get; set; } = new List<Node>();
     public virtual ICollection<Block> Blocks { get; set; } = new List<Block>();
     public virtual ICollection<Transaction> Transactions { get; set; } = new List<Transaction>();

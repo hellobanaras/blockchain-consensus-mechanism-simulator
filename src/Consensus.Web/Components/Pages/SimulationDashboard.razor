@@ -1,0 +1,859 @@
+@page "/simulation/{SimulationId:guid}"
+@using Consensus.Core.Entities
+@using Consensus.Core.Enums
+@using Consensus.Web.Services
+@using Microsoft.AspNetCore.SignalR.Client
+@using Microsoft.AspNetCore.Authorization
+@using System.Text.Json
+@inject NavigationManager Navigation
+@inject IJSRuntime JSRuntime
+@inject ILogger<SimulationDashboard> Logger
+@implements IAsyncDisposable
+@attribute [Authorize(Roles = "Admin,Operator,Viewer")]
+
+@* Real-time Simulation Dashboard *@
+
+<div class="container-fluid">
+    <!-- Header Section -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="d-flex justify-content-between align-items-center">
+                <div>
+                    <div class="d-flex align-items-center gap-3">
+                        <button class="btn btn-outline-secondary" @onclick="GoBack">
+                            <i class="bi bi-arrow-left"></i> Back
+                        </button>
+                        <div>
+                            <h1 class="mb-0">
+                                <i class="bi bi-speedometer2 me-2"></i>
+                                @(simulation?.Name ?? "Loading...")
+                            </h1>
+                            @if (simulation != null)
+                            {
+                                <div class="d-flex align-items-center gap-3 mt-2">
+                                    <span class="badge @GetStatusBadgeClass(simulation.Status) fs-6">
+                                        @simulation.Status
+                                    </span>
+                                    <span class="text-muted">
+                                        @GetAlgorithmDisplayName(simulation.ConsensusAlgorithm)
+                                    </span>
+                                    <span class="text-muted">
+                                        Started: @simulation.CreatedAt.ToString("MMM dd, yyyy HH:mm:ss")
+                                    </span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex gap-2">
+                    @if (simulation?.Status == SimulationStatus.Running)
+                    {
+                        <button class="btn btn-warning" @onclick="PauseSimulation" disabled="@isControllingSimulation">
+                            <i class="bi bi-pause-circle me-1"></i>
+                            @(isControllingSimulation ? "Pausing..." : "Pause")
+                        </button>
+                        <button class="btn btn-danger" @onclick="StopSimulation" disabled="@isControllingSimulation">
+                            <i class="bi bi-stop-circle me-1"></i>
+                            @(isControllingSimulation ? "Stopping..." : "Stop")
+                        </button>
+                    }
+                    else if (simulation?.Status == SimulationStatus.Paused)
+                    {
+                        <button class="btn btn-success" @onclick="ResumeSimulation" disabled="@isControllingSimulation">
+                            <i class="bi bi-play-circle me-1"></i>
+                            @(isControllingSimulation ? "Resuming..." : "Resume")
+                        </button>
+                    }
+                    <button class="btn btn-info" @onclick="ExportData" disabled="@isExporting">
+                        <i class="bi bi-download me-1"></i>
+                        @(isExporting ? "Exporting..." : "Export")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (simulation == null)
+    {
+        <!-- Loading State -->
+        <div class="d-flex justify-content-center align-items-center" style="min-height: 400px;">
+            <div class="text-center">
+                <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <h4>Loading Simulation Dashboard...</h4>
+                <p class="text-muted">Connecting to real-time data stream</p>
+            </div>
+        </div>
+    }
+    else
+    {
+        <!-- Connection Status -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="alert @GetConnectionAlertClass() d-flex align-items-center" role="alert">
+                    <i class="bi @GetConnectionIcon() me-2"></i>
+                    <span>@GetConnectionStatusText()</span>
+                    @if (hubConnection?.State == HubConnectionState.Disconnected)
+                    {
+                        <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="ReconnectAsync">
+                            <i class="bi bi-arrow-clockwise me-1"></i>
+                            Reconnect
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Metrics Row -->
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card border-primary">
+                    <div class="card-body text-center">
+                        <i class="bi bi-nodes text-primary fs-2"></i>
+                        <h3 class="mt-2 mb-0">@currentMetrics.ActiveNodes</h3>
+                        <p class="text-muted mb-0">Active Nodes</p>
+                        <small class="text-muted">of @currentMetrics.TotalNodes total</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-success">
+                    <div class="card-body text-center">
+                        <i class="bi bi-layers text-success fs-2"></i>
+                        <h3 class="mt-2 mb-0">@currentMetrics.BlockHeight</h3>
+                        <p class="text-muted mb-0">Current Block</p>
+                        <small class="text-muted">@currentMetrics.BlocksPerSecond.ToString("F1") blocks/sec</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-info">
+                    <div class="card-body text-center">
+                        <i class="bi bi-arrow-repeat text-info fs-2"></i>
+                        <h3 class="mt-2 mb-0">@currentMetrics.CurrentRound</h3>
+                        <p class="text-muted mb-0">Consensus Round</p>
+                        <small class="text-muted">@currentMetrics.RoundsPerMinute.ToString("F1") rounds/min</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card border-warning">
+                    <div class="card-body text-center">
+                        <i class="bi bi-clock text-warning fs-2"></i>
+                        <h3 class="mt-2 mb-0">@currentMetrics.AverageLatency</h3>
+                        <p class="text-muted mb-0">Avg Latency (ms)</p>
+                        <small class="text-muted">@currentMetrics.MessageCount messages</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Progress & Status Row -->
+        <div class="row mb-4">
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-bar-chart me-2"></i>
+                            Simulation Progress
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between mb-1">
+                                <span>Overall Progress</span>
+                                <span>@overallProgress%</span>
+                            </div>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar @GetProgressBarClass()" 
+                                     role="progressbar" 
+                                     style="width: @(overallProgress)%"
+                                     aria-valuenow="@overallProgress" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Time Information -->
+                        <div class="row text-center">
+                            <div class="col-md-4">
+                                <small class="text-muted">Elapsed Time</small>
+                                <div class="fw-bold">@GetElapsedTime()</div>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">Estimated Remaining</small>
+                                <div class="fw-bold">@GetEstimatedTimeRemaining()</div>
+                            </div>
+                            <div class="col-md-4">
+                                <small class="text-muted">Target Duration</small>
+                                <div class="fw-bold">@GetTargetDuration()</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-activity me-2"></i>
+                            Current Activity
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        @if (currentActivity.Any())
+                        {
+                            @foreach (var activity in currentActivity.TakeLast(5))
+                            {
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div>
+                                        <i class="bi @GetActivityIcon(activity.Type) me-2"></i>
+                                        <span class="small">@activity.Message</span>
+                                    </div>
+                                    <small class="text-muted">@activity.Timestamp.ToString("HH:mm:ss")</small>
+                                </div>
+                            }
+                        }
+                        else
+                        {
+                            <div class="text-center text-muted py-3">
+                                <i class="bi bi-dash-circle fs-4"></i>
+                                <p class="mb-0">No recent activity</p>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Network Visualization & Logs Row -->
+        <div class="row mb-4">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-diagram-3 me-2"></i>
+                            Network Topology
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="networkVisualization" style="height: 300px; background-color: #f8f9fa; border-radius: 0.375rem;">
+                            <div class="d-flex justify-content-center align-items-center h-100">
+                                <div class="text-center text-muted">
+                                    <i class="bi bi-diagram-3 fs-1"></i>
+                                    <p>Network visualization will appear here</p>
+                                    <small>Real-time node status and connections</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">
+                            <i class="bi bi-terminal me-2"></i>
+                            Live Event Log
+                        </h5>
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn @(logFilter == "all" ? "btn-primary" : "btn-outline-secondary")" 
+                                    @onclick='() => SetLogFilter("all")'>All</button>
+                            <button class="btn @(logFilter == "consensus" ? "btn-primary" : "btn-outline-secondary")" 
+                                    @onclick='() => SetLogFilter("consensus")'>Consensus</button>
+                            <button class="btn @(logFilter == "blocks" ? "btn-primary" : "btn-outline-secondary")" 
+                                    @onclick='() => SetLogFilter("blocks")'>Blocks</button>
+                            <button class="btn @(logFilter == "errors" ? "btn-primary" : "btn-outline-secondary")" 
+                                    @onclick='() => SetLogFilter("errors")'>Errors</button>
+                        </div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div id="eventLog" class="console-log" style="height: 300px; overflow-y: auto;">
+                            @foreach (var logEntry in GetFilteredLogs().TakeLast(20))
+                            {
+                                <div class="log-entry @GetLogEntryClass(logEntry.Level)">
+                                    <span class="timestamp">@logEntry.Timestamp.ToString("HH:mm:ss.fff")</span>
+                                    <span class="level">[@logEntry.Level]</span>
+                                    <span class="message">@logEntry.Message</span>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Real-time Charts Row -->
+        <div class="row">
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-graph-up me-2"></i>
+                            Performance Metrics
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="performanceChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">
+                            <i class="bi bi-pie-chart me-2"></i>
+                            Node Participation
+                        </h5>
+                    </div>
+                    <div class="card-body">
+                        <canvas id="participationChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid SimulationId { get; set; }
+
+    private SimulationRun? simulation;
+    private HubConnection? hubConnection;
+    private bool isControllingSimulation = false;
+    private bool isExporting = false;
+    private string logFilter = "all";
+    private int overallProgress = 0;
+
+    // Real-time data
+    private SimulationMetrics currentMetrics = new();
+    private List<ActivityEvent> currentActivity = new();
+    private List<LogEntry> eventLogs = new();
+    private Timer? metricsUpdateTimer;
+
+    // Data models
+    public class SimulationMetrics
+    {
+        public int ActiveNodes { get; set; }
+        public int TotalNodes { get; set; }
+        public int BlockHeight { get; set; }
+        public int CurrentRound { get; set; }
+        public decimal BlocksPerSecond { get; set; }
+        public decimal RoundsPerMinute { get; set; }
+        public int AverageLatency { get; set; }
+        public int MessageCount { get; set; }
+    }
+
+    public class ActivityEvent
+    {
+        public DateTime Timestamp { get; set; }
+        public string Type { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+    }
+
+    public class LogEntry
+    {
+        public DateTime Timestamp { get; set; }
+        public string Level { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSimulationAsync();
+        await InitializeSignalRConnection();
+        InitializeMetricsTimer();
+    }
+
+    private async Task LoadSimulationAsync()
+    {
+        try
+        {
+            // TODO: Replace with actual API call
+            await Task.Delay(500); // Simulate API call
+
+            // Mock simulation data
+            simulation = new SimulationRun
+            {
+                Id = SimulationId,
+                Name = "Real-time PoET Simulation",
+                Description = "Testing Proof of Elapsed Time with Byzantine nodes",
+                ConsensusAlgorithm = ConsensusAlgorithm.ProofOfElapsedTime,
+                Status = SimulationStatus.Running,
+                CreatedAt = DateTime.UtcNow.AddMinutes(-10),
+                Configuration = new Dictionary<string, object>
+                {
+                    ["nodes"] = 7,
+                    ["byzantineNodes"] = 1,
+                    ["durationSeconds"] = 300,
+                    ["blockTimeMs"] = 2000
+                }
+            };
+
+            // Initialize metrics
+            currentMetrics.TotalNodes = 7;
+            currentMetrics.ActiveNodes = 7;
+            overallProgress = 35;
+
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading simulation {SimulationId}", SimulationId);
+        }
+    }
+
+    private async Task InitializeSignalRConnection()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl(Navigation.ToAbsoluteUri("/simulationHub"))
+                .Build();
+
+            // Register event handlers
+            hubConnection.On<string>("ReceiveMetricsUpdate", OnMetricsUpdate);
+            hubConnection.On<string>("ReceiveRoundUpdate", OnRoundUpdate);
+            hubConnection.On<string>("ReceiveBlockCreated", OnBlockCreated);
+            hubConnection.On<string>("ReceiveLogEntry", OnLogEntry);
+            hubConnection.On<string>("ReceiveStatusUpdate", OnStatusUpdate);
+
+            await hubConnection.StartAsync();
+            
+            // Join simulation group
+            await hubConnection.SendAsync("JoinSimulationGroup", SimulationId.ToString());
+            
+            Logger.LogInformation("Connected to simulation hub for {SimulationId}", SimulationId);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error connecting to SignalR hub");
+        }
+    }
+
+    private void InitializeMetricsTimer()
+    {
+        // Update metrics every second with mock data
+        metricsUpdateTimer = new Timer(UpdateMockMetrics, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+    }
+
+    private void UpdateMockMetrics(object? state)
+    {
+        // Generate mock real-time data
+        var random = new Random();
+        
+        currentMetrics.BlockHeight++;
+        currentMetrics.CurrentRound = currentMetrics.BlockHeight + random.Next(0, 3);
+        currentMetrics.BlocksPerSecond = (decimal)(random.NextDouble() * 2 + 0.5);
+        currentMetrics.RoundsPerMinute = currentMetrics.BlocksPerSecond * 60;
+        currentMetrics.AverageLatency = random.Next(50, 200);
+        currentMetrics.MessageCount += random.Next(5, 15);
+        
+        overallProgress = Math.Min(100, overallProgress + random.Next(0, 2));
+
+        // Add random activity
+        if (random.NextDouble() < 0.3)
+        {
+            var activities = new[]
+            {
+                ("consensus", "Node 3 proposed new block"),
+                ("consensus", "Round 45 consensus reached"),
+                ("block", $"Block #{currentMetrics.BlockHeight} validated"),
+                ("network", "Node 2 reconnected"),
+                ("consensus", "Leader election completed")
+            };
+            
+            var activity = activities[random.Next(activities.Length)];
+            currentActivity.Add(new ActivityEvent
+            {
+                Timestamp = DateTime.UtcNow,
+                Type = activity.Item1,
+                Message = activity.Item2
+            });
+            
+            // Keep only last 50 activities
+            if (currentActivity.Count > 50)
+                currentActivity.RemoveAt(0);
+        }
+
+        // Add random log entries
+        if (random.NextDouble() < 0.4)
+        {
+            var logEntries = new[]
+            {
+                ("INFO", "consensus", "Consensus round completed successfully"),
+                ("DEBUG", "blocks", $"Block #{currentMetrics.BlockHeight} added to chain"),
+                ("INFO", "network", "All nodes responding normally"),
+                ("WARN", "consensus", "Minor delay in consensus protocol"),
+                ("INFO", "blocks", "Block validation passed")
+            };
+            
+            var entry = logEntries[random.Next(logEntries.Length)];
+            eventLogs.Add(new LogEntry
+            {
+                Timestamp = DateTime.UtcNow,
+                Level = entry.Item1,
+                Category = entry.Item2,
+                Message = entry.Item3
+            });
+            
+            // Keep only last 100 logs
+            if (eventLogs.Count > 100)
+                eventLogs.RemoveAt(0);
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    // SignalR event handlers
+    private void OnMetricsUpdate(string metricsJson)
+    {
+        try
+        {
+            var metrics = JsonSerializer.Deserialize<SimulationMetrics>(metricsJson);
+            if (metrics != null)
+            {
+                currentMetrics = metrics;
+                InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error processing metrics update");
+        }
+    }
+
+    private void OnRoundUpdate(string roundData)
+    {
+        currentActivity.Add(new ActivityEvent
+        {
+            Timestamp = DateTime.UtcNow,
+            Type = "consensus",
+            Message = $"Round update: {roundData}"
+        });
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnBlockCreated(string blockData)
+    {
+        currentActivity.Add(new ActivityEvent
+        {
+            Timestamp = DateTime.UtcNow,
+            Type = "block",
+            Message = $"New block created: {blockData}"
+        });
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnLogEntry(string logJson)
+    {
+        try
+        {
+            var logEntry = JsonSerializer.Deserialize<LogEntry>(logJson);
+            if (logEntry != null)
+            {
+                eventLogs.Add(logEntry);
+                InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error processing log entry");
+        }
+    }
+
+    private void OnStatusUpdate(string status)
+    {
+        if (simulation != null && Enum.TryParse<SimulationStatus>(status, out var newStatus))
+        {
+            simulation.Status = newStatus;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    // Control methods
+    private async Task PauseSimulation()
+    {
+        isControllingSimulation = true;
+        try
+        {
+            // TODO: Implement actual pause API call
+            await Task.Delay(1000);
+            await JSRuntime.InvokeVoidAsync("showToast", "Simulation paused", "warning");
+        }
+        finally
+        {
+            isControllingSimulation = false;
+        }
+    }
+
+    private async Task ResumeSimulation()
+    {
+        isControllingSimulation = true;
+        try
+        {
+            // TODO: Implement actual resume API call
+            await Task.Delay(1000);
+            await JSRuntime.InvokeVoidAsync("showToast", "Simulation resumed", "success");
+        }
+        finally
+        {
+            isControllingSimulation = false;
+        }
+    }
+
+    private async Task StopSimulation()
+    {
+        isControllingSimulation = true;
+        try
+        {
+            // TODO: Implement actual stop API call
+            await Task.Delay(1000);
+            await JSRuntime.InvokeVoidAsync("showToast", "Simulation stopped", "info");
+        }
+        finally
+        {
+            isControllingSimulation = false;
+        }
+    }
+
+    private async Task ExportData()
+    {
+        isExporting = true;
+        try
+        {
+            // TODO: Implement actual export functionality
+            await Task.Delay(2000);
+            await JSRuntime.InvokeVoidAsync("showToast", "Data exported successfully", "success");
+        }
+        finally
+        {
+            isExporting = false;
+        }
+    }
+
+    private async Task ReconnectAsync()
+    {
+        try
+        {
+            if (hubConnection != null)
+            {
+                await hubConnection.DisposeAsync();
+            }
+            await InitializeSignalRConnection();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error reconnecting to SignalR hub");
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/simulations");
+    }
+
+    private void SetLogFilter(string filter)
+    {
+        logFilter = filter;
+        StateHasChanged();
+    }
+
+    // Helper methods
+    private List<LogEntry> GetFilteredLogs()
+    {
+        return logFilter switch
+        {
+            "consensus" => eventLogs.Where(l => l.Category == "consensus").ToList(),
+            "blocks" => eventLogs.Where(l => l.Category == "blocks").ToList(),
+            "errors" => eventLogs.Where(l => l.Level == "ERROR" || l.Level == "WARN").ToList(),
+            _ => eventLogs
+        };
+    }
+
+    private string GetStatusBadgeClass(SimulationStatus status)
+    {
+        return status switch
+        {
+            SimulationStatus.Running => "bg-success",
+            SimulationStatus.Paused => "bg-warning",
+            SimulationStatus.Completed => "bg-primary",
+            SimulationStatus.Failed => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetAlgorithmDisplayName(ConsensusAlgorithm algorithm)
+    {
+        return algorithm switch
+        {
+            ConsensusAlgorithm.ProofOfElapsedTime => "Proof of Elapsed Time (PoET)",
+            ConsensusAlgorithm.ProofOfStake => "Proof of Stake (PoS)",
+            ConsensusAlgorithm.ProofOfWork => "Proof of Work (PoW)",
+            ConsensusAlgorithm.PracticalByzantineFaultTolerance => "Practical Byzantine Fault Tolerance (pBFT)",
+            _ => algorithm.ToString()
+        };
+    }
+
+    private string GetConnectionAlertClass()
+    {
+        return hubConnection?.State switch
+        {
+            HubConnectionState.Connected => "alert-success",
+            HubConnectionState.Connecting => "alert-info",
+            HubConnectionState.Reconnecting => "alert-warning",
+            _ => "alert-danger"
+        };
+    }
+
+    private string GetConnectionIcon()
+    {
+        return hubConnection?.State switch
+        {
+            HubConnectionState.Connected => "bi-wifi",
+            HubConnectionState.Connecting => "bi-arrow-clockwise",
+            HubConnectionState.Reconnecting => "bi-arrow-clockwise",
+            _ => "bi-wifi-off"
+        };
+    }
+
+    private string GetConnectionStatusText()
+    {
+        return hubConnection?.State switch
+        {
+            HubConnectionState.Connected => "Connected to real-time updates",
+            HubConnectionState.Connecting => "Connecting to real-time updates...",
+            HubConnectionState.Reconnecting => "Reconnecting to real-time updates...",
+            _ => "Disconnected from real-time updates"
+        };
+    }
+
+    private string GetProgressBarClass()
+    {
+        return simulation?.Status switch
+        {
+            SimulationStatus.Running => "progress-bar-striped progress-bar-animated bg-success",
+            SimulationStatus.Paused => "bg-warning",
+            SimulationStatus.Completed => "bg-primary",
+            SimulationStatus.Failed => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetActivityIcon(string type)
+    {
+        return type switch
+        {
+            "consensus" => "bi-arrow-repeat",
+            "block" => "bi-layers",
+            "network" => "bi-diagram-3",
+            "error" => "bi-exclamation-triangle",
+            _ => "bi-info-circle"
+        };
+    }
+
+    private string GetLogEntryClass(string level)
+    {
+        return level switch
+        {
+            "ERROR" => "text-danger",
+            "WARN" => "text-warning",
+            "INFO" => "text-primary",
+            "DEBUG" => "text-muted",
+            _ => ""
+        };
+    }
+
+    private string GetElapsedTime()
+    {
+        if (simulation == null) return "00:00:00";
+        var elapsed = DateTime.UtcNow - simulation.CreatedAt;
+        return elapsed.ToString(@"hh\:mm\:ss");
+    }
+
+    private string GetEstimatedTimeRemaining()
+    {
+        if (simulation?.Configuration == null) return "Unknown";
+        
+        if (simulation.Configuration.TryGetValue("durationSeconds", out var durationObj) 
+            && int.TryParse(durationObj.ToString(), out var durationSeconds))
+        {
+            var elapsed = DateTime.UtcNow - simulation.CreatedAt;
+            var remaining = TimeSpan.FromSeconds(durationSeconds) - elapsed;
+            return remaining.TotalSeconds > 0 ? remaining.ToString(@"hh\:mm\:ss") : "00:00:00";
+        }
+        
+        return "Unknown";
+    }
+
+    private string GetTargetDuration()
+    {
+        if (simulation?.Configuration == null) return "Unknown";
+        
+        if (simulation.Configuration.TryGetValue("durationSeconds", out var durationObj) 
+            && int.TryParse(durationObj.ToString(), out var durationSeconds))
+        {
+            return TimeSpan.FromSeconds(durationSeconds).ToString(@"hh\:mm\:ss");
+        }
+        
+        return "Unknown";
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        metricsUpdateTimer?.Dispose();
+        
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}
+
+<style>
+    .console-log {
+        background-color: #1e1e1e;
+        color: #d4d4d4;
+        font-family: 'Courier New', monospace;
+        font-size: 0.8rem;
+        padding: 10px;
+    }
+
+    .log-entry {
+        margin-bottom: 2px;
+        padding: 2px 0;
+    }
+
+    .log-entry .timestamp {
+        color: #608b4e;
+    }
+
+    .log-entry .level {
+        font-weight: bold;
+        margin: 0 8px;
+    }
+
+    .log-entry.text-danger .level {
+        color: #f44747;
+    }
+
+    .log-entry.text-warning .level {
+        color: #ffcc02;
+    }
+
+    .log-entry.text-primary .level {
+        color: #4fc3f7;
+    }
+
+    .log-entry.text-muted .level {
+        color: #808080;
+    }
+
+    .card-body canvas {
+        max-width: 100%;
+        height: auto;
+    }
+</style>

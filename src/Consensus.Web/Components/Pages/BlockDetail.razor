@@ -1,0 +1,222 @@
+@page "/blocks/{id:guid}"
+@using Consensus.Core.Models
+@using Consensus.Web.Services
+@inject IBlockExplorerService BlockExplorerService
+@inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+
+<h1>Block Details</h1>
+
+<div class="container-fluid">
+    @if (isLoading)
+    {
+        <div class="d-flex justify-content-center align-items-center" style="min-height: 400px;">
+            <div class="text-center">
+                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-3 text-muted">Loading block details...</p>
+            </div>
+        </div>
+    }
+    else if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="row justify-content-center">
+            <div class="col-md-8">
+                <div class="alert alert-danger" role="alert">
+                    <h4 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Error Loading Block</h4>
+                    <p>@errorMessage</p>
+                    <hr>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-outline-danger" @onclick="LoadBlockDetails">
+                            <i class="bi bi-arrow-clockwise"></i> Retry
+                        </button>
+                        <button class="btn btn-outline-secondary" @onclick="GoBack">
+                            <i class="bi bi-arrow-left"></i> Go Back
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else if (blockDetail != null)
+    {
+        <!-- Header Section -->
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h1>
+                            <i class="bi bi-box"></i> Block #@blockDetail.BlockNumber
+                            @if (blockDetail.IsValid)
+                            {
+                                <span class="badge bg-success ms-2">Valid</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-danger ms-2">Invalid</span>
+                            }
+                        </h1>
+                        <p class="lead text-muted">
+                            Created @blockDetail.CreatedAt.ToString("MMM dd, yyyy 'at' HH:mm:ss UTC")
+                        </p>
+                    </div>
+                    <div>
+                        <button class="btn btn-outline-secondary me-2" @onclick="GoBack">
+                            <i class="bi bi-arrow-left"></i> Back to Blocks
+                        </button>
+                        <button class="btn btn-outline-primary" @onclick="CopyBlockHash">
+                            <i class="bi bi-clipboard"></i> Copy Hash
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="row">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="bi bi-fingerprint"></i> Block Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-striped">
+                            <tr>
+                                <td class="fw-bold" style="width: 20%;">Block Number:</td>
+                                <td>@blockDetail.BlockNumber</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Hash:</td>
+                                <td>
+                                    <code class="user-select-all">@blockDetail.Hash</code>
+                                    <button class="btn btn-outline-secondary btn-sm ms-2" @onclick="CopyBlockHash">
+                                        <i class="bi bi-clipboard"></i>
+                                    </button>
+                                </td>
+                            </tr>
+                            @if (!string.IsNullOrEmpty(blockDetail.PreviousHash))
+                            {
+                                <tr>
+                                    <td class="fw-bold">Previous Hash:</td>
+                                    <td><code class="user-select-all">@blockDetail.PreviousHash</code></td>
+                                </tr>
+                            }
+                            @if (!string.IsNullOrEmpty(blockDetail.MerkleRoot))
+                            {
+                                <tr>
+                                    <td class="fw-bold">Merkle Root:</td>
+                                    <td><code class="user-select-all">@blockDetail.MerkleRoot</code></td>
+                                </tr>
+                            }
+                            <tr>
+                                <td class="fw-bold">Created At:</td>
+                                <td>@blockDetail.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss UTC")</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Size:</td>
+                                <td>@blockDetail.Size bytes</td>
+                            </tr>
+                            <tr>
+                                <td class="fw-bold">Status:</td>
+                                <td>
+                                    @if (blockDetail.IsValid)
+                                    {
+                                        <span class="badge bg-success">Valid</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-danger">Invalid</span>
+                                    }
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="row justify-content-center">
+            <div class="col-md-6 text-center">
+                <div class="py-5">
+                    <i class="bi bi-exclamation-circle fs-1 text-muted"></i>
+                    <h3>Block Not Found</h3>
+                    <p class="text-muted">The requested block could not be found.</p>
+                    <button class="btn btn-primary" @onclick="GoBack">
+                        <i class="bi bi-arrow-left"></i> Go Back
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private Consensus.Core.Models.BlockDetail? blockDetail = null;
+    private bool isLoading = true;
+    private string? errorMessage = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBlockDetails();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (blockDetail?.Id != Id)
+        {
+            await LoadBlockDetails();
+        }
+    }
+
+    private async Task LoadBlockDetails()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            
+            blockDetail = await BlockExplorerService.GetBlockDetailAsync(Id);
+            
+            if (blockDetail == null)
+            {
+                errorMessage = "Block not found.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Failed to load block details: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CopyBlockHash()
+    {
+        if (blockDetail?.Hash != null)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", blockDetail.Hash);
+                await JSRuntime.InvokeVoidAsync("alert", "Block hash copied to clipboard!");
+            }
+            catch
+            {
+                // Fallback for older browsers
+                await JSRuntime.InvokeVoidAsync("prompt", "Copy this hash:", blockDetail.Hash);
+            }
+        }
+    }
+
+    private void GoBack()
+    {
+        Navigation.NavigateTo("/blocks");
+    }
+}

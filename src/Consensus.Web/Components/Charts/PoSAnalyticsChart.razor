@@ -1,0 +1,873 @@
+@namespace Consensus.Web.Components.Charts
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<div class="pos-analytics-container">
+    <div class="row g-4">
+        <!-- Stake Distribution Analysis -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-coins me-2"></i>
+                        Stake Distribution
+                    </h5>
+                    <div class="chart-actions">
+                        <div class="btn-group btn-group-sm" role="group">
+                            <input type="radio" class="btn-check" name="stakeView" id="absolute" value="absolute" @onchange="UpdateStakeView" checked="@(stakeViewType == "absolute")">
+                            <label class="btn btn-outline-primary" for="absolute">Absolute</label>
+                            
+                            <input type="radio" class="btn-check" name="stakeView" id="percentage" value="percentage" @onchange="UpdateStakeView" checked="@(stakeViewType == "percentage")">
+                            <label class="btn btn-outline-primary" for="percentage">Percentage</label>
+                        </div>
+                        <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="ExportStakeData">
+                            <i class="fas fa-download"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="posStakeDistributionChart" width="400" height="300"></canvas>
+                </div>
+                <div class="stake-stats">
+                    <div class="row text-center">
+                        <div class="col-4">
+                            <div class="stat-value">@totalStake.ToString("N0")</div>
+                            <div class="stat-label">Total Stake</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-value">@activeValidators</div>
+                            <div class="stat-label">Active Validators</div>
+                        </div>
+                        <div class="col-4">
+                            <div class="stat-value">@nakamotoCoefficient</div>
+                            <div class="stat-label">Nakamoto Coefficient</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Validator Performance -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-trophy me-2"></i>
+                        Validator Performance
+                    </h5>
+                    <div class="chart-actions">
+                        <select class="form-select form-select-sm" @onchange="UpdatePerformanceMetric" style="width: auto;">
+                            <option value="blocks">Blocks Proposed</option>
+                            <option value="rewards">Rewards Earned</option>
+                            <option value="uptime">Uptime %</option>
+                            <option value="efficiency">Efficiency Score</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="posValidatorPerformanceChart" width="400" height="300"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Delegation Analysis -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-handshake me-2"></i>
+                        Delegation Analysis
+                    </h5>
+                    <div class="chart-subtitle">
+                        Delegated stake distribution and patterns
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="posDelegationChart" width="400" height="300"></canvas>
+                </div>
+                <div class="delegation-metrics mt-3">
+                    <div class="row">
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <div class="metric-value">@delegationRatio.ToString("P1")</div>
+                                <div class="metric-label">Delegation Ratio</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="metric-card">
+                                <div class="metric-value">@avgDelegationPerValidator.ToString("N0")</div>
+                                <div class="metric-label">Avg Delegation</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Staking Rewards Analysis -->
+        <div class="col-12 col-lg-6">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-chart-line me-2"></i>
+                        Staking Rewards Trend
+                    </h5>
+                    <div class="chart-actions">
+                        <button class="btn btn-sm btn-outline-info" @onclick="ToggleRewardDetails">
+                            <i class="fas @(showRewardDetails ? "fa-eye-slash" : "fa-eye")"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="posRewardsChart" width="400" height="300"></canvas>
+                </div>
+                @if (showRewardDetails)
+                {
+                    <div class="reward-details mt-3">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value">@annualYield.ToString("P2")</div>
+                                    <div class="metric-label">Annual Yield</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value">@dailyRewards.ToString("N0")</div>
+                                    <div class="metric-label">Daily Rewards</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value">@totalRewardsDistributed.ToString("N0")</div>
+                                    <div class="metric-label">Total Distributed</div>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="metric-card">
+                                    <div class="metric-value">@rewardVariance.ToString("F3")</div>
+                                    <div class="metric-label">Reward Variance</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Centralization Analysis -->
+        <div class="col-12">
+            <div class="chart-card">
+                <div class="chart-header">
+                    <h5 class="chart-title">
+                        <i class="fas fa-network-wired me-2"></i>
+                        Centralization Analysis
+                    </h5>
+                    <div class="chart-subtitle">
+                        Measuring stake concentration and network decentralization
+                    </div>
+                </div>
+                <div class="chart-body">
+                    <canvas id="posCentralizationChart" width="400" height="250"></canvas>
+                </div>
+                <div class="centralization-metrics mt-3">
+                    <div class="row">
+                        <div class="col-md-2">
+                            <div class="metric-card">
+                                <div class="metric-value">@herfindahlIndex.ToString("F4")</div>
+                                <div class="metric-label">Herfindahl Index</div>
+                                <div class="metric-description">Lower = more decentralized</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="metric-card">
+                                <div class="metric-value">@top10StakeShare.ToString("P1")</div>
+                                <div class="metric-label">Top 10 Share</div>
+                                <div class="metric-description">Stake held by top 10</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="metric-card">
+                                <div class="metric-value">@entropyScore.ToString("F2")</div>
+                                <div class="metric-label">Entropy Score</div>
+                                <div class="metric-description">Higher = more distributed</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="metric-card">
+                                <div class="metric-value">@effectiveValidators</div>
+                                <div class="metric-label">Effective Validators</div>
+                                <div class="metric-description">Meaningful participants</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="metric-card">
+                                <div class="metric-value">@stakingParticipation.ToString("P1")</div>
+                                <div class="metric-label">Participation Rate</div>
+                                <div class="metric-description">% of total supply staked</div>
+                            </div>
+                        </div>
+                        <div class="col-md-2">
+                            <div class="metric-card">
+                                <div class="metric-value">@GetCentralizationLevel()</div>
+                                <div class="metric-label">Centralization</div>
+                                <div class="metric-description">Overall assessment</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> OnDataExported { get; set; }
+    [Parameter] public bool EnableRealTimeUpdates { get; set; } = false;
+    
+    private IJSObjectReference? chartModule;
+    private IJSObjectReference? stakeDistributionChartInstance;
+    private IJSObjectReference? validatorPerformanceChartInstance;
+    private IJSObjectReference? delegationChartInstance;
+    private IJSObjectReference? rewardsChartInstance;
+    private IJSObjectReference? centralizationChartInstance;
+    
+    private string stakeViewType = "absolute";
+    private string performanceMetric = "blocks";
+    private bool showRewardDetails = false;
+    private PoSAnalyticsData? posData;
+    
+    // Stake statistics
+    private long totalStake = 0;
+    private int activeValidators = 0;
+    private int nakamotoCoefficient = 0;
+    
+    // Delegation statistics
+    private double delegationRatio = 0.0;
+    private long avgDelegationPerValidator = 0;
+    
+    // Reward statistics
+    private double annualYield = 0.0;
+    private long dailyRewards = 0;
+    private long totalRewardsDistributed = 0;
+    private double rewardVariance = 0.0;
+    
+    // Centralization metrics
+    private double herfindahlIndex = 0.0;
+    private double top10StakeShare = 0.0;
+    private double entropyScore = 0.0;
+    private int effectiveValidators = 0;
+    private double stakingParticipation = 0.0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/chart-interop-v2.js");
+            await LoadPoSAnalyticsData();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing PoS analytics: {ex.Message}");
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && chartModule != null && posData != null)
+        {
+            await CreateCharts();
+        }
+    }
+
+    private async Task LoadPoSAnalyticsData()
+    {
+        // Generate mock PoS analytics data
+        posData = new PoSAnalyticsData
+        {
+            StakeDistribution = GenerateStakeDistribution(),
+            ValidatorPerformance = GenerateValidatorPerformance(),
+            DelegationData = GenerateDelegationData(),
+            RewardsData = GenerateRewardsData(),
+            CentralizationMetrics = GenerateCentralizationMetrics()
+        };
+        
+        // Update statistics
+        UpdateStatistics();
+    }
+
+    private void UpdateStatistics()
+    {
+        if (posData?.StakeDistribution?.Any() == true)
+        {
+            totalStake = posData.StakeDistribution.Sum(v => v.Stake);
+            activeValidators = posData.StakeDistribution.Count;
+            nakamotoCoefficient = CalculateNakamotoCoefficient();
+        }
+        
+        if (posData?.DelegationData?.Any() == true)
+        {
+            var totalDelegation = posData.DelegationData.Sum(d => d.DelegatedAmount);
+            delegationRatio = (double)totalDelegation / totalStake;
+            avgDelegationPerValidator = totalDelegation / activeValidators;
+        }
+        
+        if (posData?.RewardsData?.Any() == true)
+        {
+            dailyRewards = posData.RewardsData.TakeLast(1).Sum(r => r.TotalRewards);
+            totalRewardsDistributed = posData.RewardsData.Sum(r => r.TotalRewards);
+            annualYield = (double)dailyRewards * 365 / totalStake;
+            
+            var rewardValues = posData.RewardsData.Select(r => (double)r.TotalRewards).ToList();
+            var mean = rewardValues.Average();
+            rewardVariance = rewardValues.Average(v => Math.Pow(v - mean, 2));
+        }
+        
+        if (posData?.CentralizationMetrics != null)
+        {
+            herfindahlIndex = posData.CentralizationMetrics.HerfindahlIndex;
+            top10StakeShare = posData.CentralizationMetrics.Top10StakeShare;
+            entropyScore = posData.CentralizationMetrics.EntropyScore;
+            effectiveValidators = posData.CentralizationMetrics.EffectiveValidators;
+            stakingParticipation = posData.CentralizationMetrics.StakingParticipation;
+        }
+    }
+
+    private async Task CreateCharts()
+    {
+        if (chartModule == null || posData == null) return;
+
+        try
+        {
+            await CreateStakeDistributionChart();
+            await CreateValidatorPerformanceChart();
+            await CreateDelegationChart();
+            await CreateRewardsChart();
+            await CreateCentralizationChart();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating PoS charts: {ex.Message}");
+        }
+    }
+
+    private async Task CreateStakeDistributionChart()
+    {
+        if (posData?.StakeDistribution == null) return;
+
+        var data = stakeViewType == "percentage" 
+            ? posData.StakeDistribution.Select(v => Math.Round((double)v.Stake / totalStake * 100, 2)).ToArray()
+            : posData.StakeDistribution.Select(v => (double)v.Stake).ToArray();
+
+        var chartConfig = new
+        {
+            type = "doughnut",
+            data = new
+            {
+                labels = posData.StakeDistribution.Select(v => v.ValidatorId).ToArray(),
+                datasets = new[]
+                {
+                    new
+                    {
+                        data = data,
+                        backgroundColor = posData.StakeDistribution.Select((_, i) => GetValidatorColor(i)).ToArray(),
+                        borderWidth = 2
+                    }
+                }
+            },
+            options = new
+            {
+                responsive = true,
+                maintainAspectRatio = false,
+                plugins = new
+                {
+                    legend = new { display = true, position = "right", maxHeight = 200 },
+                    title = new { display = false }
+                }
+            }
+        };
+
+        stakeDistributionChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "posStakeDistributionChart", chartConfig);
+    }
+
+    private async Task CreateValidatorPerformanceChart()
+    {
+        if (posData?.ValidatorPerformance == null) return;
+
+        var data = performanceMetric switch
+        {
+            "blocks" => posData.ValidatorPerformance.Select(v => (double)v.BlocksProposed).ToArray(),
+            "rewards" => posData.ValidatorPerformance.Select(v => (double)v.RewardsEarned).ToArray(),
+            "uptime" => posData.ValidatorPerformance.Select(v => v.UptimePercentage).ToArray(),
+            "efficiency" => posData.ValidatorPerformance.Select(v => v.EfficiencyScore).ToArray(),
+            _ => posData.ValidatorPerformance.Select(v => (double)v.BlocksProposed).ToArray()
+        };
+
+        var chartConfig = new
+        {
+            type = "bar",
+            data = new
+            {
+                labels = posData.ValidatorPerformance.Select(v => v.ValidatorId).ToArray(),
+                datasets = new[]
+                {
+                    new
+                    {
+                        label = GetPerformanceLabel(performanceMetric),
+                        data = data,
+                        backgroundColor = "rgba(75, 192, 192, 0.8)",
+                        borderColor = "rgba(75, 192, 192, 1)",
+                        borderWidth = 1
+                    }
+                }
+            },
+            options = new
+            {
+                responsive = true,
+                maintainAspectRatio = false,
+                plugins = new
+                {
+                    legend = new { display = false },
+                    title = new { display = false }
+                },
+                scales = new
+                {
+                    y = new
+                    {
+                        beginAtZero = true,
+                        title = new { display = true, text = GetPerformanceLabel(performanceMetric) }
+                    },
+                    x = new
+                    {
+                        title = new { display = true, text = "Validators" }
+                    }
+                }
+            }
+        };
+
+        validatorPerformanceChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "posValidatorPerformanceChart", chartConfig);
+    }
+
+    private async Task CreateDelegationChart()
+    {
+        if (posData?.DelegationData == null) return;
+
+        var chartConfig = new
+        {
+            type = "bar",
+            data = new
+            {
+                labels = posData.DelegationData.Select(d => d.ValidatorId).ToArray(),
+                datasets = new[]
+                {
+                    new
+                    {
+                        label = "Self Stake",
+                        data = posData.DelegationData.Select(d => (double)d.SelfStake).ToArray(),
+                        backgroundColor = "rgba(54, 162, 235, 0.8)",
+                        stack = "stack1"
+                    },
+                    new
+                    {
+                        label = "Delegated Stake",
+                        data = posData.DelegationData.Select(d => (double)d.DelegatedAmount).ToArray(),
+                        backgroundColor = "rgba(255, 99, 132, 0.8)",
+                        stack = "stack1"
+                    }
+                }
+            },
+            options = new
+            {
+                responsive = true,
+                maintainAspectRatio = false,
+                plugins = new
+                {
+                    legend = new { display = true, position = "top" },
+                    title = new { display = false }
+                },
+                scales = new
+                {
+                    y = new
+                    {
+                        stacked = true,
+                        beginAtZero = true,
+                        title = new { display = true, text = "Stake Amount" }
+                    },
+                    x = new
+                    {
+                        stacked = true,
+                        title = new { display = true, text = "Validators" }
+                    }
+                }
+            }
+        };
+
+        delegationChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "posDelegationChart", chartConfig);
+    }
+
+    private async Task CreateRewardsChart()
+    {
+        if (posData?.RewardsData == null) return;
+
+        var chartConfig = new
+        {
+            type = "line",
+            data = new
+            {
+                labels = posData.RewardsData.Select(r => r.Date.ToString("MM/dd")).ToArray(),
+                datasets = new[]
+                {
+                    new
+                    {
+                        label = "Total Rewards",
+                        data = posData.RewardsData.Select(r => (double)r.TotalRewards).ToArray(),
+                        backgroundColor = "rgba(153, 102, 255, 0.2)",
+                        borderColor = "rgba(153, 102, 255, 1)",
+                        borderWidth = 2,
+                        fill = true,
+                        tension = 0.4
+                    }
+                }
+            },
+            options = new
+            {
+                responsive = true,
+                maintainAspectRatio = false,
+                plugins = new
+                {
+                    legend = new { display = false },
+                    title = new { display = false }
+                },
+                scales = new
+                {
+                    y = new
+                    {
+                        beginAtZero = true,
+                        title = new { display = true, text = "Rewards" }
+                    },
+                    x = new
+                    {
+                        title = new { display = true, text = "Date" }
+                    }
+                }
+            }
+        };
+
+        rewardsChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "posRewardsChart", chartConfig);
+    }
+
+    private async Task CreateCentralizationChart()
+    {
+        if (posData?.StakeDistribution == null) return;
+
+        // Create a Lorenz curve for stake distribution
+        var sortedStakes = posData.StakeDistribution.OrderBy(v => v.Stake).Select(v => (double)v.Stake).ToArray();
+        var cumulativeStakes = new double[sortedStakes.Length + 1];
+        var totalStakeDouble = (double)totalStake;
+        
+        for (int i = 0; i < sortedStakes.Length; i++)
+        {
+            cumulativeStakes[i + 1] = cumulativeStakes[i] + sortedStakes[i] / totalStakeDouble;
+        }
+
+        var equalityLine = Enumerable.Range(0, sortedStakes.Length + 1)
+            .Select(i => (double)i / sortedStakes.Length).ToArray();
+
+        var chartConfig = new
+        {
+            type = "line",
+            data = new
+            {
+                labels = Enumerable.Range(0, sortedStakes.Length + 1)
+                    .Select(i => Math.Round((double)i / sortedStakes.Length * 100, 1) + "%").ToArray(),
+                datasets = new object[]
+                {
+                    new
+                    {
+                        label = "Perfect Equality",
+                        data = equalityLine,
+                        backgroundColor = "rgba(128, 128, 128, 0.2)",
+                        borderColor = "rgba(128, 128, 128, 1)",
+                        borderWidth = 2,
+                        borderDash = new[] { 5, 5 },
+                        fill = false
+                    },
+                    new
+                    {
+                        label = "Actual Distribution",
+                        data = cumulativeStakes,
+                        backgroundColor = "rgba(255, 159, 64, 0.2)",
+                        borderColor = "rgba(255, 159, 64, 1)",
+                        borderWidth = 3,
+                        fill = true
+                    }
+                }
+            },
+            options = new
+            {
+                responsive = true,
+                maintainAspectRatio = false,
+                plugins = new
+                {
+                    legend = new { display = true, position = "top" },
+                    title = new { display = true, text = "Lorenz Curve - Stake Distribution" }
+                },
+                scales = new
+                {
+                    y = new
+                    {
+                        beginAtZero = true,
+                        max = 1,
+                        title = new { display = true, text = "Cumulative Stake Share" }
+                    },
+                    x = new
+                    {
+                        title = new { display = true, text = "Cumulative Validator Share" }
+                    }
+                }
+            }
+        };
+
+        centralizationChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "posCentralizationChart", chartConfig);
+    }
+
+    private async Task UpdateStakeView(ChangeEventArgs e)
+    {
+        stakeViewType = e.Value?.ToString() ?? "absolute";
+        await CreateStakeDistributionChart();
+    }
+
+    private async Task UpdatePerformanceMetric(ChangeEventArgs e)
+    {
+        performanceMetric = e.Value?.ToString() ?? "blocks";
+        await CreateValidatorPerformanceChart();
+    }
+
+    private void ToggleRewardDetails()
+    {
+        showRewardDetails = !showRewardDetails;
+    }
+
+    private async Task ExportStakeData()
+    {
+        if (OnDataExported.HasDelegate)
+        {
+            await OnDataExported.InvokeAsync("pos-stake-distribution");
+        }
+    }
+
+    private int CalculateNakamotoCoefficient()
+    {
+        if (posData?.StakeDistribution == null) return 0;
+        
+        var sortedStakes = posData.StakeDistribution.OrderByDescending(v => v.Stake).ToList();
+        var halfStake = totalStake / 2;
+        var cumulativeStake = 0L;
+        
+        for (int i = 0; i < sortedStakes.Count; i++)
+        {
+            cumulativeStake += sortedStakes[i].Stake;
+            if (cumulativeStake > halfStake)
+                return i + 1;
+        }
+        
+        return sortedStakes.Count;
+    }
+
+    private string GetCentralizationLevel()
+    {
+        if (herfindahlIndex > 0.25) return "High";
+        if (herfindahlIndex > 0.15) return "Medium";
+        if (herfindahlIndex > 0.10) return "Low";
+        return "Very Low";
+    }
+
+    private string GetPerformanceLabel(string metric)
+    {
+        return metric switch
+        {
+            "blocks" => "Blocks Proposed",
+            "rewards" => "Rewards Earned",
+            "uptime" => "Uptime %",
+            "efficiency" => "Efficiency Score",
+            _ => "Performance"
+        };
+    }
+
+    private string GetValidatorColor(int index)
+    {
+        var colors = new[]
+        {
+            "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0",
+            "#9966FF", "#FF9F40", "#FF6384", "#C9CBCF",
+            "#4BC0C0", "#9966FF", "#FF9F40", "#36A2EB"
+        };
+        return colors[index % colors.Length];
+    }
+
+    // Generate mock data methods
+    private List<StakeDistribution> GenerateStakeDistribution()
+    {
+        var validators = new List<StakeDistribution>();
+        var validatorCount = 12;
+        
+        for (int i = 0; i < validatorCount; i++)
+        {
+            validators.Add(new StakeDistribution
+            {
+                ValidatorId = $"validator-{i + 1:D2}",
+                Stake = Random.Shared.Next(50000, 500000),
+                StakePercentage = 0 // Will be calculated
+            });
+        }
+        
+        var total = validators.Sum(v => v.Stake);
+        validators.ForEach(v => v.StakePercentage = (double)v.Stake / total * 100);
+        
+        return validators;
+    }
+
+    private List<ValidatorPerformance> GenerateValidatorPerformance()
+    {
+        return posData?.StakeDistribution?.Select(v => new ValidatorPerformance
+        {
+            ValidatorId = v.ValidatorId,
+            BlocksProposed = Random.Shared.Next(10, 100),
+            RewardsEarned = Random.Shared.Next(1000, 10000),
+            UptimePercentage = Math.Round(Random.Shared.NextDouble() * 20 + 80, 2),
+            EfficiencyScore = Math.Round(Random.Shared.NextDouble() * 3 + 7, 2)
+        }).ToList() ?? new List<ValidatorPerformance>();
+    }
+
+    private List<DelegationData> GenerateDelegationData()
+    {
+        return posData?.StakeDistribution?.Select(v => new DelegationData
+        {
+            ValidatorId = v.ValidatorId,
+            SelfStake = v.Stake / 3,
+            DelegatedAmount = v.Stake * 2 / 3,
+            DelegatorCount = Random.Shared.Next(5, 50)
+        }).ToList() ?? new List<DelegationData>();
+    }
+
+    private List<RewardsData> GenerateRewardsData()
+    {
+        var rewards = new List<RewardsData>();
+        var baseDate = DateTime.Today.AddDays(-30);
+        
+        for (int i = 0; i < 30; i++)
+        {
+            rewards.Add(new RewardsData
+            {
+                Date = baseDate.AddDays(i),
+                TotalRewards = Random.Shared.Next(5000, 15000),
+                ValidatorRewards = Random.Shared.Next(3000, 8000),
+                DelegatorRewards = Random.Shared.Next(2000, 7000)
+            });
+        }
+        
+        return rewards;
+    }
+
+    private CentralizationMetrics GenerateCentralizationMetrics()
+    {
+        if (posData?.StakeDistribution == null)
+            return new CentralizationMetrics();
+            
+        var stakes = posData.StakeDistribution.Select(v => (double)v.Stake).ToList();
+        var total = stakes.Sum();
+        var shares = stakes.Select(s => s / total).ToList();
+        
+        var hhi = shares.Sum(s => s * s);
+        var top10 = shares.OrderByDescending(s => s).Take(10).Sum();
+        var entropy = -shares.Sum(s => s > 0 ? s * Math.Log(s) : 0);
+        
+        return new CentralizationMetrics
+        {
+            HerfindahlIndex = hhi,
+            Top10StakeShare = top10,
+            EntropyScore = entropy,
+            EffectiveValidators = (int)(1.0 / hhi),
+            StakingParticipation = Random.Shared.NextDouble() * 0.3 + 0.5 // 50-80%
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        var instances = new[] { stakeDistributionChartInstance, validatorPerformanceChartInstance, 
+                               delegationChartInstance, rewardsChartInstance, centralizationChartInstance };
+        
+        foreach (var instance in instances)
+        {
+            if (instance != null)
+            {
+                try
+                {
+                    await instance.InvokeVoidAsync("destroy");
+                    await instance.DisposeAsync();
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error disposing chart: {ex.Message}");
+                }
+            }
+        }
+
+        if (chartModule != null)
+        {
+            await chartModule.DisposeAsync();
+        }
+    }
+
+    // Data models
+    public class PoSAnalyticsData
+    {
+        public List<StakeDistribution> StakeDistribution { get; set; } = new();
+        public List<ValidatorPerformance> ValidatorPerformance { get; set; } = new();
+        public List<DelegationData> DelegationData { get; set; } = new();
+        public List<RewardsData> RewardsData { get; set; } = new();
+        public CentralizationMetrics CentralizationMetrics { get; set; } = new();
+    }
+
+    public class StakeDistribution
+    {
+        public string ValidatorId { get; set; } = "";
+        public long Stake { get; set; }
+        public double StakePercentage { get; set; }
+    }
+
+    public class ValidatorPerformance
+    {
+        public string ValidatorId { get; set; } = "";
+        public int BlocksProposed { get; set; }
+        public long RewardsEarned { get; set; }
+        public double UptimePercentage { get; set; }
+        public double EfficiencyScore { get; set; }
+    }
+
+    public class DelegationData
+    {
+        public string ValidatorId { get; set; } = "";
+        public long SelfStake { get; set; }
+        public long DelegatedAmount { get; set; }
+        public int DelegatorCount { get; set; }
+    }
+
+    public class RewardsData
+    {
+        public DateTime Date { get; set; }
+        public long TotalRewards { get; set; }
+        public long ValidatorRewards { get; set; }
+        public long DelegatorRewards { get; set; }
+    }
+
+    public class CentralizationMetrics
+    {
+        public double HerfindahlIndex { get; set; }
+        public double Top10StakeShare { get; set; }
+        public double EntropyScore { get; set; }
+        public int EffectiveValidators { get; set; }
+        public double StakingParticipation { get; set; }
+    }
+}

@@ -1,0 +1,617 @@
+@using Consensus.Core.Enums
+@using Consensus.Core.Interfaces
+@using Consensus.Web.Models
+@using Microsoft.AspNetCore.SignalR.Client
+@implements IAsyncDisposable
+@inject ISimulationService SimulationService
+@inject IJSRuntime JSRuntime
+@inject ILogger<SimulationLog> Logger
+
+<div class="card border-0 shadow-sm h-100">
+    <div class="card-header bg-transparent border-0 pt-3">
+        <div class="d-flex justify-content-between align-items-center">
+            <h5 class="card-title mb-0">
+                <i class="bi bi-journal-text text-primary me-2"></i>
+                Simulation Log
+                @if (!string.IsNullOrEmpty(SimulationId))
+                {
+                    <small class="text-muted">(@SimulationId[..8]...)</small>
+                }
+            </h5>
+            <div class="d-flex gap-2">
+                <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" 
+                            data-bs-toggle="dropdown">
+                        <i class="bi bi-funnel"></i> Filter
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <button class="dropdown-item @(selectedLogLevel == null ? "active" : "")" 
+                                    @onclick="() => FilterByLevel(null)">
+                                All Levels
+                            </button>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        @foreach (var level in Enum.GetValues<LogLevel>())
+                        {
+                            <li>
+                                <button class="dropdown-item @(selectedLogLevel == level ? "active" : "")" 
+                                        @onclick="() => FilterByLevel(level)">
+                                    <i class="bi @GetLogLevelIcon(level) me-2"></i>
+                                    @level
+                                </button>
+                            </li>
+                        }
+                    </ul>
+                </div>
+                <button class="btn btn-sm btn-outline-primary" @onclick="ToggleAutoScroll">
+                    <i class="bi @(autoScroll ? "bi-pause" : "bi-play") me-1"></i>
+                    @(autoScroll ? "Pause" : "Resume")
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="ClearLog">
+                    <i class="bi bi-trash"></i>
+                </button>
+                <button class="btn btn-sm btn-outline-info" @onclick="ExportLog">
+                    <i class="bi bi-download"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+    <div class="card-body p-0">
+        <div class="log-container" style="height: @(Height)px; overflow-y: auto;" @ref="logContainer">
+            @if (!logEntries.Any())
+            {
+                <div class="text-center p-4 text-muted">
+                    <i class="bi bi-hourglass-split" style="font-size: 2rem;"></i>
+                    <div class="mt-2">Waiting for log entries...</div>
+                    @if (!string.IsNullOrEmpty(SimulationId))
+                    {
+                        <small>Monitoring simulation @SimulationId[..8]...</small>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="list-group list-group-flush">
+                    @foreach (var entry in filteredLogEntries.TakeLast(maxDisplayEntries))
+                    {
+                        <div class="list-group-item border-0 py-2 px-3 @GetLogEntryClass(entry.Level)">
+                            <div class="d-flex align-items-start">
+                                <div class="flex-shrink-0 me-3">
+                                    <span class="badge @GetLogLevelBadgeClass(entry.Level) rounded-pill">
+                                        <i class="bi @GetLogLevelIcon(entry.Level) me-1"></i>
+                                        @entry.Level.ToString().ToUpper()
+                                    </span>
+                                </div>
+                                <div class="flex-grow-1 min-w-0">
+                                    <div class="d-flex justify-content-between align-items-start">
+                                        <div class="fw-medium text-truncate me-2">
+                                            @entry.Message
+                                        </div>
+                                        <small class="text-muted flex-shrink-0">
+                                            @entry.Timestamp.ToString("HH:mm:ss.fff")
+                                        </small>
+                                    </div>
+                                    @if (!string.IsNullOrEmpty(entry.Category))
+                                    {
+                                        <div class="mt-1">
+                                            <small class="text-muted">
+                                                <i class="bi bi-tag me-1"></i>@entry.Category
+                                            </small>
+                                        </div>
+                                    }
+                                    @if (entry.Properties?.Any() == true)
+                                    {
+                                        <div class="mt-2">
+                                            <details class="collapse-details">
+                                                <summary class="text-primary" style="cursor: pointer;">
+                                                    <small>View Details</small>
+                                                </summary>
+                                                <div class="mt-2 p-2 bg-light rounded">
+                                                    @foreach (var prop in entry.Properties)
+                                                    {
+                                                        <div class="row mb-1">
+                                                            <div class="col-4">
+                                                                <small class="fw-medium">@prop.Key:</small>
+                                                            </div>
+                                                            <div class="col-8">
+                                                                <small class="text-muted">@prop.Value</small>
+                                                            </div>
+                                                        </div>
+                                                    }
+                                                </div>
+                                            </details>
+                                        </div>
+                                    }
+                                    @if (!string.IsNullOrEmpty(entry.Exception))
+                                    {
+                                        <div class="mt-2">
+                                            <details class="collapse-details">
+                                                <summary class="text-danger" style="cursor: pointer;">
+                                                    <small><i class="bi bi-exclamation-triangle me-1"></i>Exception Details</small>
+                                                </summary>
+                                                <div class="mt-2 p-2 bg-danger bg-opacity-10 rounded">
+                                                    <pre class="mb-0"><small>@entry.Exception</small></pre>
+                                                </div>
+                                            </details>
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
+                </div>
+                
+                @if (filteredLogEntries.Count > maxDisplayEntries)
+                {
+                    <div class="text-center p-3 border-top">
+                        <small class="text-muted">
+                            Showing last @maxDisplayEntries of @filteredLogEntries.Count entries
+                        </small>
+                        <button class="btn btn-sm btn-outline-primary ms-2" @onclick="LoadMoreEntries">
+                            Load More
+                        </button>
+                    </div>
+                }
+            }
+        </div>
+    </div>
+    @if (isConnected && !string.IsNullOrEmpty(SimulationId))
+    {
+        <div class="card-footer bg-transparent border-0 px-3 py-2">
+            <div class="d-flex justify-content-between align-items-center">
+                <small class="text-success">
+                    <i class="bi bi-circle-fill text-success me-1" style="font-size: 0.5rem;"></i>
+                    Live monitoring active
+                </small>
+                <small class="text-muted">
+                    @filteredLogEntries.Count entries
+                    @if (selectedLogLevel.HasValue)
+                    {
+                        <span>(filtered by @selectedLogLevel.Value)</span>
+                    }
+                </small>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .log-container {
+        font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        font-size: 0.875rem;
+        background-color: #f8f9fa;
+    }
+    
+    .log-entry-info {
+        background-color: rgba(13, 202, 240, 0.1);
+        border-left: 3px solid #0dcaf0;
+    }
+    
+    .log-entry-warning {
+        background-color: rgba(255, 193, 7, 0.1);
+        border-left: 3px solid #ffc107;
+    }
+    
+    .log-entry-error {
+        background-color: rgba(220, 53, 69, 0.1);
+        border-left: 3px solid #dc3545;
+    }
+    
+    .log-entry-debug {
+        background-color: rgba(108, 117, 125, 0.1);
+        border-left: 3px solid #6c757d;
+    }
+    
+    .collapse-details summary {
+        list-style: none;
+    }
+    
+    .collapse-details summary::-webkit-details-marker {
+        display: none;
+    }
+    
+    .collapse-details summary::before {
+        content: '▶ ';
+        transition: transform 0.2s;
+    }
+    
+    .collapse-details[open] summary::before {
+        transform: rotate(90deg);
+    }
+</style>
+
+@code {
+    [Parameter] public string? SimulationId { get; set; }
+    [Parameter] public int Height { get; set; } = 400;
+    [Parameter] public bool AutoConnect { get; set; } = true;
+
+    private List<LogEntry> logEntries = new();
+    private List<LogEntry> filteredLogEntries = new();
+    private LogLevel? selectedLogLevel = null;
+    private bool autoScroll = true;
+    private bool isConnected = false;
+    private int maxDisplayEntries = 100;
+    
+    private HubConnection? hubConnection;
+    private ElementReference logContainer;
+
+    public enum LogLevel
+    {
+        Debug,
+        Information,
+        Warning,
+        Error
+    }
+
+    public class LogEntry
+    {
+        public DateTime Timestamp { get; set; } = DateTime.Now;
+        public LogLevel Level { get; set; }
+        public string Message { get; set; } = string.Empty;
+        public string? Category { get; set; }
+        public string? Exception { get; set; }
+        public Dictionary<string, object>? Properties { get; set; }
+        public string? SimulationId { get; set; }
+        public int? RoundNumber { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (AutoConnect)
+        {
+            await ConnectToHub();
+        }
+        
+        // Load existing logs if SimulationId is provided
+        if (!string.IsNullOrEmpty(SimulationId))
+        {
+            await LoadSimulationLogs();
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(SimulationId) && hubConnection?.State == HubConnectionState.Connected)
+        {
+            // Join the simulation group for real-time updates
+            await hubConnection.InvokeAsync("JoinSimulation", SimulationId);
+            await LoadSimulationLogs();
+        }
+    }
+
+    private async Task ConnectToHub()
+    {
+        try
+        {
+            hubConnection = new HubConnectionBuilder()
+                .WithUrl("/simulationHub")
+                .Build();
+
+            // Set up event handlers for real-time log updates
+            hubConnection.On<RoundUpdate>("RoundUpdate", OnRoundUpdate);
+            hubConnection.On<SimulationUpdate>("SimulationUpdate", OnSimulationUpdate);
+            hubConnection.On<object>("SimulationError", OnSimulationError);
+
+            await hubConnection.StartAsync();
+            isConnected = true;
+            
+            Logger.LogInformation("Connected to SignalR hub for log monitoring");
+            
+            if (!string.IsNullOrEmpty(SimulationId))
+            {
+                await hubConnection.InvokeAsync("JoinSimulation", SimulationId);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to connect to SignalR hub");
+            isConnected = false;
+        }
+    }
+
+    private async Task LoadSimulationLogs()
+    {
+        try
+        {
+            if (string.IsNullOrEmpty(SimulationId)) return;
+
+            // Load simulation and generate initial log entries
+            var simulation = await SimulationService.GetSimulationAsync(Guid.Parse(SimulationId));
+            if (simulation == null) return;
+
+            var initialEntries = new List<LogEntry>
+            {
+                new()
+                {
+                    Timestamp = simulation.CreatedAt,
+                    Level = LogLevel.Information,
+                    Message = $"Simulation '{simulation.Name}' created",
+                    Category = "Simulation Lifecycle",
+                    Properties = new Dictionary<string, object>
+                    {
+                        ["Algorithm"] = simulation.ConsensusAlgorithm.ToString(),
+                        ["NodeCount"] = simulation.NodeCount,
+                        ["ByzantineNodes"] = simulation.ByzantineNodeCount,
+                        ["Duration"] = $"{simulation.DurationSeconds}s"
+                    }
+                }
+            };
+
+            if (simulation.StartedAt.HasValue)
+            {
+                initialEntries.Add(new LogEntry
+                {
+                    Timestamp = simulation.StartedAt.Value,
+                    Level = LogLevel.Information,
+                    Message = "Simulation started",
+                    Category = "Simulation Lifecycle"
+                });
+            }
+
+            if (simulation.CompletedAt.HasValue)
+            {
+                initialEntries.Add(new LogEntry
+                {
+                    Timestamp = simulation.CompletedAt.Value,
+                    Level = LogLevel.Information,
+                    Message = $"Simulation completed with status: {simulation.Status}",
+                    Category = "Simulation Lifecycle",
+                    Properties = new Dictionary<string, object>
+                    {
+                        ["TotalRounds"] = simulation.ConsensusRounds?.Count ?? 0,
+                        ["Duration"] = simulation.GetDuration()?.ToString(@"mm\:ss") ?? "Unknown"
+                    }
+                });
+            }
+
+            // Add round-specific log entries
+            if (simulation.ConsensusRounds?.Any() == true)
+            {
+                foreach (var round in simulation.ConsensusRounds.OrderBy(r => r.StartedAt))
+                {
+                    initialEntries.Add(new LogEntry
+                    {
+                        Timestamp = round.StartedAt,
+                        Level = LogLevel.Debug,
+                        Message = $"Round {round.RoundNumber} started",
+                        Category = "Consensus Round",
+                        RoundNumber = (int?)round.RoundNumber,
+                        Properties = new Dictionary<string, object>
+                        {
+                            ["LeaderNodeId"] = round.LeaderId?.ToString() ?? "Not selected",
+                            ["Algorithm"] = round.Algorithm.ToString()
+                        }
+                    });
+
+                    if (round.CompletedAt.HasValue)
+                    {
+                        var duration = round.CompletedAt.Value - round.StartedAt;
+                        var level = round.Status == ConsensusRoundStatus.Completed ? LogLevel.Information : LogLevel.Warning;
+                        
+                        initialEntries.Add(new LogEntry
+                        {
+                            Timestamp = round.CompletedAt.Value,
+                            Level = level,
+                            Message = $"Round {round.RoundNumber} {round.Status.ToString().ToLower()}",
+                            Category = "Consensus Round",
+                            RoundNumber = (int?)round.RoundNumber,
+                            Properties = new Dictionary<string, object>
+                            {
+                                ["Duration"] = $"{duration.TotalMilliseconds:F0}ms",
+                                ["Status"] = round.Status.ToString(),
+                                ["Value"] = round.AgreedValue?.ToString() ?? "None"
+                            }
+                        });
+                    }
+                }
+            }
+
+            logEntries.AddRange(initialEntries.OrderBy(e => e.Timestamp));
+            FilterLogEntries();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load simulation logs for {SimulationId}", SimulationId);
+            AddLogEntry(LogLevel.Error, $"Failed to load simulation logs: {ex.Message}");
+        }
+    }
+
+    private void OnRoundUpdate(RoundUpdate update)
+    {
+        var message = update.Status switch
+        {
+            RoundStatus.Starting => $"Round {update.RoundNumber} starting",
+            RoundStatus.InProgress => $"Round {update.RoundNumber} in progress",
+            RoundStatus.Completed => $"Round {update.RoundNumber} completed by node {update.LeaderNodeId}",
+            RoundStatus.Failed => $"Round {update.RoundNumber} failed",
+            _ => $"Round {update.RoundNumber} status: {update.Status}"
+        };
+
+        var level = update.Status == RoundStatus.Failed ? LogLevel.Error : LogLevel.Information;
+        
+        AddLogEntry(level, message, "Consensus Round", new Dictionary<string, object>
+        {
+            ["RoundNumber"] = update.RoundNumber,
+            ["Status"] = update.Status.ToString(),
+            ["LeaderNodeId"] = update.LeaderNodeId?.ToString() ?? "None",
+            ["Timestamp"] = update.Timestamp.ToString("HH:mm:ss.fff")
+        }, (int?)update.RoundNumber);
+    }
+
+    private void OnSimulationUpdate(SimulationUpdate update)
+    {
+        var message = update.Status switch
+        {
+            SimulationStatus.Starting => "Simulation is starting",
+            SimulationStatus.Running => $"Simulation running - Round {update.CurrentRound}",
+            SimulationStatus.Paused => "Simulation paused",
+            SimulationStatus.Completed => "Simulation completed successfully",
+            SimulationStatus.Failed => "Simulation failed",
+            SimulationStatus.Stopped => "Simulation stopped",
+            _ => $"Simulation status: {update.Status}"
+        };
+
+        var level = update.Status == SimulationStatus.Failed ? LogLevel.Error : LogLevel.Information;
+        
+        var properties = new Dictionary<string, object>
+        {
+            ["Status"] = update.Status.ToString(),
+            ["CurrentRound"] = update.CurrentRound,
+            ["TotalRounds"] = update.TotalRounds
+        };
+
+        properties["ElapsedTime"] = update.ElapsedTime.ToString(@"mm\:ss");
+
+        AddLogEntry(level, message, "Simulation Status", properties);
+    }
+
+    private void OnSimulationError(object errorData)
+    {
+        // Handle simulation errors (would need to define the error structure)
+        AddLogEntry(LogLevel.Error, "Simulation error occurred", "Error");
+    }
+
+    private void AddLogEntry(LogLevel level, string message, string? category = null, 
+                           Dictionary<string, object>? properties = null, int? roundNumber = null)
+    {
+        var entry = new LogEntry
+        {
+            Timestamp = DateTime.Now,
+            Level = level,
+            Message = message,
+            Category = category,
+            Properties = properties,
+            SimulationId = SimulationId,
+            RoundNumber = roundNumber
+        };
+
+        logEntries.Add(entry);
+        
+        // Keep only the last 1000 entries to prevent memory issues
+        if (logEntries.Count > 1000)
+        {
+            logEntries.RemoveRange(0, logEntries.Count - 1000);
+        }
+
+        FilterLogEntries();
+        StateHasChanged();
+
+        // Auto-scroll to bottom if enabled
+        if (autoScroll)
+        {
+            InvokeAsync(async () =>
+            {
+                await Task.Delay(50); // Small delay to ensure rendering
+                await ScrollToBottom();
+            });
+        }
+    }
+
+    private void FilterLogEntries()
+    {
+        filteredLogEntries = selectedLogLevel.HasValue
+            ? logEntries.Where(e => e.Level == selectedLogLevel.Value).ToList()
+            : logEntries.ToList();
+    }
+
+    private void FilterByLevel(LogLevel? level)
+    {
+        selectedLogLevel = level;
+        FilterLogEntries();
+        StateHasChanged();
+    }
+
+    private void ToggleAutoScroll()
+    {
+        autoScroll = !autoScroll;
+    }
+
+    private void ClearLog()
+    {
+        logEntries.Clear();
+        FilterLogEntries();
+        StateHasChanged();
+    }
+
+    private async Task ExportLog()
+    {
+        try
+        {
+            var logText = string.Join("\n", filteredLogEntries.Select(e => 
+                $"[{e.Timestamp:yyyy-MM-dd HH:mm:ss.fff}] {e.Level.ToString().ToUpper()}: {e.Message}"));
+                
+            var fileName = $"simulation-log-{SimulationId?[..8] ?? "all"}-{DateTime.Now:yyyyMMdd-HHmmss}.txt";
+            
+            await JSRuntime.InvokeVoidAsync("downloadTextFile", fileName, logText);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to export log");
+            await JSRuntime.InvokeVoidAsync("alert", "Failed to export log");
+        }
+    }
+
+    private void LoadMoreEntries()
+    {
+        maxDisplayEntries += 50;
+        StateHasChanged();
+    }
+
+    private async Task ScrollToBottom()
+    {
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("scrollToBottom", logContainer);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Failed to auto-scroll log container");
+        }
+    }
+
+    private static string GetLogLevelIcon(LogLevel level)
+    {
+        return level switch
+        {
+            LogLevel.Debug => "bi-bug",
+            LogLevel.Information => "bi-info-circle",
+            LogLevel.Warning => "bi-exclamation-triangle",
+            LogLevel.Error => "bi-x-circle",
+            _ => "bi-circle"
+        };
+    }
+
+    private static string GetLogLevelBadgeClass(LogLevel level)
+    {
+        return level switch
+        {
+            LogLevel.Debug => "bg-secondary",
+            LogLevel.Information => "bg-info",
+            LogLevel.Warning => "bg-warning",
+            LogLevel.Error => "bg-danger",
+            _ => "bg-secondary"
+        };
+    }
+
+    private static string GetLogEntryClass(LogLevel level)
+    {
+        return level switch
+        {
+            LogLevel.Information => "log-entry-info",
+            LogLevel.Warning => "log-entry-warning",
+            LogLevel.Error => "log-entry-error",
+            LogLevel.Debug => "log-entry-debug",
+            _ => ""
+        };
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (hubConnection is not null)
+        {
+            await hubConnection.DisposeAsync();
+        }
+    }
+}

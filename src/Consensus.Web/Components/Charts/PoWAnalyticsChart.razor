@@ -1,0 +1,425 @@
+@using Consensus.Core.Entities
+@using Consensus.Core.Enums
+@using Consensus.Core.Models
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@inject IJSRuntime JSRuntime
+
+<div class="analytics-chart">
+    <div class="chart-header">
+        <h6 class="chart-title">
+            <i class="fas fa-hammer"></i>
+            Proof of Work Mining Analytics
+        </h6>
+        <div class="chart-controls">
+            <button class="btn btn-sm btn-outline-primary" @onclick="RefreshChart">
+                <i class="fas fa-sync-alt"></i> Refresh
+            </button>
+        </div>
+    </div>
+
+    <div class="chart-content">
+        @if (IsLoading)
+        {
+            <div class="text-center p-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading mining analytics...</span>
+                </div>
+                <p class="mt-2">Analyzing mining performance...</p>
+            </div>
+        }
+        else if (HasError)
+        {
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle"></i>
+                Failed to load mining analytics. Please try again.
+            </div>
+        }
+        else
+        {
+            <div class="row">
+                <!-- Mining Performance Chart -->
+                <div class="col-lg-8">
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6>Mining Performance Over Time</h6>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="mining-performance-chart" width="800" height="400"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mining Statistics -->
+                <div class="col-lg-4">
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6>Mining Statistics</h6>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-6">
+                                    <div class="stat-item">
+                                        <div class="stat-value">@TotalBlocks</div>
+                                        <div class="stat-label">Blocks Mined</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="stat-item">
+                                        <div class="stat-value">@AverageMiningTime.ToString("F1")s</div>
+                                        <div class="stat-label">Avg Mining Time</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="stat-item">
+                                        <div class="stat-value">@CurrentDifficulty</div>
+                                        <div class="stat-label">Difficulty</div>
+                                    </div>
+                                </div>
+                                <div class="col-6">
+                                    <div class="stat-item">
+                                        <div class="stat-value">@MiningEfficiency.ToString("P1")</div>
+                                        <div class="stat-label">Efficiency</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Hashrate Distribution -->
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6>Hashrate Distribution</h6>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="hashrate-distribution-chart" width="400" height="300"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <!-- Mining Timeline -->
+                <div class="col-lg-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h6>Mining Events Timeline</h6>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="mining-timeline-chart" width="1200" height="200"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public Guid SimulationRunId { get; set; }
+    [Parameter] public EventCallback OnDataRequested { get; set; }
+
+    private bool IsLoading { get; set; } = true;
+    private bool HasError { get; set; } = false;
+
+    // Mining statistics
+    private int TotalBlocks { get; set; }
+    private double AverageMiningTime { get; set; }
+    private int CurrentDifficulty { get; set; }
+    private double MiningEfficiency { get; set; }
+
+    // Chart data
+    private List<MiningPerformanceData> MiningData { get; set; } = new();
+    private Dictionary<string, int> HashrateData { get; set; } = new();
+    private List<MiningEventData> TimelineData { get; set; } = new();
+
+    private IJSObjectReference? chartModule;
+    private IJSObjectReference? performanceChart;
+    private IJSObjectReference? distributionChart;
+    private IJSObjectReference? timelineChart;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadChartModule();
+        await LoadMiningAnalytics();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (SimulationRunId != Guid.Empty)
+        {
+            await LoadMiningAnalytics();
+        }
+    }
+
+    private async Task LoadChartModule()
+    {
+        try
+        {
+            chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/charts.js");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to load chart module: {ex.Message}");
+        }
+    }
+
+    private async Task LoadMiningAnalytics()
+    {
+        if (SimulationRunId == Guid.Empty) return;
+
+        IsLoading = true;
+        HasError = false;
+        StateHasChanged();
+
+        try
+        {
+            // Simulate loading PoW analytics data
+            await Task.Delay(500); // Simulate API call
+
+            // Generate sample data for demonstration
+            GenerateSampleMiningData();
+
+            await CreateCharts();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading mining analytics: {ex.Message}");
+            HasError = true;
+        }
+        finally
+        {
+            IsLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void GenerateSampleMiningData()
+    {
+        var random = new Random();
+        
+        // Generate mining performance data
+        MiningData.Clear();
+        for (int i = 0; i < 50; i++)
+        {
+            MiningData.Add(new MiningPerformanceData
+            {
+                Round = i + 1,
+                MiningTime = 3000 + random.Next(-1000, 2000), // 2-5 seconds
+                Difficulty = 4 + (i / 10), // Increasing difficulty
+                HashesPerSecond = 1000 + random.Next(-200, 500),
+                Success = random.NextDouble() > 0.1 // 90% success rate
+            });
+        }
+
+        // Generate hashrate distribution
+        HashrateData = new Dictionary<string, int>
+        {
+            { "Node-1", 1500 },
+            { "Node-2", 1200 },
+            { "Node-3", 1800 },
+            { "Node-4", 900 },
+            { "Node-5", 1100 }
+        };
+
+        // Generate timeline events
+        TimelineData.Clear();
+        var startTime = DateTime.UtcNow.AddMinutes(-30);
+        for (int i = 0; i < 20; i++)
+        {
+            TimelineData.Add(new MiningEventData
+            {
+                Timestamp = startTime.AddMinutes(i * 1.5),
+                EventType = random.NextDouble() > 0.8 ? "Difficulty Adjustment" : "Block Mined",
+                MinerId = $"Node-{random.Next(1, 6)}",
+                BlockNumber = i + 1,
+                HashRate = 1000 + random.Next(-300, 700)
+            });
+        }
+
+        // Calculate statistics
+        TotalBlocks = MiningData.Count(m => m.Success);
+        AverageMiningTime = MiningData.Where(m => m.Success).Average(m => m.MiningTime) / 1000.0;
+        CurrentDifficulty = MiningData.LastOrDefault()?.Difficulty ?? 4;
+        MiningEfficiency = MiningData.Count(m => m.Success) / (double)MiningData.Count;
+    }
+
+    private async Task CreateCharts()
+    {
+        if (chartModule == null) return;
+
+        try
+        {
+            // Create mining performance chart
+            var performanceLabels = MiningData.Select(m => m.Round.ToString()).ToArray();
+            var miningTimes = MiningData.Select(m => m.MiningTime / 1000.0).ToArray();
+            var difficulties = MiningData.Select(m => m.Difficulty).ToArray();
+
+            performanceChart = await chartModule.InvokeAsync<IJSObjectReference>("createMiningPerformanceChart",
+                "mining-performance-chart", performanceLabels, miningTimes, difficulties);
+
+            // Create hashrate distribution chart
+            var hashrateLabels = HashrateData.Keys.ToArray();
+            var hashrateValues = HashrateData.Values.ToArray();
+
+            distributionChart = await chartModule.InvokeAsync<IJSObjectReference>("createHashrateDistributionChart",
+                "hashrate-distribution-chart", hashrateLabels, hashrateValues);
+
+            // Create mining timeline chart
+            var timelineLabels = TimelineData.Select(t => t.Timestamp.ToString("HH:mm")).ToArray();
+            var blockNumbers = TimelineData.Select(t => t.BlockNumber).ToArray();
+
+            timelineChart = await chartModule.InvokeAsync<IJSObjectReference>("createMiningTimelineChart",
+                "mining-timeline-chart", timelineLabels, blockNumbers);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error creating charts: {ex.Message}");
+        }
+    }
+
+    private async Task RefreshChart()
+    {
+        await OnDataRequested.InvokeAsync();
+        await LoadMiningAnalytics();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (performanceChart != null)
+        {
+            await performanceChart.InvokeVoidAsync("destroy");
+            await performanceChart.DisposeAsync();
+        }
+
+        if (distributionChart != null)
+        {
+            await distributionChart.InvokeVoidAsync("destroy");
+            await distributionChart.DisposeAsync();
+        }
+
+        if (timelineChart != null)
+        {
+            await timelineChart.InvokeVoidAsync("destroy");
+            await timelineChart.DisposeAsync();
+        }
+
+        if (chartModule != null)
+        {
+            await chartModule.DisposeAsync();
+        }
+    }
+
+    // Data models for mining analytics
+    private class MiningPerformanceData
+    {
+        public int Round { get; set; }
+        public double MiningTime { get; set; }
+        public int Difficulty { get; set; }
+        public int HashesPerSecond { get; set; }
+        public bool Success { get; set; }
+    }
+
+    private class MiningEventData
+    {
+        public DateTime Timestamp { get; set; }
+        public string EventType { get; set; } = string.Empty;
+        public string MinerId { get; set; } = string.Empty;
+        public int BlockNumber { get; set; }
+        public int HashRate { get; set; }
+    }
+}
+
+<style>
+    .analytics-chart {
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        background: white;
+        overflow: hidden;
+    }
+
+    .chart-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: white;
+        padding: 1rem;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .chart-title {
+        margin: 0;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .chart-controls .btn {
+        background: rgba(255,255,255,0.2);
+        border: 1px solid rgba(255,255,255,0.3);
+        color: white;
+        border-radius: 4px;
+    }
+
+    .chart-controls .btn:hover {
+        background: rgba(255,255,255,0.3);
+        border-color: rgba(255,255,255,0.5);
+    }
+
+    .chart-content {
+        padding: 1.5rem;
+    }
+
+    .stat-item {
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+
+    .stat-value {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #667eea;
+        line-height: 1.2;
+    }
+
+    .stat-label {
+        font-size: 0.8rem;
+        color: #6c757d;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .card {
+        border: 1px solid #e9ecef;
+        border-radius: 8px;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+
+    .card-header {
+        background: #f8f9fa;
+        border-bottom: 1px solid #e9ecef;
+        padding: 0.75rem 1rem;
+    }
+
+    .card-header h6 {
+        margin: 0;
+        font-weight: 600;
+        color: #495057;
+    }
+
+    canvas {
+        max-width: 100%;
+        height: auto;
+    }
+
+    .alert {
+        border-radius: 6px;
+        margin: 1rem 0;
+    }
+
+    .spinner-border {
+        width: 2rem;
+        height: 2rem;
+    }
+</style>

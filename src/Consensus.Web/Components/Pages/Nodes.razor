@@ -1,7 +1,9 @@
 @page "/nodes"
 @using Consensus.Core.Entities
 @using Consensus.Core.Enums
+@using Microsoft.AspNetCore.Authorization
 @inject IJSRuntime JSRuntime
+@attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
 <PageTitle>Node Management - Consensus Simulator</PageTitle>
 

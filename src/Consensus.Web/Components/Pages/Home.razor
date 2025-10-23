@@ -1,7 +1,9 @@
 ﻿@page "/"
 @using Consensus.Core.Entities
 @using Consensus.Core.Enums
+@rendermode InteractiveServer
 @inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
 
 <PageTitle>Dashboard - Consensus Simulator</PageTitle>
 
@@ -240,26 +242,26 @@
 
     private async Task StartNewSimulation()
     {
-        await JSRuntime.InvokeVoidAsync("alert", "Starting new simulation... (Feature coming soon!)");
-        // TODO: Navigate to simulation setup page
+        // Navigate to simulation setup page
+        Navigation.NavigateTo("/simulations");
     }
 
     private async Task ManageNodes()
     {
-        // TODO: Navigate to nodes page
-        await JSRuntime.InvokeVoidAsync("window.location.href", "/nodes");
+        // Navigate to nodes page
+        Navigation.NavigateTo("/nodes");
     }
 
     private async Task ViewBlocks()
     {
-        // TODO: Navigate to blocks page
-        await JSRuntime.InvokeVoidAsync("window.location.href", "/blocks");
+        // Navigate to blocks page
+        Navigation.NavigateTo("/blocks");
     }
 
     private async Task ViewAnalytics()
     {
-        // TODO: Navigate to analytics page
-        await JSRuntime.InvokeVoidAsync("window.location.href", "/analytics");
+        // Navigate to analytics page
+        Navigation.NavigateTo("/analytics");
     }
 
     private async Task ViewSimulation(Guid simulationId)

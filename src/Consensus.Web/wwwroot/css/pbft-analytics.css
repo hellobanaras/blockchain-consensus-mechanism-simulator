@@ -1,0 +1,408 @@
+/* PBFT Analytics Chart Styles */
+.pbft-analytics-container {
+    padding: 1rem;
+}
+
+.chart-card {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    border: 1px solid #e9ecef;
+    transition: box-shadow 0.3s ease;
+}
+
+.chart-card:hover {
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
+}
+
+.chart-header {
+    padding: 1rem 1.5rem;
+    background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+    color: white;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid #dee2e6;
+}
+
+.chart-title {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+}
+
+.chart-title i {
+    opacity: 0.9;
+}
+
+.chart-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.chart-body {
+    padding: 1.5rem;
+    position: relative;
+    min-height: 300px;
+}
+
+/* Phase Legend */
+.phase-legend {
+    display: flex;
+    justify-content: center;
+    gap: 1.5rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.legend-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+}
+
+.pre-prepare .legend-color {
+    background: rgba(255, 99, 132, 1);
+}
+
+.prepare .legend-color {
+    background: rgba(54, 162, 235, 1);
+}
+
+.commit .legend-color {
+    background: rgba(75, 192, 192, 1);
+}
+
+.view-change .legend-color {
+    background: rgba(255, 159, 64, 1);
+}
+
+/* View Status */
+.view-display {
+    margin-bottom: 1.5rem;
+}
+
+.view-number {
+    font-size: 3rem;
+    font-weight: 700;
+    color: #dc3545;
+    line-height: 1;
+}
+
+.view-label {
+    color: #6c757d;
+    font-size: 0.875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 0.25rem;
+}
+
+.primary-info {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+}
+
+.primary-node {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+.sequence-info {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.view-stats .stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.view-stats .stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+/* Message Stats */
+.message-stats {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+}
+
+.message-stats .stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #495057;
+    line-height: 1;
+}
+
+.message-stats .stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+/* Fault Stats */
+.fault-stats {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+}
+
+.fault-stats .stat-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.fault-stats .stat-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+/* Safety Indicators */
+.safety-indicators {
+    padding: 1rem;
+}
+
+.indicator-card {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid #e9ecef;
+    transition: background-color 0.3s ease;
+}
+
+.indicator-card:hover {
+    background: #e9ecef;
+}
+
+.indicator-icon {
+    font-size: 1.5rem;
+    width: 40px;
+    text-align: center;
+}
+
+.indicator-content {
+    flex: 1;
+}
+
+.indicator-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    line-height: 1;
+    color: #495057;
+}
+
+.indicator-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+/* Latency Stats */
+.latency-stats {
+    padding: 1rem;
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+}
+
+.latency-stats .stat-value {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #495057;
+    line-height: 1;
+}
+
+.latency-stats .stat-label {
+    font-size: 0.7rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+/* Button Groups */
+.btn-group .btn-check:checked + .btn {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
+
+.btn-outline-danger:hover {
+    background-color: #dc3545;
+    border-color: #dc3545;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .pbft-analytics-container {
+        padding: 0.5rem;
+    }
+    
+    .chart-header {
+        padding: 0.75rem 1rem;
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: stretch;
+    }
+    
+    .chart-actions {
+        justify-content: center;
+    }
+    
+    .chart-body {
+        padding: 1rem;
+    }
+    
+    .phase-legend {
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    
+    .view-number {
+        font-size: 2.5rem;
+    }
+    
+    .primary-info {
+        padding: 0.75rem;
+    }
+    
+    .indicator-card {
+        padding: 0.75rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .chart-title {
+        font-size: 1rem;
+    }
+    
+    .view-number {
+        font-size: 2rem;
+    }
+    
+    .phase-legend {
+        flex-direction: column;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    
+    .btn-group {
+        width: 100%;
+    }
+    
+    .btn-group .btn {
+        font-size: 0.8rem;
+    }
+}
+
+/* Animation for real-time updates */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+.chart-card.updating {
+    animation: pulse 0.5s ease-in-out;
+}
+
+/* Status colors */
+.text-danger {
+    color: #dc3545 !important;
+}
+
+.text-warning {
+    color: #ffc107 !important;
+}
+
+.text-success {
+    color: #28a745 !important;
+}
+
+.text-info {
+    color: #17a2b8 !important;
+}
+
+/* Loading state */
+.chart-body.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+}
+
+.chart-body.loading::before {
+    content: '';
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #dc3545;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Chart canvas styling */
+canvas {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Error state */
+.chart-error {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+    color: #dc3545;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.chart-error i {
+    font-size: 2rem;
+    opacity: 0.5;
+}
+
+.chart-error .error-message {
+    font-size: 0.9rem;
+    text-align: center;
+}

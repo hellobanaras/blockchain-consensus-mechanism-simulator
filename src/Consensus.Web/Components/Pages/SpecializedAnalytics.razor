@@ -1,0 +1,499 @@
+@page "/specialized-analytics"
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Web
+@using Consensus.Web.Components.Charts
+@inject NavigationManager Navigation
+
+<link href="~/css/specialized-analytics.css" rel="stylesheet" />
+<link href="~/css/pbft-analytics.css" rel="stylesheet" />
+
+<div class="page-title-container" style="display: none;">Specialized Consensus Analytics</div>
+
+<div class="specialized-analytics-page">
+    <!-- Header Section -->
+    <div class="page-header mb-4">
+        <div class="row align-items-center">
+            <div class="col">
+                <h2 class="page-title mb-1">
+                    <i class="fas fa-microscope me-2"></i>
+                    Specialized Consensus Analytics
+                </h2>
+                <p class="page-subtitle mb-0">
+                    Deep dive analysis for specific consensus mechanisms and their unique characteristics
+                </p>
+            </div>
+            <div class="col-auto">
+                <div class="btn-group" role="group">
+                    <button class="btn btn-outline-primary" @onclick="() => NavigateToMainDashboard()">
+                        <i class="fas fa-arrow-left me-1"></i>
+                        Main Dashboard
+                    </button>
+                    <button class="btn btn-outline-secondary dropdown-toggle" data-bs-toggle="dropdown">
+                        <i class="fas fa-cog me-1"></i>
+                        Settings
+                    </button>
+                    <ul class="dropdown-menu">
+                        <li>
+                            <label class="dropdown-item">
+                                <input type="checkbox" @bind="enableRealTimeUpdates" class="form-check-input me-2">
+                                Real-time Updates
+                            </label>
+                        </li>
+                        <li>
+                            <label class="dropdown-item">
+                                <input type="checkbox" @bind="enableAutoRefresh" class="form-check-input me-2">
+                                Auto Refresh (30s)
+                            </label>
+                        </li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item" href="#" @onclick="ExportAllData">
+                                <i class="fas fa-download me-2"></i>
+                                Export All Data
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Consensus Mechanism Selector -->
+    <div class="consensus-selector mb-4">
+        <div class="card">
+            <div class="card-body py-3">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <h6 class="card-title mb-2">Select Consensus Mechanism</h6>
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="consensusType" id="poet" value="poet" 
+                                   checked="@(selectedConsensus == "poet")" @onchange="OnConsensusChanged">
+                            <label class="btn btn-outline-info" for="poet">
+                                <i class="fas fa-clock me-1"></i>
+                                Proof of Elapsed Time
+                            </label>
+
+                            <input type="radio" class="btn-check" name="consensusType" id="pos" value="pos" 
+                                   checked="@(selectedConsensus == "pos")" @onchange="OnConsensusChanged">
+                            <label class="btn btn-outline-success" for="pos">
+                                <i class="fas fa-coins me-1"></i>
+                                Proof of Stake
+                            </label>
+
+                            <input type="radio" class="btn-check" name="consensusType" id="dpos" value="dpos" 
+                                   checked="@(selectedConsensus == "dpos")" @onchange="OnConsensusChanged">
+                            <label class="btn btn-outline-primary" for="dpos">
+                                <i class="fas fa-users-crown me-1"></i>
+                                Delegated PoS
+                            </label>
+
+                            <input type="radio" class="btn-check" name="consensusType" id="pbft" value="pbft" 
+                                   checked="@(selectedConsensus == "pbft")" @onchange="OnConsensusChanged">
+                            <label class="btn btn-outline-danger" for="pbft">
+                                <i class="fas fa-shield-alt me-1"></i>
+                                PBFT
+                            </label>
+
+                            <input type="radio" class="btn-check" name="consensusType" id="comparison" value="comparison" 
+                                   checked="@(selectedConsensus == "comparison")" @onchange="OnConsensusChanged">
+                            <label class="btn btn-outline-warning" for="comparison">
+                                <i class="fas fa-balance-scale me-1"></i>
+                                Comparison View
+                            </label>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="consensus-info">
+                            @if (selectedConsensus == "poet")
+                            {
+                                <div class="info-card poet-info">
+                                    <div class="info-icon">
+                                        <i class="fas fa-clock"></i>
+                                    </div>
+                                    <div class="info-content">
+                                        <div class="info-title">Proof of Elapsed Time (PoET)</div>
+                                        <div class="info-description">
+                                            Analyzes wait times, fairness metrics, and timer distribution patterns
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else if (selectedConsensus == "pos")
+                            {
+                                <div class="info-card pos-info">
+                                    <div class="info-icon">
+                                        <i class="fas fa-coins"></i>
+                                    </div>
+                                    <div class="info-content">
+                                        <div class="info-title">Proof of Stake (PoS)</div>
+                                        <div class="info-description">
+                                            Examines stake distribution, delegation patterns, and centralization metrics
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else if (selectedConsensus == "dpos")
+                            {
+                                <div class="info-card dpos-info">
+                                    <div class="info-icon">
+                                        <i class="fas fa-users-crown"></i>
+                                    </div>
+                                    <div class="info-content">
+                                        <div class="info-title">Delegated Proof of Stake (DPoS)</div>
+                                        <div class="info-description">
+                                            Analyzes witness performance, delegation patterns, and democratic governance metrics
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else if (selectedConsensus == "pbft")
+                            {
+                                <div class="info-card pbft-info">
+                                    <div class="info-icon">
+                                        <i class="fas fa-shield-alt"></i>
+                                    </div>
+                                    <div class="info-content">
+                                        <div class="info-title">Practical Byzantine Fault Tolerance (PBFT)</div>
+                                        <div class="info-description">
+                                            Monitors phase progression, view changes, message flow, and Byzantine fault detection
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="info-card comparison-info">
+                                    <div class="info-icon">
+                                        <i class="fas fa-balance-scale"></i>
+                                    </div>
+                                    <div class="info-content">
+                                        <div class="info-title">Consensus Comparison</div>
+                                        <div class="info-description">
+                                            Side-by-side analysis of different consensus mechanisms
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Analytics Content -->
+    <div class="analytics-content">
+        @if (selectedConsensus == "poet")
+        {
+            <!-- PoET Analytics -->
+            <div class="consensus-analytics poet-analytics">
+                <div class="section-header mb-3">
+                    <h4 class="section-title">
+                        <i class="fas fa-clock me-2"></i>
+                        Proof of Elapsed Time Analytics
+                    </h4>
+                    <p class="section-subtitle">
+                        Detailed analysis of PoET consensus mechanism performance and fairness
+                    </p>
+                </div>
+                
+                <PoETAnalyticsChart 
+                    EnableRealTimeUpdates="@enableRealTimeUpdates"
+                    OnDataExported="@HandleDataExported" />
+            </div>
+        }
+        else if (selectedConsensus == "pos")
+        {
+            <!-- PoS Analytics -->
+            <div class="consensus-analytics pos-analytics">
+                <div class="section-header mb-3">
+                    <h4 class="section-title">
+                        <i class="fas fa-coins me-2"></i>
+                        Proof of Stake Analytics
+                    </h4>
+                    <p class="section-subtitle">
+                        Comprehensive analysis of PoS consensus including stake distribution and delegation patterns
+                    </p>
+                </div>
+                
+                <PoSAnalyticsChart 
+                    EnableRealTimeUpdates="@enableRealTimeUpdates"
+                    OnDataExported="@HandleDataExported" />
+            </div>
+        }
+        else if (selectedConsensus == "dpos")
+        {
+            <!-- DPoS Analytics -->
+            <div class="consensus-analytics dpos-analytics">
+                <div class="section-header mb-3">
+                    <h4 class="section-title">
+                        <i class="fas fa-users-crown me-2"></i>
+                        Delegated Proof of Stake Analytics
+                    </h4>
+                    <p class="section-subtitle">
+                        Detailed analysis of witness performance, delegation patterns, and governance metrics
+                    </p>
+                </div>
+                
+                <DposAnalyticsChart 
+                    SimulationId="@selectedSimulationId"
+                    OnExportRequest="@HandleDataExported" />
+            </div>
+        }
+        else if (selectedConsensus == "pbft")
+        {
+            <!-- PBFT Analytics -->
+            <div class="consensus-analytics pbft-analytics">
+                <div class="section-header mb-3">
+                    <h4 class="section-title">
+                        <i class="fas fa-shield-alt me-2"></i>
+                        Practical Byzantine Fault Tolerance Analytics
+                    </h4>
+                    <p class="section-subtitle">
+                        Comprehensive analysis of PBFT consensus including phase progression, view changes, and Byzantine fault monitoring
+                    </p>
+                </div>
+                
+                <PbftAnalyticsChart 
+                    SimulationId="@(selectedSimulationId?.ToString() ?? "default")" 
+                    OnExportData="@HandleDataExported" />
+            </div>
+        }
+        else if (selectedConsensus == "comparison")
+        {
+            <!-- Comparison View -->
+            <div class="consensus-analytics comparison-analytics">
+                <div class="section-header mb-3">
+                    <h4 class="section-title">
+                        <i class="fas fa-balance-scale me-2"></i>
+                        Consensus Mechanism Comparison
+                    </h4>
+                    <p class="section-subtitle">
+                        Side-by-side analysis and performance comparison between different consensus mechanisms
+                    </p>
+                </div>
+
+                <!-- Comparison Metrics Overview -->
+                <div class="comparison-overview mb-4">
+                    <div class="row g-4">
+                        <div class="col-md-4">
+                            <div class="metric-comparison-card">
+                                <h6 class="metric-title">Performance Metrics</h6>
+                                <div class="comparison-table">
+                                    <div class="comparison-row">
+                                        <span class="metric-name">Throughput</span>
+                                        <span class="poet-value">~250 TPS</span>
+                                        <span class="pos-value">~500 TPS</span>
+                                    </div>
+                                    <div class="comparison-row">
+                                        <span class="metric-name">Latency</span>
+                                        <span class="poet-value">~2-4s</span>
+                                        <span class="pos-value">~1-2s</span>
+                                    </div>
+                                    <div class="comparison-row">
+                                        <span class="metric-name">Energy</span>
+                                        <span class="poet-value">Low</span>
+                                        <span class="pos-value">Very Low</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="metric-comparison-card">
+                                <h6 class="metric-title">Security & Decentralization</h6>
+                                <div class="comparison-table">
+                                    <div class="comparison-row">
+                                        <span class="metric-name">Nakamoto Coefficient</span>
+                                        <span class="poet-value">15-25</span>
+                                        <span class="pos-value">8-12</span>
+                                    </div>
+                                    <div class="comparison-row">
+                                        <span class="metric-name">Entry Barrier</span>
+                                        <span class="poet-value">Hardware</span>
+                                        <span class="pos-value">Capital</span>
+                                    </div>
+                                    <div class="comparison-row">
+                                        <span class="metric-name">Finality</span>
+                                        <span class="poet-value">Probabilistic</span>
+                                        <span class="pos-value">Economic</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="metric-comparison-card">
+                                <h6 class="metric-title">Fairness & Governance</h6>
+                                <div class="comparison-table">
+                                    <div class="comparison-row">
+                                        <span class="metric-name">Fairness Index</span>
+                                        <span class="poet-value">0.92</span>
+                                        <span class="pos-value">0.76</span>
+                                    </div>
+                                    <div class="comparison-row">
+                                        <span class="metric-name">Governance</span>
+                                        <span class="poet-value">Democratic</span>
+                                        <span class="pos-value">Plutocratic</span>
+                                    </div>
+                                    <div class="comparison-row">
+                                        <span class="metric-name">Scalability</span>
+                                        <span class="poet-value">Moderate</span>
+                                        <span class="pos-value">High</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Side-by-Side Analytics -->
+                <div class="row g-4">
+                    <div class="col-lg-3">
+                        <div class="comparison-section">
+                            <h5 class="comparison-title">
+                                <i class="fas fa-clock me-2"></i>
+                                PoET Analytics
+                            </h5>
+                            <PoETAnalyticsChart 
+                                EnableRealTimeUpdates="@enableRealTimeUpdates"
+                                OnDataExported="@HandleDataExported" />
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="comparison-section">
+                            <h5 class="comparison-title">
+                                <i class="fas fa-coins me-2"></i>
+                                PoS Analytics
+                            </h5>
+                            <PoSAnalyticsChart 
+                                EnableRealTimeUpdates="@enableRealTimeUpdates"
+                                OnDataExported="@HandleDataExported" />
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="comparison-section">
+                            <h5 class="comparison-title">
+                                <i class="fas fa-users-crown me-2"></i>
+                                DPoS Analytics
+                            </h5>
+                            <DposAnalyticsChart 
+                                SimulationId="@selectedSimulationId"
+                                OnExportRequest="@HandleDataExported" />
+                        </div>
+                    </div>
+                    <div class="col-lg-3">
+                        <div class="comparison-section">
+                            <h5 class="comparison-title">
+                                <i class="fas fa-shield-alt me-2"></i>
+                                PBFT Analytics
+                            </h5>
+                            <PbftAnalyticsChart 
+                                SimulationId="@(selectedSimulationId?.ToString() ?? "default")"
+                                OnExportData="@HandleDataExported" />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+
+    <!-- Export Status Toast -->
+    @if (showExportToast)
+    {
+        <div class="toast-container position-fixed bottom-0 end-0 p-3">
+            <div class="toast show" role="alert">
+                <div class="toast-header">
+                    <i class="fas fa-download me-2"></i>
+                    <strong class="me-auto">Data Export</strong>
+                    <button type="button" class="btn-close" @onclick="() => showExportToast = false"></button>
+                </div>
+                <div class="toast-body">
+                    @exportMessage
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private string selectedConsensus = "poet";
+    private bool enableRealTimeUpdates = false;
+    private bool enableAutoRefresh = false;
+    private bool showExportToast = false;
+    private string exportMessage = "";
+    private Timer? autoRefreshTimer;
+    private Guid? selectedSimulationId = null;
+
+    protected override void OnInitialized()
+    {
+        // Initialize with PoET as default
+        selectedConsensus = "poet";
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && enableAutoRefresh)
+        {
+            StartAutoRefresh();
+        }
+    }
+
+    private void OnConsensusChanged(ChangeEventArgs e)
+    {
+        selectedConsensus = e.Value?.ToString() ?? "poet";
+        StateHasChanged();
+    }
+
+    private void NavigateToMainDashboard()
+    {
+        Navigation.NavigateTo("/analytics");
+    }
+
+    private async Task HandleDataExported(string dataType)
+    {
+        exportMessage = $"Successfully exported {dataType} data";
+        showExportToast = true;
+        StateHasChanged();
+
+        // Auto-hide toast after 3 seconds
+        await Task.Delay(3000);
+        showExportToast = false;
+        StateHasChanged();
+    }
+
+    private async Task ExportAllData()
+    {
+        try
+        {
+            // Export logic would go here
+            await HandleDataExported("all specialized analytics");
+        }
+        catch (Exception ex)
+        {
+            exportMessage = $"Export failed: {ex.Message}";
+            showExportToast = true;
+            StateHasChanged();
+        }
+    }
+
+    private void StartAutoRefresh()
+    {
+        autoRefreshTimer = new Timer(async _ =>
+        {
+            await InvokeAsync(() =>
+            {
+                StateHasChanged();
+            });
+        }, null, TimeSpan.Zero, TimeSpan.FromSeconds(30));
+    }
+
+    private void StopAutoRefresh()
+    {
+        autoRefreshTimer?.Dispose();
+        autoRefreshTimer = null;
+    }
+
+    public void Dispose()
+    {
+        StopAutoRefresh();
+    }
+}
