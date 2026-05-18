@@ -332,11 +332,15 @@ app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
-// Initialize database and seed data
+// Apply EF migrations (controlled by ConsensusSimulator:AutoMigrateDatabase) and seed admin user.
+// Order matters: migrate before seeding so Identity tables exist.
 using (var scope = app.Services.CreateScope())
 {
     try
     {
+        var dbInit = scope.ServiceProvider.GetRequiredService<DatabaseInitializationService>();
+        await dbInit.InitializeAsync();
+
         var logger = scope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILogger<IdentitySeeder>>();
         var seeder = new IdentitySeeder(scope.ServiceProvider, logger);
         await seeder.SeedAsync();

@@ -21,7 +21,7 @@ public class DposProtocol : IConsensusProtocol
     private readonly Dictionary<Guid, int> _witnessPerformance; // witness -> blocks produced
     private readonly Dictionary<Guid, int> _missedBlocks; // witness -> missed blocks
     private readonly List<double> _roundTimes;
-    private readonly Random _random;
+    private Random _random;
     private int _currentWitnessIndex = 0;
     private long _currentRound = 0;
 
@@ -55,6 +55,8 @@ public class DposProtocol : IConsensusProtocol
         _roundTimes = new List<double>();
         _random = new Random();
     }
+
+    public void SetRandom(Random rng) => _random = rng;
 
     public async Task InitializeAsync(IEnumerable<Node> nodes, Dictionary<string, object> configuration)
     {

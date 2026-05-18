@@ -267,6 +267,26 @@ public class AlgorithmPerformanceMetrics
     /// Worst performing simulation ID for this algorithm
     /// </summary>
     public Guid? WorstSimulationId { get; set; }
+
+    /// <summary>
+    /// Gini coefficient of leader/proposer distribution (0 = perfect equality, 1 = one node leads all).
+    /// </summary>
+    public double LeaderGini { get; set; }
+
+    /// <summary>
+    /// Shannon entropy (bits) of leader/proposer distribution. Higher = more decentralized.
+    /// </summary>
+    public double LeaderEntropy { get; set; }
+
+    /// <summary>
+    /// 95th-percentile inter-block time in milliseconds across all blocks for this algorithm.
+    /// </summary>
+    public double P95BlockTimeMs { get; set; }
+
+    /// <summary>
+    /// 99th-percentile inter-block time in milliseconds.
+    /// </summary>
+    public double P99BlockTimeMs { get; set; }
 }
 
 /// <summary>

@@ -1,0 +1,131 @@
+{
+  "schemaVersion": "1.0",
+  "experimentSuite": {
+    "id": "S7-federated-learning",
+    "name": "Federated Learning Payload Coordination Study",
+    "description": "AI-relevant workload: FL model update rounds coordinated via PoS, DPoS, and PBFT consensus.",
+    "researchQuestions": ["RQ4", "RQ5"],
+    "hypotheses": ["H5"],
+    "repetitions": 15,
+    "randomSeed": 600,
+    "warmupRounds": 5,
+    "baseSimulation": {
+      "nodeCount": 10,
+      "byzantineNodeCount": 0,
+      "durationSeconds": 600,
+      "networkTopology": "FullMesh",
+      "blockTimeMs": 5000,
+      "transactionsPerBlock": 10,
+      "networkLatencyMs": 50,
+      "enableDetailedLogging": true,
+      "autoStart": true,
+      "algorithmConfiguration": { "seed": 600 }
+    },
+    "payloadDefaults": {
+      "payloadMode": "FederatedLearning",
+      "payloadParameters": {
+        "participantCount": 10,
+        "modelUpdateSizeKb": 256,
+        "roundsPerSimulation": 20,
+        "aggregationStrategy": "fedavg",
+        "localEpochs": 1,
+        "learningRate": 0.01
+      }
+    },
+    "runs": [
+      {
+        "runId": "S7-PoS-FL",
+        "name": "S7-FL-PoS",
+        "protocol": "ProofOfStake",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": {
+            "seed": 600,
+            "minimumStake": 1000,
+            "payloadMode": "FederatedLearning"
+          },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "payloadMode": "FederatedLearning",
+        "payloadParameters": {
+          "participantCount": 10,
+          "modelUpdateSizeKb": 256,
+          "roundsPerSimulation": 20,
+          "aggregationStrategy": "fedavg"
+        },
+        "tags": ["S7", "federated-learning", "PoS", "AIDSE"]
+      },
+      {
+        "runId": "S7-DPoS-FL",
+        "name": "S7-FL-DPoS",
+        "protocol": "DelegatedProofOfStake",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": {
+            "seed": 600,
+            "witnessCount": 5,
+            "payloadMode": "FederatedLearning"
+          },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "payloadMode": "FederatedLearning",
+        "payloadParameters": {
+          "participantCount": 10,
+          "modelUpdateSizeKb": 256,
+          "roundsPerSimulation": 20,
+          "aggregationStrategy": "fedavg"
+        },
+        "tags": ["S7", "federated-learning", "DPoS", "AIDSE"]
+      },
+      {
+        "runId": "S7-PBFT-FL",
+        "name": "S7-FL-PBFT",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": {
+            "seed": 600,
+            "payloadMode": "FederatedLearning"
+          },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "payloadMode": "FederatedLearning",
+        "payloadParameters": {
+          "participantCount": 10,
+          "modelUpdateSizeKb": 256,
+          "roundsPerSimulation": 20,
+          "aggregationStrategy": "fedavg"
+        },
+        "tags": ["S7", "federated-learning", "PBFT", "AIDSE"]
+      }
+    ],
+    "analysisPlan": {
+      "primaryMetric": "flRoundMeanMs",
+      "correlationTarget": "meanRoundDurationMs",
+      "hypothesis": "H5",
+      "method": "Pearson correlation with p < 0.05 threshold"
+    },
+    "notes": "PoW and PoET excluded — FL coordination typically uses BFT or stake-based permissioned networks."
+  }
+}

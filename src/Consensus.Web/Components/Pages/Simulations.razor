@@ -1,12 +1,21 @@
 @page "/simulations"
 @using Consensus.Core.Entities
 @using Consensus.Core.Enums
+@using Consensus.Core.Interfaces
+@using Consensus.Core.Models
+@using Consensus.Core.Repositories
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Components.Web
 @rendermode InteractiveServer
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Navigation
+@inject ISimulationService SimulationService
+@inject ISimulationRunRepository SimulationRepo
+@inject INodeRepository NodeRepo
+@inject IBlockRepository BlockRepo
+@inject IConsensusRoundRepository RoundRepo
+@inject ILogger<Simulations> Logger
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
 @* Simulations Page *@
@@ -229,10 +238,11 @@
                             <div class="mb-3">
                                 <label class="form-label">Consensus Algorithm</label>
                                 <select class="form-select" @bind="newSimulationAlgorithm">
-                                    <option value="@ConsensusAlgorithm.ProofOfWork">Proof of Work</option>
-                                    <option value="@ConsensusAlgorithm.ProofOfStake">Proof of Stake</option>
+                                    <option value="@ConsensusAlgorithm.ProofOfWork">Proof of Work (PoW)</option>
+                                    <option value="@ConsensusAlgorithm.ProofOfStake">Proof of Stake (PoS)</option>
+                                    <option value="@ConsensusAlgorithm.DelegatedProofOfStake">Delegated PoS (DPoS)</option>
                                     <option value="@ConsensusAlgorithm.PracticalByzantineFaultTolerance">PBFT</option>
-                                    <option value="@ConsensusAlgorithm.Raft">Raft</option>
+                                    <option value="@ConsensusAlgorithm.ProofOfElapsedTime">Proof of Elapsed Time (PoET)</option>
                                 </select>
                             </div>
                         </div>
@@ -261,14 +271,24 @@
                             </div>
                         </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">Network Topology</label>
-                        <select class="form-select" @bind="newSimulationTopology">
-                            <option value="@NetworkTopologyType.FullMesh">Full Mesh</option>
-                            <option value="@NetworkTopologyType.Ring">Ring</option>
-                            <option value="@NetworkTopologyType.Star">Star</option>
-                            <option value="@NetworkTopologyType.Random">Random</option>
-                        </select>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Network Topology</label>
+                                <select class="form-select" @bind="newSimulationTopology">
+                                    <option value="@NetworkTopologyType.FullMesh">Full Mesh</option>
+                                    <option value="@NetworkTopologyType.Ring">Ring</option>
+                                    <option value="@NetworkTopologyType.Star">Star</option>
+                                    <option value="@NetworkTopologyType.Random">Random</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Random Seed <span class="text-muted small">(optional, for reproducibility)</span></label>
+                                <input type="number" class="form-control" @bind="newSimulationSeed" placeholder="e.g. 42">
+                            </div>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -301,6 +321,10 @@
     private int newSimulationRounds = 100;
     private int newSimulationFaultyNodes = 0;
     private NetworkTopologyType newSimulationTopology = NetworkTopologyType.FullMesh;
+    private int? newSimulationSeed = 42;
+
+    // Counts cache so the list view doesn't re-query per row on every render.
+    private Dictionary<Guid, (int Nodes, int Rounds, int Blocks)> simulationCounts = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -309,48 +333,36 @@
 
     private async Task LoadSimulations()
     {
-        // TODO: Replace with actual service call
-        await Task.Delay(100);
-
-        // Mock simulation data
-        simulations = new List<SimulationRun>
+        try
         {
-            new SimulationRun
-            {
-                Id = Guid.NewGuid(),
-                Name = "PoW Network Test",
-                Description = "Testing Proof of Work consensus with 5 nodes",
-                ConsensusAlgorithm = ConsensusAlgorithm.ProofOfWork,
-                Status = SimulationStatus.Running,
-                CreatedAt = DateTime.UtcNow.AddMinutes(-15),
-                Configuration = new Dictionary<string, object> { { "nodes", 5 }, { "rounds", 100 } }
-            },
-            new SimulationRun
-            {
-                Id = Guid.NewGuid(),
-                Name = "PBFT Byzantine Fault Tolerance",
-                Description = "Testing Byzantine fault tolerance with intentional faulty nodes",
-                ConsensusAlgorithm = ConsensusAlgorithm.PracticalByzantineFaultTolerance,
-                Status = SimulationStatus.Completed,
-                CreatedAt = DateTime.UtcNow.AddHours(-2),
-                CompletedAt = DateTime.UtcNow.AddMinutes(-45),
-                Configuration = new Dictionary<string, object> { { "nodes", 7 }, { "faultyNodes", 2 } }
-            },
-            new SimulationRun
-            {
-                Id = Guid.NewGuid(),
-                Name = "Raft Consensus Demo",
-                Description = "Demonstrating leader election in Raft protocol",
-                ConsensusAlgorithm = ConsensusAlgorithm.Raft,
-                Status = SimulationStatus.Failed,
-                CreatedAt = DateTime.UtcNow.AddHours(-4),
-                CompletedAt = DateTime.UtcNow.AddHours(-3),
-                Configuration = new Dictionary<string, object> { { "nodes", 3 }, { "rounds", 50 } }
-            }
-        };
+            // Merge: live in-memory sims from the service + recent persisted sims from DB.
+            // The service holds the running runtime; the repo holds completed history.
+            var liveSims = (await SimulationService.GetSimulationsAsync()).ToList();
+            var persisted = (await SimulationRepo.GetRecentAsync(50)).ToList();
 
-        filteredSimulations = simulations.OrderByDescending(s => s.CreatedAt).ToList();
-        StateHasChanged();
+            simulations = liveSims
+                .Concat(persisted.Where(p => liveSims.All(l => l.Id != p.Id)))
+                .OrderByDescending(s => s.CreatedAt)
+                .ToList();
+
+            simulationCounts.Clear();
+            foreach (var sim in simulations)
+            {
+                var nodes = await NodeRepo.GetBySimulationRunAsync(sim.Id);
+                var rounds = await RoundRepo.GetBySimulationRunAsync(sim.Id);
+                var blocks = await BlockRepo.GetBySimulationRunAsync(sim.Id);
+                simulationCounts[sim.Id] = (nodes.Count(), rounds.Count(), blocks.Count());
+            }
+
+            filteredSimulations = simulations.ToList();
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to load simulations list");
+            simulations = new List<SimulationRun>();
+            filteredSimulations = new List<SimulationRun>();
+        }
     }
 
     private void FilterByStatus(ChangeEventArgs e)
@@ -404,9 +416,34 @@
             return;
         }
 
-        // TODO: Replace with actual service call
-        await JSRuntime.InvokeVoidAsync("alert", $"Creating simulation '{newSimulationName}' with {newSimulationAlgorithm}... (Feature coming soon!)");
-        HideCreateSimulationModal();
+        try
+        {
+            var request = new CreateSimulationRequest
+            {
+                Name = newSimulationName,
+                Algorithm = newSimulationAlgorithm,
+                NodeCount = newSimulationNodes,
+                ByzantineNodeCount = newSimulationFaultyNodes,
+                DurationSeconds = Math.Max(10, newSimulationRounds * 2), // rough budget for live demo
+                NetworkTopology = newSimulationTopology,
+                BlockTimeMs = 2000,
+                TransactionsPerBlock = 10,
+                NetworkLatencyMs = 50,
+                RandomSeed = newSimulationSeed,
+                AlgorithmConfiguration = new Dictionary<string, object>()
+            };
+
+            var sim = await SimulationService.CreateSimulationAsync(request);
+            await SimulationService.StartSimulationAsync(sim.Id);
+
+            HideCreateSimulationModal();
+            Navigation.NavigateTo($"/simulation/{sim.Id}");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to create simulation {Name}", newSimulationName);
+            await JSRuntime.InvokeVoidAsync("alert", $"Could not start simulation: {ex.Message}");
+        }
     }
 
     private async Task ViewSimulation(Guid simulationId)
@@ -430,7 +467,20 @@
 
     private async Task StopSimulation(Guid simulationId)
     {
-        await JSRuntime.InvokeVoidAsync("alert", $"Stopping simulation {simulationId}... (Feature coming soon!)");
+        try
+        {
+            var ok = await SimulationService.StopSimulationAsync(simulationId);
+            if (!ok)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", "Simulation could not be stopped (already finished?)");
+            }
+            await LoadSimulations();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to stop simulation {SimulationId}", simulationId);
+            await JSRuntime.InvokeVoidAsync("alert", $"Stop failed: {ex.Message}");
+        }
     }
 
     private async Task ViewResults(Guid simulationId)
@@ -500,21 +550,12 @@
         return Math.Min(100, (int)(runningTime * 5)); // 5% per minute
     }
 
-    private int GetNodeCount(Guid simulationId)
-    {
-        // TODO: Get actual node count from service
-        return 5; // Mock data
-    }
+    private int GetNodeCount(Guid simulationId) =>
+        simulationCounts.TryGetValue(simulationId, out var c) ? c.Nodes : 0;
 
-    private int GetRoundCount(Guid simulationId)
-    {
-        // TODO: Get actual round count from service
-        return 23; // Mock data
-    }
+    private int GetRoundCount(Guid simulationId) =>
+        simulationCounts.TryGetValue(simulationId, out var c) ? c.Rounds : 0;
 
-    private int GetBlockCount(Guid simulationId)
-    {
-        // TODO: Get actual block count from service
-        return 15; // Mock data
-    }
+    private int GetBlockCount(Guid simulationId) =>
+        simulationCounts.TryGetValue(simulationId, out var c) ? c.Blocks : 0;
 }

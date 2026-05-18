@@ -57,6 +57,12 @@ public interface IConsensusProtocol
     /// <param name="node">The faulty node</param>
     /// <param name="faultType">The type of fault</param>
     Task HandleNodeFaultAsync(Node node, FaultType faultType);
+
+    /// <summary>
+    /// Injects a deterministic random source so leader/proposer selection is reproducible
+    /// across runs sharing the same seed. Default no-op preserves prior non-deterministic behaviour.
+    /// </summary>
+    void SetRandom(Random rng) { }
 }
 
 /// <summary>

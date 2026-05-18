@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "1.0",
+  "experimentSuite": {
+    "id": "S2-scale",
+    "name": "Node Count Scaling Study",
+    "description": "Measure block time and throughput as node count increases from 5 to 50.",
+    "researchQuestions": ["RQ1", "RQ3"],
+    "hypotheses": ["H1"],
+    "repetitions": 10,
+    "randomSeed": 100,
+    "warmupRounds": 5,
+    "baseSimulation": {
+      "byzantineNodeCount": 0,
+      "durationSeconds": 600,
+      "networkTopology": "FullMesh",
+      "blockTimeMs": 5000,
+      "transactionsPerBlock": 10,
+      "networkLatencyMs": 50,
+      "enableDetailedLogging": true,
+      "autoStart": true,
+      "algorithmConfiguration": { "seed": 100 }
+    },
+    "expansion": {
+      "protocols": [
+        "ProofOfWork",
+        "ProofOfStake",
+        "DelegatedProofOfStake",
+        "PracticalByzantineFaultTolerance",
+        "ProofOfElapsedTime"
+      ],
+      "protocolShortNames": {
+        "ProofOfWork": "PoW",
+        "ProofOfStake": "PoS",
+        "DelegatedProofOfStake": "DPoS",
+        "PracticalByzantineFaultTolerance": "PBFT",
+        "ProofOfElapsedTime": "PoET"
+      },
+      "sweep": {
+        "parameter": "nodeCount",
+        "values": [5, 10, 25, 50]
+      },
+      "runIdPattern": "S2-{protocolShort}-n{nodeCount}",
+      "namePattern": "S2-Scale-{protocolShort}-{nodeCount}nodes"
+    },
+    "runs": [
+      {
+        "runId": "S2-PoW-n5",
+        "name": "S2-Scale-PoW-5nodes",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 5,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 100, "difficulty": 4 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S2", "scale", "PoW", "n5"]
+      },
+      {
+        "runId": "S2-PoW-n10",
+        "name": "S2-Scale-PoW-10nodes",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 100, "difficulty": 4 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S2", "scale", "PoW", "n10"]
+      },
+      {
+        "runId": "S2-PoW-n25",
+        "name": "S2-Scale-PoW-25nodes",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 25,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 100, "difficulty": 4 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S2", "scale", "PoW", "n25"]
+      },
+      {
+        "runId": "S2-PoW-n50",
+        "name": "S2-Scale-PoW-50nodes",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 50,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 100, "difficulty": 4 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S2", "scale", "PoW", "n50"]
+      },
+      {
+        "runId": "S2-PBFT-n10",
+        "name": "S2-Scale-PBFT-10nodes",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 100 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S2", "scale", "PBFT", "n10"]
+      }
+    ],
+    "notes": "Expand full 20-run matrix via expansion block: 4 node counts × 5 protocols. Sample runs included for PoW (all sizes) and PBFT (n=10)."
+  }
+}

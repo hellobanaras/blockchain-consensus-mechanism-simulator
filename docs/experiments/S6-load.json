@@ -1,0 +1,126 @@
+{
+  "schemaVersion": "1.0",
+  "experimentSuite": {
+    "id": "S6-load",
+    "name": "Transaction Load Pressure Test",
+    "description": "Low (5), medium (50), and high (200) transactions per block at baseline network settings.",
+    "researchQuestions": ["RQ1"],
+    "hypotheses": [],
+    "repetitions": 10,
+    "randomSeed": 500,
+    "warmupRounds": 5,
+    "baseSimulation": {
+      "nodeCount": 10,
+      "byzantineNodeCount": 0,
+      "durationSeconds": 600,
+      "networkTopology": "FullMesh",
+      "blockTimeMs": 5000,
+      "networkLatencyMs": 50,
+      "enableDetailedLogging": true,
+      "autoStart": true,
+      "algorithmConfiguration": { "seed": 500 }
+    },
+    "loadLevels": [
+      { "label": "low", "transactionsPerBlock": 5 },
+      { "label": "medium", "transactionsPerBlock": 50 },
+      { "label": "high", "transactionsPerBlock": 200 }
+    ],
+    "expansion": {
+      "protocols": [
+        "ProofOfWork",
+        "ProofOfStake",
+        "DelegatedProofOfStake",
+        "PracticalByzantineFaultTolerance",
+        "ProofOfElapsedTime"
+      ],
+      "protocolShortNames": {
+        "ProofOfWork": "PoW",
+        "ProofOfStake": "PoS",
+        "DelegatedProofOfStake": "DPoS",
+        "PracticalByzantineFaultTolerance": "PBFT",
+        "ProofOfElapsedTime": "PoET"
+      },
+      "sweep": {
+        "parameter": "transactionsPerBlock",
+        "values": [5, 50, 200]
+      },
+      "runIdPattern": "S6-{protocolShort}-tx{transactionsPerBlock}",
+      "namePattern": "S6-Load-{protocolShort}-{transactionsPerBlock}tx"
+    },
+    "runs": [
+      {
+        "runId": "S6-PoW-tx5",
+        "name": "S6-Load-PoW-5tx",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 5,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 500, "difficulty": 4 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S6", "load", "PoW", "low"]
+      },
+      {
+        "runId": "S6-PoW-tx50",
+        "name": "S6-Load-PoW-50tx",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 50,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 500, "difficulty": 4 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S6", "load", "PoW", "medium"]
+      },
+      {
+        "runId": "S6-PoW-tx200",
+        "name": "S6-Load-PoW-200tx",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 200,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 500, "difficulty": 4 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S6", "load", "PoW", "high"]
+      },
+      {
+        "runId": "S6-PBFT-tx50",
+        "name": "S6-Load-PBFT-50tx",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 50,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 500 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S6", "load", "PBFT", "medium"]
+      }
+    ],
+    "notes": "Full matrix: 3 load levels × 5 protocols = 15 runs."
+  }
+}

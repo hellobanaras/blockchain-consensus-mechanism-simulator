@@ -19,6 +19,7 @@ public record CreateSimulationRequest
     public int BlockTimeMs { get; init; }
     public int TransactionsPerBlock { get; init; }
     public int NetworkLatencyMs { get; init; }
+    public int? RandomSeed { get; init; }
     public Dictionary<string, object> AlgorithmConfiguration { get; init; } = new();
 
     public IEnumerable<string> Validate()

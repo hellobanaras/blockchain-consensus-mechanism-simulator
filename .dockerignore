@@ -1,0 +1,26 @@
+# Avoid copying build artefacts and developer-only files into the build context.
+**/bin
+**/obj
+**/.vs
+**/.vscode
+**/.idea
+**/*.user
+**/*.suo
+**/node_modules
+
+# Source-control and CI metadata
+.git
+.gitignore
+.github
+
+# Tests are intentionally deleted on this branch.
+tests
+
+# Large thesis / spec assets — not needed inside the container image.
+mtech
+docs/experiments/results
+docs/presentation/assets
+
+# Misc
+.DS_Store
+*.log

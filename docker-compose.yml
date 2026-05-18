@@ -1,0 +1,64 @@
+# One-click stack for the M.Tech thesis demo: Postgres 16 + Blazor Web app.
+# `docker compose up --build` brings everything online; web on http://localhost:3000.
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: consensus-postgres
+    environment:
+      POSTGRES_USER: consensus_user
+      POSTGRES_PASSWORD: consensus_password
+      POSTGRES_DB: consensusdb
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U consensus_user -d consensusdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: consensus-web
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=consensusdb;Username=consensus_user;Password=consensus_password"
+      ConsensusSimulator__AutoMigrateDatabase: "true"
+      ConsensusSimulator__SeedTestData: "false"
+      Simulation__PersistToDb: "true"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: consensus_user
+      POSTGRES_DB: consensusdb
+    ports:
+      - "3000:8080"
+    restart: unless-stopped
+
+  # Optional pgAdmin for inspecting tables during the demo. Enabled with `--profile debug`.
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: consensus-pgadmin
+    profiles: ["debug"]
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@consensus-lab.dev
+      PGADMIN_DEFAULT_PASSWORD: Admin@123!
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    depends_on:
+      - postgres
+    ports:
+      - "5050:80"
+    restart: unless-stopped
+
+volumes:
+  postgres-data:

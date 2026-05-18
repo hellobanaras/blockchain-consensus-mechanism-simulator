@@ -15,7 +15,7 @@ namespace Consensus.Core.Protocols;
 public class PoetProtocol : IConsensusProtocol
 {
     private readonly ILogger<PoetProtocol> _logger;
-    private readonly Random _random;
+    private Random _random;
     private readonly Dictionary<Guid, double> _nodeWaitTimes;
     private readonly Dictionary<Guid, int> _leaderCounts;
     private readonly List<double> _roundTimes;
@@ -41,6 +41,8 @@ public class PoetProtocol : IConsensusProtocol
         _leaderCounts = new Dictionary<Guid, int>();
         _roundTimes = new List<double>();
     }
+
+    public void SetRandom(Random rng) => _random = rng;
 
     public async Task InitializeAsync(IEnumerable<Node> nodes, Dictionary<string, object> configuration)
     {

@@ -1,0 +1,140 @@
+{
+  "schemaVersion": "1.0",
+  "experimentSuite": {
+    "id": "S1-baseline",
+    "name": "Baseline Healthy Network Comparison",
+    "description": "Cross-protocol comparison under identical benign conditions: 10 nodes, 50 ms latency, no faults, 600 s duration.",
+    "researchQuestions": ["RQ1"],
+    "hypotheses": ["H1", "H2", "H3"],
+    "repetitions": 30,
+    "randomSeed": 42,
+    "warmupRounds": 5,
+    "baseSimulation": {
+      "nodeCount": 10,
+      "byzantineNodeCount": 0,
+      "durationSeconds": 600,
+      "networkTopology": "FullMesh",
+      "blockTimeMs": 5000,
+      "transactionsPerBlock": 10,
+      "networkLatencyMs": 50,
+      "enableDetailedLogging": true,
+      "autoStart": true
+    },
+    "runs": [
+      {
+        "runId": "S1-PoW",
+        "name": "S1-Baseline-PoW",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": {
+            "seed": 42,
+            "difficulty": 4,
+            "maxHashAttemptsPerNode": 100000
+          },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "payloadMode": "None",
+        "tags": ["S1", "baseline", "PoW"]
+      },
+      {
+        "runId": "S1-PoS",
+        "name": "S1-Baseline-PoS",
+        "protocol": "ProofOfStake",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": {
+            "seed": 42,
+            "minimumStake": 1000,
+            "slashingEnabled": false
+          },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "payloadMode": "None",
+        "tags": ["S1", "baseline", "PoS"]
+      },
+      {
+        "runId": "S1-DPoS",
+        "name": "S1-Baseline-DPoS",
+        "protocol": "DelegatedProofOfStake",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": {
+            "seed": 42,
+            "witnessCount": 5,
+            "minimumStake": 500
+          },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "payloadMode": "None",
+        "tags": ["S1", "baseline", "DPoS"]
+      },
+      {
+        "runId": "S1-PBFT",
+        "name": "S1-Baseline-PBFT",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": {
+            "seed": 42,
+            "viewChangeTimeoutMs": 10000
+          },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "payloadMode": "None",
+        "tags": ["S1", "baseline", "PBFT"]
+      },
+      {
+        "runId": "S1-PoET",
+        "name": "S1-Baseline-PoET",
+        "protocol": "ProofOfElapsedTime",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": {
+            "seed": 42,
+            "minWaitTimeMs": 1000,
+            "maxWaitTimeMs": 8000
+          },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "payloadMode": "None",
+        "tags": ["S1", "baseline", "PoET"]
+      }
+    ]
+  }
+}

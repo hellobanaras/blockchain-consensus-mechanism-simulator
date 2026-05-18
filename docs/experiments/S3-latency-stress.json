@@ -1,0 +1,139 @@
+{
+  "schemaVersion": "1.0",
+  "experimentSuite": {
+    "id": "S3-latency-stress",
+    "name": "Network Latency Stress Test",
+    "description": "Simulate LAN to high-WAN latency (50–1000 ms) with fixed 10-node FullMesh topology.",
+    "researchQuestions": ["RQ1", "RQ3"],
+    "hypotheses": ["H1"],
+    "repetitions": 10,
+    "randomSeed": 200,
+    "warmupRounds": 5,
+    "baseSimulation": {
+      "nodeCount": 10,
+      "byzantineNodeCount": 0,
+      "durationSeconds": 600,
+      "networkTopology": "FullMesh",
+      "blockTimeMs": 5000,
+      "transactionsPerBlock": 10,
+      "enableDetailedLogging": true,
+      "autoStart": true,
+      "algorithmConfiguration": { "seed": 200 }
+    },
+    "expansion": {
+      "protocols": [
+        "ProofOfWork",
+        "ProofOfStake",
+        "DelegatedProofOfStake",
+        "PracticalByzantineFaultTolerance",
+        "ProofOfElapsedTime"
+      ],
+      "protocolShortNames": {
+        "ProofOfWork": "PoW",
+        "ProofOfStake": "PoS",
+        "DelegatedProofOfStake": "DPoS",
+        "PracticalByzantineFaultTolerance": "PBFT",
+        "ProofOfElapsedTime": "PoET"
+      },
+      "sweep": {
+        "parameter": "networkLatencyMs",
+        "values": [50, 200, 500, 1000]
+      },
+      "runIdPattern": "S3-{protocolShort}-lat{networkLatencyMs}",
+      "namePattern": "S3-Latency-{protocolShort}-{networkLatencyMs}ms"
+    },
+    "runs": [
+      {
+        "runId": "S3-PBFT-lat50",
+        "name": "S3-Latency-PBFT-50ms",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 200 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S3", "latency", "PBFT", "50ms"]
+      },
+      {
+        "runId": "S3-PBFT-lat200",
+        "name": "S3-Latency-PBFT-200ms",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 200,
+          "algorithmConfiguration": { "seed": 200 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S3", "latency", "PBFT", "200ms"]
+      },
+      {
+        "runId": "S3-PBFT-lat500",
+        "name": "S3-Latency-PBFT-500ms",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 500,
+          "algorithmConfiguration": { "seed": 200 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S3", "latency", "PBFT", "500ms"]
+      },
+      {
+        "runId": "S3-PBFT-lat1000",
+        "name": "S3-Latency-PBFT-1000ms",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 1000,
+          "algorithmConfiguration": { "seed": 200 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S3", "latency", "PBFT", "1000ms"]
+      },
+      {
+        "runId": "S3-PoW-lat50",
+        "name": "S3-Latency-PoW-50ms",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 200, "difficulty": 4 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S3", "latency", "PoW", "50ms"]
+      }
+    ],
+    "notes": "Full matrix: 4 latency levels × 5 protocols = 20 runs. PBFT full sweep + PoW baseline included as samples."
+  }
+}

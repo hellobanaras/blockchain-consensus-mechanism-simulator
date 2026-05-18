@@ -1,28 +1,19 @@
 #!/bin/bash
+# Container entrypoint: wait for Postgres, then hand off to the .NET host.
+# Migrations + identity seeding now run inside Program.cs (see DatabaseInitializationService
+# and IdentitySeeder), so we no longer call `dotnet ef` here.
 set -e
 
-echo "Starting application..."
+DB_HOST="${POSTGRES_HOST:-postgres}"
+DB_PORT="${POSTGRES_PORT:-5432}"
+DB_USER="${POSTGRES_USER:-consensus_user}"
+DB_NAME="${POSTGRES_DB:-consensusdb}"
 
-# Install dotnet ef tool if not already installed
-export PATH="$PATH:/home/appuser/.dotnet/tools"
-
-# Check if the database is ready
-echo "Waiting for database to be ready..."
-until pg_isready -h postgres -p 5432 -U consensus_user -d consensusdb; do
-  echo "Database is unavailable - sleeping..."
+echo "[startup] Waiting for Postgres at ${DB_HOST}:${DB_PORT} (user=${DB_USER}, db=${DB_NAME})..."
+until pg_isready -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" -t 2 >/dev/null 2>&1; do
   sleep 2
+  echo "[startup] Postgres not ready yet, retrying..."
 done
 
-echo "Database is ready!"
-
-# Try to run migrations
-echo "Running database migrations..."
-if command -v dotnet-ef &> /dev/null; then
-    dotnet ef database update --no-build || echo "Migration failed or no migrations to apply"
-else
-    echo "EF tools not available, skipping migrations"
-fi
-
-# Start the application
-echo "Starting Blazor application..."
+echo "[startup] Postgres is ready. Launching Consensus.Web on ${ASPNETCORE_URLS:-http://+:8080}"
 exec dotnet Consensus.Web.dll

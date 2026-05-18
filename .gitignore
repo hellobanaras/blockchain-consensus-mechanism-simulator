@@ -63,10 +63,11 @@ bld/
 appsettings.local.json
 appsettings.*.local.json
 
-# Docker
-Dockerfile*
-docker-compose*
-.dockerignore
+# Docker — Dockerfile, docker-compose.yml, and .dockerignore are TRACKED so the
+# one-click `docker compose up --build` works for anyone who clones the repo.
+# Ignore local override files only.
+docker-compose.override.yml
+docker-compose.*.local.yml
 
 # Logs
 *.log
@@ -117,3 +118,13 @@ coverage/
 # Application specific
 wwwroot/lib/
 publish/
+
+# Thesis experiment outputs (regenerate via scripts/expand-experiment-suite.sh)
+docs/experiments/results/
+docs/experiments/payloads/
+
+# Claude Code repo-local infra — track everything EXCEPT personal/secret overrides.
+# .claude/settings.json is committed (sane defaults); settings.local.json is per-developer.
+.claude/settings.local.json
+.claude/cache/
+.claude/sessions/

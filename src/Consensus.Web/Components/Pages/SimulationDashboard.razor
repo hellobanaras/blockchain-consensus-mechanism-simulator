@@ -1,6 +1,8 @@
 @page "/simulation/{SimulationId:guid}"
 @using Consensus.Core.Entities
 @using Consensus.Core.Enums
+@using Consensus.Core.Interfaces
+@using Consensus.Core.Repositories
 @using Consensus.Web.Services
 @using Microsoft.AspNetCore.SignalR.Client
 @using Microsoft.AspNetCore.Authorization
@@ -8,6 +10,9 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JSRuntime
 @inject ILogger<SimulationDashboard> Logger
+@inject ISimulationService SimService
+@inject ISimulationRunRepository SimulationRepo
+@inject INodeRepository NodeRepo
 @implements IAsyncDisposable
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
@@ -372,31 +377,25 @@
     {
         try
         {
-            // TODO: Replace with actual API call
-            await Task.Delay(500); // Simulate API call
+            // Live in-memory state first (current runtime); fall back to DB row if the run already finished.
+            simulation = await SimService.GetSimulationAsync(SimulationId)
+                         ?? await SimulationRepo.GetByIdAsync(SimulationId);
 
-            // Mock simulation data
-            simulation = new SimulationRun
+            if (simulation == null)
             {
-                Id = SimulationId,
-                Name = "Real-time PoET Simulation",
-                Description = "Testing Proof of Elapsed Time with Byzantine nodes",
-                ConsensusAlgorithm = ConsensusAlgorithm.ProofOfElapsedTime,
-                Status = SimulationStatus.Running,
-                CreatedAt = DateTime.UtcNow.AddMinutes(-10),
-                Configuration = new Dictionary<string, object>
-                {
-                    ["nodes"] = 7,
-                    ["byzantineNodes"] = 1,
-                    ["durationSeconds"] = 300,
-                    ["blockTimeMs"] = 2000
-                }
-            };
+                Logger.LogWarning("Simulation {SimulationId} not found in memory or DB", SimulationId);
+                return;
+            }
 
-            // Initialize metrics
-            currentMetrics.TotalNodes = 7;
-            currentMetrics.ActiveNodes = 7;
-            overallProgress = 35;
+            var nodes = (await NodeRepo.GetBySimulationRunAsync(SimulationId)).ToList();
+            currentMetrics.TotalNodes = nodes.Count > 0 ? nodes.Count : simulation.NodeCount;
+            currentMetrics.ActiveNodes = nodes.Count(n => n.Status == NodeStatus.Online);
+            if (currentMetrics.ActiveNodes == 0 && simulation.Status == SimulationStatus.Running)
+            {
+                currentMetrics.ActiveNodes = currentMetrics.TotalNodes;
+            }
+
+            overallProgress = (int)Math.Clamp(simulation.Progress * 100, 0, 100);
 
             StateHasChanged();
         }
@@ -423,8 +422,8 @@
 
             await hubConnection.StartAsync();
             
-            // Join simulation group
-            await hubConnection.SendAsync("JoinSimulationGroup", SimulationId.ToString());
+            // Join simulation group (hub method is JoinSimulation; takes a Guid).
+            await hubConnection.SendAsync("JoinSimulation", SimulationId);
             
             Logger.LogInformation("Connected to simulation hub for {SimulationId}", SimulationId);
         }

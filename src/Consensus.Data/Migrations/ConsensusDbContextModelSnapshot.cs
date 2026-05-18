@@ -671,6 +671,9 @@ namespace Consensus.Data.Migrations
                     b.Property<double>("Progress")
                         .HasColumnType("double precision");
 
+                    b.Property<int?>("RandomSeed")
+                        .HasColumnType("integer");
+
                     b.Property<string>("Results")
                         .HasColumnType("jsonb");
 

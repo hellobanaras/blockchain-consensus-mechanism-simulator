@@ -20,7 +20,7 @@ public class PosProtocol : IConsensusProtocol
     private readonly Dictionary<Guid, decimal> _slashingPenalties;
     private readonly Dictionary<Guid, DateTime> _lastValidationTime;
     private readonly List<double> _roundTimes;
-    private readonly Random _random;
+    private Random _random;
 
     public ConsensusAlgorithm Algorithm => ConsensusAlgorithm.ProofOfStake;
     public string Name => "PoS";
@@ -47,6 +47,8 @@ public class PosProtocol : IConsensusProtocol
         _roundTimes = new List<double>();
         _random = new Random();
     }
+
+    public void SetRandom(Random rng) => _random = rng;
 
     public async Task InitializeAsync(IEnumerable<Node> nodes, Dictionary<string, object> configuration)
     {

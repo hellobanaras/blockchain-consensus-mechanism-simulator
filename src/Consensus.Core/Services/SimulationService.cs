@@ -3,6 +3,9 @@ using Consensus.Core.Enums;
 using Consensus.Core.Interfaces;
 using Consensus.Core.Models;
 using Consensus.Core.Protocols;
+using Consensus.Core.Repositories;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using SimulationStatus = Consensus.Core.Enums.SimulationStatus;
 
@@ -14,12 +17,20 @@ namespace Consensus.Core.Services;
 public class SimulationService : ISimulationService
 {
     private readonly ILogger<SimulationService> _logger;
+    private readonly IServiceScopeFactory _scopeFactory;
+    private readonly bool _persistToDb;
     private readonly Dictionary<Guid, SimulationRuntime> _activeSimulations;
     private readonly object _lock = new();
 
-    public SimulationService(ILogger<SimulationService> logger)
+    public SimulationService(
+        ILogger<SimulationService> logger,
+        IServiceScopeFactory scopeFactory,
+        IConfiguration configuration)
     {
         _logger = logger;
+        _scopeFactory = scopeFactory;
+        // Read feature flag without taking a dependency on Configuration.Binder. Defaults to true.
+        _persistToDb = !bool.TryParse(configuration["Simulation:PersistToDb"], out var flag) || flag;
         _activeSimulations = new Dictionary<Guid, SimulationRuntime>();
     }
 
@@ -53,16 +64,22 @@ public class SimulationService : ISimulationService
                 BlockTimeMs = request.BlockTimeMs,
                 TransactionsPerBlock = request.TransactionsPerBlock,
                 NetworkLatencyMs = request.NetworkLatencyMs,
+                RandomSeed = request.RandomSeed,
                 Status = SimulationStatus.Initializing,
                 CreatedAt = DateTime.UtcNow,
                 Configuration = request.AlgorithmConfiguration
             };
 
+            // One seeded RNG per simulation — shared across node-power and protocol leader selection
+            // so the same seed yields identical traces.
+            var rng = request.RandomSeed.HasValue ? new Random(request.RandomSeed.Value) : Random.Shared;
+
             // Create nodes for the simulation
-            simulation.Nodes = await CreateNodesAsync(request);
+            simulation.Nodes = await CreateNodesAsync(request, rng);
 
             // Initialize the consensus protocol
             var protocol = CreateConsensusProtocol(request.Algorithm);
+            protocol.SetRandom(rng);
             await protocol.InitializeAsync(simulation.Nodes, request.AlgorithmConfiguration);
 
             // Create the simulation runtime
@@ -79,6 +96,11 @@ public class SimulationService : ISimulationService
             }
 
             simulation.Status = SimulationStatus.Ready;
+
+            // Persist simulation + nodes so post-run queries (export, dashboard refresh) have data.
+            // Best-effort: a DB failure must not break the live in-memory run.
+            await PersistSimulationCreatedAsync(simulation);
+
             OnSimulationStatusChanged(simulation);
 
             _logger.LogInformation("Simulation {SimulationId} created successfully", simulation.Id);
@@ -321,6 +343,9 @@ public class SimulationService : ISimulationService
                     // Update simulation progress
                     simulation.Progress = (double)roundNumber / maxRounds;
 
+                    // Persist round + block + event log row (best-effort, see PersistRoundResultAsync)
+                    await PersistRoundResultAsync(simulation, round, newBlock, result);
+
                     // Notify subscribers about round completion
                     OnRoundCompleted(simulation, round, result);
 
@@ -380,8 +405,11 @@ public class SimulationService : ISimulationService
 
             _logger.LogInformation("Simulation {SimulationId} completed: {Status}, " +
                                  "Successful rounds: {SuccessfulRounds}/{TotalRounds}, " +
-                                 "Final block height: {BlockHeight}", 
+                                 "Final block height: {BlockHeight}",
                 simulationId, simulation.Status, successfulRounds, totalRounds, finalBlockHeight);
+
+            // Persist final simulation state so exports reflect Completed/Stopped status.
+            await PersistSimulationCompletedAsync(simulation);
 
             OnSimulationStatusChanged(simulation);
         }
@@ -508,7 +536,7 @@ public class SimulationService : ISimulationService
         return Convert.ToHexString(hashBytes).ToLower();
     }
 
-    private async Task<List<Node>> CreateNodesAsync(CreateSimulationRequest request)
+    private async Task<List<Node>> CreateNodesAsync(CreateSimulationRequest request, Random rng)
     {
         var nodes = new List<Node>();
 
@@ -522,7 +550,7 @@ public class SimulationService : ISimulationService
                 ConsensusAlgorithm = request.Algorithm,
                 IsActive = true,
                 IsByzantine = i < request.ByzantineNodeCount, // First N nodes are Byzantine
-                ComputationalPower = Random.Shared.Next(80, 120), // Vary slightly for realism
+                ComputationalPower = rng.Next(80, 120), // Vary slightly for realism
                 ReputationScore = 100m,
                 CreatedAt = DateTime.UtcNow
             };
@@ -530,7 +558,7 @@ public class SimulationService : ISimulationService
             nodes.Add(node);
         }
 
-        return nodes;
+        return await Task.FromResult(nodes);
     }
 
     private IConsensusProtocol CreateConsensusProtocol(ConsensusAlgorithm algorithm)
@@ -578,13 +606,108 @@ public class SimulationService : ISimulationService
         try
         {
             RoundCompleted?.Invoke(this, new RoundCompletedEventArgs(simulation, round, result));
-            _logger.LogDebug("Round completed event fired for simulation {SimulationId}, round {RoundNumber}", 
+            _logger.LogDebug("Round completed event fired for simulation {SimulationId}, round {RoundNumber}",
                 simulation.Id, round.RoundNumber);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error firing round completed event for simulation {SimulationId}, round {RoundNumber}", 
+            _logger.LogError(ex, "Error firing round completed event for simulation {SimulationId}, round {RoundNumber}",
                 simulation.Id, round.RoundNumber);
+        }
+    }
+
+    private async Task PersistSimulationCreatedAsync(SimulationRun simulation)
+    {
+        if (!_persistToDb) return;
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var simRepo = scope.ServiceProvider.GetRequiredService<ISimulationRunRepository>();
+            var nodeRepo = scope.ServiceProvider.GetRequiredService<INodeRepository>();
+
+            // Detach Nodes before saving the parent to avoid cascade-insert collisions; persist them explicitly.
+            var nodes = simulation.Nodes?.ToList() ?? new List<Node>();
+            simulation.Nodes = new List<Node>();
+
+            await simRepo.AddAsync(simulation);
+            foreach (var node in nodes)
+            {
+                node.SimulationRunId = simulation.Id;
+                await nodeRepo.AddAsync(node);
+            }
+
+            simulation.Nodes = nodes;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Persistence of simulation {SimulationId} failed; continuing with in-memory state",
+                simulation.Id);
+        }
+    }
+
+    private async Task PersistRoundResultAsync(SimulationRun simulation, ConsensusRound round, Block? newBlock, ConsensusResult result)
+    {
+        if (!_persistToDb) return;
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var roundRepo = scope.ServiceProvider.GetRequiredService<IConsensusRoundRepository>();
+            var blockRepo = scope.ServiceProvider.GetRequiredService<IBlockRepository>();
+            var eventRepo = scope.ServiceProvider.GetRequiredService<IEventLogRepository>();
+
+            await roundRepo.AddAsync(round);
+
+            if (newBlock != null)
+            {
+                await blockRepo.AddAsync(newBlock);
+            }
+
+            var eventLog = EventLog.Info(
+                simulation.Id,
+                "RoundCompleted",
+                $"Round {round.RoundNumber} {(result.Success ? "succeeded" : "failed")} (leader={result.LeaderId ?? "n/a"})",
+                result.Metrics);
+            eventLog.ConsensusRoundId = round.Id;
+            eventLog.BlockId = newBlock?.Id;
+            eventLog.Source = nameof(SimulationService);
+            await eventRepo.AddAsync(eventLog);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Persistence of round {RoundNumber} for simulation {SimulationId} failed",
+                round.RoundNumber, simulation.Id);
+        }
+    }
+
+    private async Task PersistSimulationCompletedAsync(SimulationRun simulation)
+    {
+        if (!_persistToDb) return;
+
+        try
+        {
+            using var scope = _scopeFactory.CreateScope();
+            var simRepo = scope.ServiceProvider.GetRequiredService<ISimulationRunRepository>();
+            var stored = await simRepo.GetByIdAsync(simulation.Id);
+            if (stored == null)
+            {
+                _logger.LogWarning("Cannot finalize persistence for simulation {SimulationId}: row not found",
+                    simulation.Id);
+                return;
+            }
+
+            stored.Status = simulation.Status;
+            stored.CompletedAt = simulation.CompletedAt;
+            stored.StartedAt = simulation.StartedAt;
+            stored.Progress = simulation.Progress;
+            stored.TotalTransactions = simulation.TotalTransactions;
+            stored.ErrorMessage = simulation.ErrorMessage;
+            await simRepo.UpdateAsync(stored);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Final persistence update for simulation {SimulationId} failed", simulation.Id);
         }
     }
 }

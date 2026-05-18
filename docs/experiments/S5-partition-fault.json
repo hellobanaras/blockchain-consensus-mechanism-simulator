@@ -1,0 +1,166 @@
+{
+  "schemaVersion": "1.0",
+  "experimentSuite": {
+    "id": "S5-partition-fault",
+    "name": "Network Partition Recovery Test",
+    "description": "Temporary network partition at t=120s for 60s; measure recovery time and consensus continuity.",
+    "researchQuestions": ["RQ2"],
+    "hypotheses": ["H4"],
+    "repetitions": 10,
+    "randomSeed": 400,
+    "warmupRounds": 5,
+    "baseSimulation": {
+      "nodeCount": 10,
+      "byzantineNodeCount": 0,
+      "durationSeconds": 600,
+      "networkTopology": "FullMesh",
+      "blockTimeMs": 5000,
+      "transactionsPerBlock": 10,
+      "networkLatencyMs": 50,
+      "enableDetailedLogging": true,
+      "autoStart": true,
+      "algorithmConfiguration": { "seed": 400 }
+    },
+    "faultInjectionDefaults": {
+      "type": "NetworkPartition",
+      "triggerAtSeconds": 120,
+      "durationSeconds": 60,
+      "affectedNodeFraction": 0.4,
+      "recovery": "automatic"
+    },
+    "runs": [
+      {
+        "runId": "S5-PoW",
+        "name": "S5-Partition-PoW",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 400, "difficulty": 4 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "faultInjection": {
+          "type": "NetworkPartition",
+          "triggerAtSeconds": 120,
+          "durationSeconds": 60,
+          "affectedNodeFraction": 0.4,
+          "recovery": "automatic"
+        },
+        "tags": ["S5", "partition", "PoW"]
+      },
+      {
+        "runId": "S5-PoS",
+        "name": "S5-Partition-PoS",
+        "protocol": "ProofOfStake",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 400 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "faultInjection": {
+          "type": "NetworkPartition",
+          "triggerAtSeconds": 120,
+          "durationSeconds": 60,
+          "affectedNodeFraction": 0.4,
+          "recovery": "automatic"
+        },
+        "tags": ["S5", "partition", "PoS"]
+      },
+      {
+        "runId": "S5-DPoS",
+        "name": "S5-Partition-DPoS",
+        "protocol": "DelegatedProofOfStake",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 400, "witnessCount": 5 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "faultInjection": {
+          "type": "NetworkPartition",
+          "triggerAtSeconds": 120,
+          "durationSeconds": 60,
+          "affectedNodeFraction": 0.4,
+          "recovery": "automatic"
+        },
+        "tags": ["S5", "partition", "DPoS"]
+      },
+      {
+        "runId": "S5-PBFT",
+        "name": "S5-Partition-PBFT",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 400 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "faultInjection": {
+          "type": "NetworkPartition",
+          "triggerAtSeconds": 120,
+          "durationSeconds": 60,
+          "affectedNodeFraction": 0.4,
+          "recovery": "automatic"
+        },
+        "tags": ["S5", "partition", "PBFT"]
+      },
+      {
+        "runId": "S5-PoET",
+        "name": "S5-Partition-PoET",
+        "protocol": "ProofOfElapsedTime",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 400 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "faultInjection": {
+          "type": "NetworkPartition",
+          "triggerAtSeconds": 120,
+          "durationSeconds": 60,
+          "affectedNodeFraction": 0.4,
+          "recovery": "automatic"
+        },
+        "tags": ["S5", "partition", "PoET"]
+      }
+    ],
+    "fallbackProcedure": {
+      "description": "If dynamic fault injection API is unavailable, use static pre-partition: set 4 nodes as Disconnected via node management at t=120s manually, document in DEVIATIONS.md",
+      "staticAlternative": {
+        "byzantineNodeCount": 0,
+        "manualStep": "Mark 4 nodes Offline at 120s via UI or API"
+      }
+    }
+  }
+}

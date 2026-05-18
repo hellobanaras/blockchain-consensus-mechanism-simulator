@@ -1,3 +1,4 @@
+using Consensus.Core.Analytics;
 using Consensus.Core.Entities;
 using Consensus.Core.Enums;
 using Consensus.Core.Repositories;
@@ -193,7 +194,32 @@ public class AnalyticsService : IAnalyticsService
         foreach (var group in algorithmGroups)
         {
             var sims = group.ToList();
-            
+
+            // Aggregate blocks across all sims in this algorithm group.
+            // Used for leader-distribution fairness (Gini, entropy) and inter-block latency percentiles.
+            var allBlocks = new List<Block>();
+            foreach (var sim in sims)
+            {
+                var blocks = await _blockRepository.GetBySimulationRunAsync(sim.Id);
+                allBlocks.AddRange(blocks);
+            }
+
+            var leaderCounts = allBlocks
+                .Where(b => b.ProposerId.HasValue)
+                .GroupBy(b => b.ProposerId!.Value)
+                .Select(g => g.Count())
+                .ToList();
+
+            var interBlockMs = new List<double>();
+            foreach (var simBlocks in allBlocks.GroupBy(b => b.SimulationRunId))
+            {
+                var ordered = simBlocks.OrderBy(b => b.Timestamp).ToList();
+                for (int i = 1; i < ordered.Count; i++)
+                {
+                    interBlockMs.Add((ordered[i].Timestamp - ordered[i - 1].Timestamp).TotalMilliseconds);
+                }
+            }
+
             var metrics = new AlgorithmPerformanceMetrics
             {
                 AlgorithmName = group.Key.ToString(),
@@ -208,12 +234,16 @@ public class AnalyticsService : IAnalyticsService
                     .Sum(s => (s.CompletedAt!.Value - s.StartedAt!.Value).TotalSeconds),
                 AverageNodesPerSimulation = await GetAverageNodesForSimulations(sims),
                 NetworkEfficiency = await GetNetworkEfficiency(sims),
-                StabilityScore = await GetStabilityScore(sims)
+                StabilityScore = await GetStabilityScore(sims),
+                LeaderGini = FairnessMetrics.ComputeGini(leaderCounts),
+                LeaderEntropy = FairnessMetrics.ComputeShannonEntropy(leaderCounts),
+                P95BlockTimeMs = FairnessMetrics.Percentile(interBlockMs, 95),
+                P99BlockTimeMs = FairnessMetrics.Percentile(interBlockMs, 99)
             };
-            
+
             performanceMetrics[group.Key] = metrics;
         }
-        
+
         return performanceMetrics;
     }
 

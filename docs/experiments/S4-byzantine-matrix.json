@@ -1,0 +1,149 @@
+{
+  "schemaVersion": "1.0",
+  "experimentSuite": {
+    "id": "S4-byzantine-matrix",
+    "name": "Byzantine Fault Tolerance Matrix",
+    "description": "Increasing Byzantine node count at n=10 (0, 1, 2, 3 nodes ≈ 0%, 10%, 20%, 33%).",
+    "researchQuestions": ["RQ2", "RQ3"],
+    "hypotheses": ["H4"],
+    "repetitions": 10,
+    "randomSeed": 300,
+    "warmupRounds": 5,
+    "baseSimulation": {
+      "nodeCount": 10,
+      "durationSeconds": 600,
+      "networkTopology": "FullMesh",
+      "blockTimeMs": 5000,
+      "transactionsPerBlock": 10,
+      "networkLatencyMs": 50,
+      "enableDetailedLogging": true,
+      "autoStart": true,
+      "algorithmConfiguration": { "seed": 300 }
+    },
+    "byzantineMatrix": {
+      "nodeCount": 10,
+      "levels": [
+        { "byzantineNodeCount": 0, "label": "0pct", "fraction": 0.0 },
+        { "byzantineNodeCount": 1, "label": "10pct", "fraction": 0.1 },
+        { "byzantineNodeCount": 2, "label": "20pct", "fraction": 0.2 },
+        { "byzantineNodeCount": 3, "label": "33pct", "fraction": 0.33 }
+      ]
+    },
+    "expansion": {
+      "protocols": [
+        "ProofOfWork",
+        "ProofOfStake",
+        "DelegatedProofOfStake",
+        "PracticalByzantineFaultTolerance",
+        "ProofOfElapsedTime"
+      ],
+      "protocolShortNames": {
+        "ProofOfWork": "PoW",
+        "ProofOfStake": "PoS",
+        "DelegatedProofOfStake": "DPoS",
+        "PracticalByzantineFaultTolerance": "PBFT",
+        "ProofOfElapsedTime": "PoET"
+      },
+      "sweep": {
+        "parameter": "byzantineNodeCount",
+        "values": [0, 1, 2, 3]
+      },
+      "runIdPattern": "S4-{protocolShort}-f{byzantineNodeCount}",
+      "namePattern": "S4-Byzantine-{protocolShort}-{byzantineNodeCount}nodes"
+    },
+    "runs": [
+      {
+        "runId": "S4-PBFT-f0",
+        "name": "S4-Byzantine-PBFT-0nodes",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 0,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 300 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S4", "byzantine", "PBFT", "0pct"]
+      },
+      {
+        "runId": "S4-PBFT-f1",
+        "name": "S4-Byzantine-PBFT-1node",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 1,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 300 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S4", "byzantine", "PBFT", "10pct"]
+      },
+      {
+        "runId": "S4-PBFT-f2",
+        "name": "S4-Byzantine-PBFT-2nodes",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 2,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 300 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S4", "byzantine", "PBFT", "20pct"]
+      },
+      {
+        "runId": "S4-PBFT-f3",
+        "name": "S4-Byzantine-PBFT-3nodes",
+        "protocol": "PracticalByzantineFaultTolerance",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 3,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 300 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S4", "byzantine", "PBFT", "33pct"],
+        "notes": "At f=3, n=10: PBFT at theoretical tolerance boundary — expect degraded success rate"
+      },
+      {
+        "runId": "S4-PoW-f2",
+        "name": "S4-Byzantine-PoW-2nodes",
+        "protocol": "ProofOfWork",
+        "simulation": {
+          "nodeCount": 10,
+          "byzantineNodeCount": 2,
+          "durationSeconds": 600,
+          "networkTopology": "FullMesh",
+          "blockTimeMs": 5000,
+          "transactionsPerBlock": 10,
+          "networkLatencyMs": 50,
+          "algorithmConfiguration": { "seed": 300, "difficulty": 4 },
+          "enableDetailedLogging": true,
+          "autoStart": true
+        },
+        "tags": ["S4", "byzantine", "PoW", "20pct"]
+      }
+    ],
+    "notes": "Full matrix: 4 Byzantine levels × 5 protocols = 20 runs. PBFT full sweep included."
+  }
+}

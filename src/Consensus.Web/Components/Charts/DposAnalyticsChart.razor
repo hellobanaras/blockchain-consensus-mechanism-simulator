@@ -1,6 +1,7 @@
 @namespace Consensus.Web.Components.Charts
 @using Microsoft.AspNetCore.Components
 @using Microsoft.JSInterop
+@using Consensus.Core.Analytics
 @inject IJSRuntime JSRuntime
 
 <div class="dpos-analytics-container">
@@ -631,7 +632,9 @@
             GovernanceMetrics = new GovernanceMetrics
             {
                 HerfindahlIndex = 0.05 + random.NextDouble() * 0.15,
-                GiniCoefficient = 0.3 + random.NextDouble() * 0.4,
+                // Compute Gini from the actual witness BlocksProduced distribution shown on screen,
+                // not a random number. Same statistic used in AnalyticsService for cross-protocol fairness.
+                GiniCoefficient = FairnessMetrics.ComputeGini(witnessPerformance.Select(w => w.BlocksProduced)),
                 NakamotoCoefficient = random.Next(3, 8),
                 VotingParticipation = (decimal)(0.6 + random.NextDouble() * 0.3)
             }

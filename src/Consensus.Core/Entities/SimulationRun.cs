@@ -99,6 +99,11 @@ public class SimulationRun
     public int TotalTransactions { get; set; } = 0;
 
     /// <summary>
+    /// Optional deterministic seed for reproducible runs. Null means non-deterministic.
+    /// </summary>
+    public int? RandomSeed { get; set; }
+
+    /// <summary>
     /// Network latency simulation settings and other configuration
     /// </summary>
     public Dictionary<string, object>? Configuration { get; set; }

@@ -24,7 +24,7 @@ public class PbftProtocol : IConsensusProtocol
     private readonly Dictionary<Guid, int> _nodeViewNumber;
     private readonly Dictionary<Guid, bool> _nodeStatus; // false = faulty
     private readonly Dictionary<Guid, DateTime> _lastMessageTime;
-    private readonly Random _random;
+    private Random _random;
 
     public ConsensusAlgorithm Algorithm => ConsensusAlgorithm.PracticalByzantineFaultTolerance;
     public string Name => "PBFT";
@@ -63,6 +63,8 @@ public class PbftProtocol : IConsensusProtocol
         _roundStates = new Dictionary<int, PbftRoundState>();
         _random = new Random();
     }
+
+    public void SetRandom(Random rng) => _random = rng;
 
     public async Task InitializeAsync(IEnumerable<Node> nodes, Dictionary<string, object> configuration)
     {
