@@ -1,119 +1,27 @@
-﻿<div class="top-row ps-3 navbar navbar-dark">
-    <div class="container-fluid">
-        <a class="navbar-brand" href="">🔗 Consensus Simulator</a>
-        
-        <!-- Authentication status -->
-        <div class="navbar-nav ms-auto">
-            <AuthorizeView>
-                <Authorized>
-                    <div class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle text-white" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            <i class="fas fa-user-circle me-1"></i>
-                            Hello, @context.User.Identity!.Name
-                        </a>
-                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                            <AuthorizeView Roles="Admin" Context="adminContext">
-                                <li><a class="dropdown-item" href="/Account/UserManagement"><i class="fas fa-users me-2"></i>User Management</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                            </AuthorizeView>
-                            <li><a class="dropdown-item" href="/Account/Profile"><i class="fas fa-user-cog me-2"></i>Profile</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <li><a class="dropdown-item" href="/Account/Logout"><i class="fas fa-sign-out-alt me-2"></i>Sign Out</a></li>
-                        </ul>
-                    </div>
-                </Authorized>
-                <NotAuthorized>
-                    <a class="btn btn-outline-light btn-sm me-2" href="/Account/Login">
-                        <i class="fas fa-sign-in-alt me-1"></i>
-                        Sign In
-                    </a>
-                    <a class="btn btn-light btn-sm" href="/Account/Register">
-                        <i class="fas fa-user-plus me-1"></i>
-                        Register
-                    </a>
-                </NotAuthorized>
-            </AuthorizeView>
-        </div>
-    </div>
-</div>
+@* MudNavMenu sidebar. Items mirror the legacy NavMenu one-for-one — same routes,
+   role-gating identical, Material icons in place of bi-* / fa-* references. *@
 
-<input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+<MudNavMenu Rounded="true" Bordered="false" Color="Color.Primary" Class="pa-2">
+    <MudNavLink Href="" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">Dashboard</MudNavLink>
 
-<div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-    <nav class="nav flex-column">
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="" Match="NavLinkMatch.All">
-                <span class="bi bi-speedometer2-nav-menu" aria-hidden="true"></span> Dashboard
-            </NavLink>
-        </div>
+    <MudNavLink Href="simulations" Icon="@Icons.Material.Filled.PlayCircle">Simulations</MudNavLink>
+    <MudNavLink Href="nodes" Icon="@Icons.Material.Filled.Hub">Node Management</MudNavLink>
+    <MudNavLink Href="blocks" Icon="@Icons.Material.Filled.GridOn">Block Explorer</MudNavLink>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="nodes">
-                <span class="bi bi-diagram-3-nav-menu" aria-hidden="true"></span> Node Management
-            </NavLink>
-        </div>
+    <AuthorizeView Roles="Admin,Operator">
+        <MudNavLink Href="playground" Icon="@Icons.Material.Filled.Science">Protocol Playground</MudNavLink>
+    </AuthorizeView>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="blocks">
-                <span class="bi bi-grid-3x3-gap-nav-menu" aria-hidden="true"></span> Block Explorer
-            </NavLink>
-        </div>
+    <MudDivider Class="my-2" />
 
-        <AuthorizeView Roles="Admin,Operator">
-            <div class="nav-item px-3">
-                <NavLink class="nav-link" href="playground">
-                    <span class="bi bi-gear-nav-menu" aria-hidden="true"></span> Protocol Playground
-                </NavLink>
-            </div>
-        </AuthorizeView>
+    <MudNavGroup Title="Analytics" Icon="@Icons.Material.Filled.QueryStats" Expanded="true">
+        <MudNavLink Href="analytics" Icon="@Icons.Material.Filled.ShowChart">Overview</MudNavLink>
+        <MudNavLink Href="analytics-v3" Icon="@Icons.Material.Filled.BarChart">Dashboard v3</MudNavLink>
+        <MudNavLink Href="analytics-dashboard" Icon="@Icons.Material.Filled.AutoGraph">Dashboard v4</MudNavLink>
+        <MudNavLink Href="specialized-analytics" Icon="@Icons.Material.Filled.Biotech">Specialized</MudNavLink>
+        <MudNavLink Href="performance-baselines" Icon="@Icons.Material.Filled.Speed">Performance Baselines</MudNavLink>
+        <MudNavLink Href="finality-health" Icon="@Icons.Material.Filled.HealthAndSafety">Finality &amp; Health</MudNavLink>
+    </MudNavGroup>
 
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="statistics">
-                <span class="bi bi-graph-up-nav-menu" aria-hidden="true"></span> Statistics
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="simulations">
-                <span class="bi bi-play-circle-nav-menu" aria-hidden="true"></span> Simulations
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="analytics">
-                <span class="bi bi-graph-up-nav-menu" aria-hidden="true"></span> Analytics
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="analytics-v3">
-                <span class="bi bi-bar-chart-line-nav-menu" aria-hidden="true"></span> Analytics Dashboard
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="analytics-dashboard">
-                <span class="bi bi-graph-up-arrow-nav-menu" aria-hidden="true"></span> Analytics v4 🚀
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="specialized-analytics">
-                <span class="bi bi-microscope-nav-menu" aria-hidden="true"></span> Specialized Analytics 🔬
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="finality-health">
-                <span class="bi bi-shield-check-nav-menu" aria-hidden="true"></span> Finality & Health 🛡️
-            </NavLink>
-        </div>
-
-        <div class="nav-item px-3">
-            <NavLink class="nav-link" href="performance-baselines">
-                <span class="bi bi-speedometer-nav-menu" aria-hidden="true"></span> Performance Baselines 📊
-            </NavLink>
-        </div>
-    </nav>
-</div>
-
+    <MudNavLink Href="statistics" Icon="@Icons.Material.Filled.Insights">Statistics</MudNavLink>
+</MudNavMenu>

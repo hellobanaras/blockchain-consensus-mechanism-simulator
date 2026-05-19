@@ -218,6 +218,10 @@ builder.Services.AddHttpClient<IConsensusApiClient, ConsensusApiClient>(client =
 // Register database initialization service
 builder.Services.AddScoped<DatabaseInitializationService>();
 
+// MudBlazor: component services + per-circuit theme state.
+MudBlazor.Services.ServiceCollectionExtensions.AddMudServices(builder.Services);
+builder.Services.AddScoped<Consensus.Web.Services.ThemeService>();
+
 // Configure logging
 builder.Services.AddLogging(logging =>
 {

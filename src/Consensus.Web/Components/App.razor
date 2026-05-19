@@ -1,23 +1,49 @@
-﻿<!DOCTYPE html>
+@inject Consensus.Web.Services.ThemeService ThemeSvc
+
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
+
+    @* Bootstrap still loaded during the UI-modernization migration window
+       (Day 1–3). The Day-4 cleanup removes this link once every page uses
+       MudBlazor components. Until then both grids coexist. *@
     <link rel="stylesheet" href="@Assets["lib/bootstrap/dist/css/bootstrap.min.css"]" />
+
+    @* Inter webfont — self-hosted from Google Fonts CDN. Falls back to system
+       sans-serif if blocked. *@
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    @* MudBlazor base styles — must come AFTER Bootstrap so Mud wins specificity
+       on the components that have switched over. *@
+    <link rel="stylesheet" href="_content/MudBlazor/MudBlazor.min.css" />
+
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["Consensus.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
-    <!-- Chart.js is self-hosted to avoid CDN outages mid-demo. v4.4.0 from cdnjs. -->
+
+    @* Chart.js is self-hosted to avoid CDN outages mid-demo. v4.4.0 from cdnjs. *@
     <script src="lib/chart.js/chart.umd.min.js"></script>
     <HeadOutlet />
 </head>
 
 <body>
+    @* MudBlazor providers — required wrappers for theme/popover/dialog/snackbar
+       to function on any page. Theme palette flips based on ThemeService. *@
+    <MudThemeProvider Theme="@Consensus.Web.Themes.AppTheme.Light" IsDarkMode="@ThemeSvc.IsDark" />
+    <MudPopoverProvider />
+    <MudDialogProvider />
+    <MudSnackbarProvider />
+
     <Routes />
     <script src="_framework/blazor.web.js"></script>
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="js/blazor-debug.js"></script>
     <script src="js/charts.js"></script>
     <script src="js/dashboard.js"></script>

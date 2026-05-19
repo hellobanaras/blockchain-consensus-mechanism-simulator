@@ -16,3 +16,9 @@
 @using Consensus.Web.Components.Charts
 @using Consensus.Web.Components.Simulation
 @using Consensus.Core.Entities
+@using MudBlazor
+@* Disambiguate types whose simple name now collides with MudBlazor's globals.
+   App-domain meaning wins; MudBlazor's same-named types are still reachable
+   via the MudBlazor.* fully-qualified path on the rare components that need them. *@
+@using ChartOptions = Consensus.Web.Models.Api.ChartOptions
+@using SortDirection = Consensus.Core.Models.SortDirection

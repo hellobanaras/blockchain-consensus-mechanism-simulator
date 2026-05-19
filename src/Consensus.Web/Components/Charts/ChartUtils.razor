@@ -1,6 +1,9 @@
 @using Consensus.Web.Models.Api
 @using Microsoft.JSInterop
 @inject IJSRuntime JSRuntime
+@* Disambiguate ChartOptions (Consensus.Web's DTO) from MudBlazor.ChartOptions
+   now that @using MudBlazor is global from _Imports.razor. *@
+@using ChartOptions = Consensus.Web.Models.Api.ChartOptions
 
 @* Chart Utilities and Helper Functions *@
 @code {
