@@ -145,6 +145,14 @@ builder.Services.ConfigureApplicationCookie(options =>
     options.Cookie.HttpOnly = true;
 });
 
+// Flow AuthenticationState as a global cascading value. Required so that
+// AuthorizeView / [Authorize] inside @rendermode InteractiveServer pages
+// (e.g. Simulations.razor) can see the current user — the wrapper
+// <CascadingAuthenticationState> in Routes.razor only covers the SSR
+// render tree, not the interactive circuit. Without this the
+// "New Simulation" button stays dead with a yellow circuit-error banner.
+builder.Services.AddCascadingAuthenticationState();
+
 // Configure authorization policies
 builder.Services.AddAuthorization(options =>
 {
