@@ -82,7 +82,9 @@
             <MudText Typo="Typo.h6">All simulations</MudText>
             <MudStack Row="true" Spacing="2">
                 <MudSelect T="string" Label="Status" Dense="true" Variant="Variant.Outlined"
-                           Value="@filterStatus" ValueChanged="@OnStatusFilterChanged" Style="min-width: 160px;">
+                           Margin="Margin.Dense"
+                           Value="@filterStatus" ValueChanged="@OnStatusFilterChanged"
+                           Style="min-width: 220px;">
                     <MudSelectItem Value="@("")">All status</MudSelectItem>
                     <MudSelectItem Value="@("Running")">Running</MudSelectItem>
                     <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
@@ -90,7 +92,9 @@
                     <MudSelectItem Value="@("Stopped")">Stopped</MudSelectItem>
                 </MudSelect>
                 <MudSelect T="string" Label="Algorithm" Dense="true" Variant="Variant.Outlined"
-                           Value="@filterAlgorithm" ValueChanged="@OnAlgorithmFilterChanged" Style="min-width: 200px;">
+                           Margin="Margin.Dense"
+                           Value="@filterAlgorithm" ValueChanged="@OnAlgorithmFilterChanged"
+                           Style="min-width: 260px;">
                     <MudSelectItem Value="@("")">All algorithms</MudSelectItem>
                     <MudSelectItem Value="@("ProofOfWork")">Proof of Work</MudSelectItem>
                     <MudSelectItem Value="@("ProofOfStake")">Proof of Stake</MudSelectItem>

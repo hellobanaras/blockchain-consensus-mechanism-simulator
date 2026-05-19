@@ -14,10 +14,15 @@
 
     <MudDivider Class="my-2" />
 
+    @* Analytics surfaces collapsed to one primary "Dashboard" (the real-data
+       /analytics-v3 page) plus the three domain-specific drill-downs. The
+       previous Overview / Dashboard v3 / Dashboard v4 trio existed only
+       because successive analytics rebuilds were added side-by-side instead
+       of replacing each other. /analytics and /analytics-dashboard routes
+       still resolve (their pages are kept for old deep-links) but they're
+       not in the IA. *@
     <MudNavGroup Title="Analytics" Icon="@Icons.Material.Filled.QueryStats" Expanded="true">
-        <MudNavLink Href="analytics" Icon="@Icons.Material.Filled.ShowChart">Overview</MudNavLink>
-        <MudNavLink Href="analytics-v3" Icon="@Icons.Material.Filled.BarChart">Dashboard v3</MudNavLink>
-        <MudNavLink Href="analytics-dashboard" Icon="@Icons.Material.Filled.AutoGraph">Dashboard v4</MudNavLink>
+        <MudNavLink Href="analytics-v3" Icon="@Icons.Material.Filled.BarChart">Dashboard</MudNavLink>
         <MudNavLink Href="specialized-analytics" Icon="@Icons.Material.Filled.Biotech">Specialized</MudNavLink>
         <MudNavLink Href="performance-baselines" Icon="@Icons.Material.Filled.Speed">Performance Baselines</MudNavLink>
         <MudNavLink Href="finality-health" Icon="@Icons.Material.Filled.HealthAndSafety">Finality &amp; Health</MudNavLink>

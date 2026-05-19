@@ -6,6 +6,7 @@
 @inject IHttpClientFactory HttpClientFactory
 @inject IJSRuntime JSRuntime
 @inject ILogger<AnalyticsDashboard> Logger
+@inject Consensus.Core.Services.IAnalyticsService AnalyticsSvc
 @implements IAsyncDisposable
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
@@ -597,32 +598,59 @@
 
         try
         {
-            // Simulate loading analytics data for now
-            await Task.Delay(1000);
-            
-            // Mock data - replace with actual API call
+            // Real-data hydration via IAnalyticsService. The previous code
+            // returned hardcoded 47-sims/1247-blocks/125-nodes after a Task.Delay,
+            // which is what made the KPI tiles read "0" when the DB was empty
+            // (the placeholders weren't ever displayed because the synthetic
+            // numbers always replaced them) and lied when the DB had ≠47 rows.
+            var summary = await AnalyticsSvc.GenerateAnalyticsSummaryAsync(
+                new Consensus.Core.Models.AnalyticsRequest
+                {
+                    IncludeNodeStats = true,
+                    IncludeTimeSeriesData = true,
+                });
+
+            var algorithmPerf = summary.AlgorithmPerformance?.ToDictionary(
+                kvp => kvp.Key,
+                kvp => new AlgorithmPerformanceData
+                {
+                    TotalSimulations = kvp.Value.TotalSimulations,
+                    AverageProcessingTime = kvp.Value.AverageBlockRate > 0
+                        ? 1000.0 / kvp.Value.AverageBlockRate : 0,
+                    AverageConsensusTime = kvp.Value.P95BlockTimeMs,
+                    SuccessRate = kvp.Value.SuccessRate,
+                }) ?? new Dictionary<string, AlgorithmPerformanceData>();
+
+            var nodeStats = summary.NodeStats?.ToDictionary(
+                kvp => kvp.Key,
+                kvp => new NodeStatsData
+                {
+                    BlocksProduced = kvp.Value.BlocksProduced,
+                    WinRate = kvp.Value.WinRate,
+                    AverageBlockTime = kvp.Value.AverageBlockTime,
+                    EfficiencyScore = kvp.Value.EfficiencyScore,
+                    PerformanceRank = kvp.Value.PerformanceRank,
+                }) ?? new Dictionary<string, NodeStatsData>();
+
+            var timeSeries = summary.TimeSeriesData?.Select(p => new TimeSeriesDataPoint
+            {
+                Timestamp = p.Timestamp,
+                AverageProcessingTime = p.AverageBlockRate > 0 ? 1000.0 / p.AverageBlockRate : 0,
+                AverageConsensusTime = 0,  // Not tracked in Core's TimeSeriesDataPoint.
+                ActiveSimulations = p.ActiveSimulations,
+                ActiveNodes = p.ActiveNodes,
+                BlocksCreated = p.BlocksCreated,
+            }).ToList() ?? new List<TimeSeriesDataPoint>();
+
             analyticsData = new AnalyticsData
             {
-                TotalSimulations = 47,
-                TotalBlocks = 1247,
-                TotalNodes = 125,
-                AverageSimulationDuration = 234.5,
-                AlgorithmPerformance = new Dictionary<string, AlgorithmPerformanceData>
-                {
-                    ["ProofOfWork"] = new() { TotalSimulations = 15, AverageProcessingTime = 4200, AverageConsensusTime = 2800, SuccessRate = 94.2 },
-                    ["ProofOfStake"] = new() { TotalSimulations = 12, AverageProcessingTime = 1800, AverageConsensusTime = 1200, SuccessRate = 96.8 },
-                    ["PBFT"] = new() { TotalSimulations = 8, AverageProcessingTime = 2100, AverageConsensusTime = 1500, SuccessRate = 98.1 },
-                    ["Raft"] = new() { TotalSimulations = 12, AverageProcessingTime = 890, AverageConsensusTime = 650, SuccessRate = 99.2 }
-                },
-                NodeStats = new Dictionary<string, NodeStatsData>
-                {
-                    ["node-001"] = new() { BlocksProduced = 45, WinRate = 18.2, AverageBlockTime = 2.1, EfficiencyScore = 8.7, PerformanceRank = 1 },
-                    ["node-002"] = new() { BlocksProduced = 42, WinRate = 17.1, AverageBlockTime = 2.3, EfficiencyScore = 8.4, PerformanceRank = 2 },
-                    ["node-003"] = new() { BlocksProduced = 38, WinRate = 15.4, AverageBlockTime = 2.5, EfficiencyScore = 8.1, PerformanceRank = 3 },
-                    ["node-004"] = new() { BlocksProduced = 35, WinRate = 14.2, AverageBlockTime = 2.7, EfficiencyScore = 7.8, PerformanceRank = 4 },
-                    ["node-005"] = new() { BlocksProduced = 32, WinRate = 13.0, AverageBlockTime = 2.9, EfficiencyScore = 7.5, PerformanceRank = 5 }
-                },
-                TimeSeriesData = GenerateTimeSeriesData()
+                TotalSimulations = summary.TotalSimulations,
+                TotalBlocks = (int)summary.TotalBlocks,
+                TotalNodes = summary.TotalNodes,
+                AverageSimulationDuration = summary.AverageSimulationDuration,
+                AlgorithmPerformance = algorithmPerf,
+                NodeStats = nodeStats,
+                TimeSeriesData = timeSeries,
             };
 
             // Generate performance summary
