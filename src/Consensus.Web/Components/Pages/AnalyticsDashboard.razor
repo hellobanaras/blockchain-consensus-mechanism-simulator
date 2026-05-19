@@ -22,13 +22,12 @@
     <div class="dashboard-header">
         <div class="header-content">
             <div class="header-text">
-                <h1 class="dashboard-title">
-                    <i class="fas fa-chart-line me-3"></i>
-                    Analytics Dashboard
-                </h1>
-                <p class="dashboard-description">
-                    Comprehensive real-time analytics and performance insights for blockchain consensus simulations
-                </p>
+                <MudText Typo="Typo.h4" Class="font-weight-bold mb-1">
+                    <MudIcon Icon="@Icons.Material.Filled.AutoGraph" Class="me-2" />Analytics Dashboard
+                </MudText>
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-2 mb-0">
+                    Sample data shown — start a simulation via /simulations to populate this view with real runs.
+                </MudAlert>
             </div>
             <div class="header-actions">
                 <button class="btn btn-primary" @onclick="RefreshData" disabled="@isLoading">

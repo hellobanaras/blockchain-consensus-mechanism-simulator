@@ -14,13 +14,12 @@
     <div class="page-header">
         <div class="header-content">
             <div class="header-text">
-                <h1 class="page-title">
-                    <i class="fas fa-chart-line me-2"></i>
-                    Analytics Dashboard
-                </h1>
-                <p class="page-description">
+                <MudText Typo="Typo.h4" Class="font-weight-bold mb-1">
+                    <MudIcon Icon="@Icons.Material.Filled.ShowChart" Class="me-2" />Analytics Dashboard
+                </MudText>
+                <MudText Typo="Typo.body1" Color="Color.Default">
                     Comprehensive analysis of consensus simulation performance and metrics
-                </p>
+                </MudText>
             </div>
             <div class="header-actions">
                 <button class="btn btn-primary" @onclick="RefreshData" disabled="@isLoading">
