@@ -256,7 +256,8 @@ public class SimulationService : ISimulationService
             TotalNodes = simulation.NodeCount,
             ActiveNodes = simulation.Nodes.Count(n => n.Status == NodeStatus.Online),
             ConsensusRounds = simulation.ConsensusRounds?.Count ?? 0,
-            AverageBlockTime = protocolMetrics.TryGetValue("averageBlockTime", out var blockTime) 
+            TotalBlocks = simulation.Blocks?.Count ?? 0,
+            AverageBlockTime = protocolMetrics.TryGetValue("averageBlockTime", out var blockTime)
                 ? Convert.ToDouble(blockTime) : 0,
             TotalTransactions = simulation.TotalTransactions,
             NetworkLatency = simulation.NetworkLatencyMs,

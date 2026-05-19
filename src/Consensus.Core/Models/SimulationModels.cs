@@ -80,6 +80,12 @@ public record SimulationMetrics
     public int TotalNodes { get; init; }
     public int ActiveNodes { get; init; }
     public int ConsensusRounds { get; init; }
+    // Distinct from ConsensusRounds: a round can fail to produce a block, so a
+    // run with 100 successful rounds may have ≤ 100 blocks. The dashboard's
+    // "Block Height" tile reads this; previously it aliased ConsensusRounds
+    // and showed 0 for completed runs whose block count happened to be 0
+    // for unrelated reasons.
+    public int TotalBlocks { get; init; }
     public double AverageBlockTime { get; init; }
     public int TotalTransactions { get; init; }
     public double NetworkLatency { get; init; }

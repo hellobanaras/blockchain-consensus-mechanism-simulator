@@ -551,7 +551,7 @@
         currentMetrics.TotalNodes = metrics.TotalNodes;
         currentMetrics.ActiveNodes = metrics.ActiveNodes;
         currentMetrics.CurrentRound = metrics.ConsensusRounds;
-        currentMetrics.BlockHeight = metrics.ConsensusRounds;
+        currentMetrics.BlockHeight = metrics.TotalBlocks;
         currentMetrics.AverageLatency = (int)Math.Round(metrics.NetworkLatency);
         currentMetrics.BlocksPerSecond = (decimal)Math.Round(metrics.ThroughputTps, 2);
         currentMetrics.RoundsPerMinute = currentMetrics.BlocksPerSecond * 60;

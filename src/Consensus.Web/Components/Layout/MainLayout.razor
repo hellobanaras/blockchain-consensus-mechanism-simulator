@@ -3,6 +3,16 @@
 @inject NavigationManager Navigation
 @implements IDisposable
 
+@* MudBlazor providers belong at the root of the interactive render tree.
+   Hosting them in `App.razor` (the static SSR host) broke MudDialog /
+   MudPopover and the theme toggle because pages declared `@rendermode
+   InteractiveServer` couldn't see them. The theme palette swaps on
+   ThemeSvc.IsDark, which is StateHasChanged-driven from this layout. *@
+<MudThemeProvider Theme="@Consensus.Web.Themes.AppTheme.Light" IsDarkMode="@ThemeSvc.IsDark" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
 <MudLayout>
     <MudAppBar Elevation="1" Dense="true">
         <MudIconButton Icon="@Icons.Material.Filled.Menu" Color="Color.Inherit" Edge="Edge.Start"

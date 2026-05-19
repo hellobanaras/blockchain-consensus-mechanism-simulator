@@ -108,6 +108,7 @@ public class DbBackedSimulationService : ISimulationService
             TotalNodes = nodes.Count > 0 ? nodes.Count : sim.NodeCount,
             ActiveNodes = nodes.Count(n => n.Status == NodeStatus.Online),
             ConsensusRounds = rounds.Count,
+            TotalBlocks = blocks.Count,
             AverageBlockTime = meanBlockTimeMs,
             TotalTransactions = totalTx,
             NetworkLatency = sim.NetworkLatencyMs,
