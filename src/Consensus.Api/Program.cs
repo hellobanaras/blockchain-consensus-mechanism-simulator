@@ -50,7 +50,16 @@ builder.Services.AddAuthorization(options =>
 });
 
 // ─── MVC + OpenAPI ───────────────────────────────────────────────────────────
-builder.Services.AddControllers();
+// IgnoreCycles is required because EF navigation properties form bidirectional
+// cycles (SimulationRun.Nodes -> Node.SimulationRun -> SimulationRun.Nodes ...).
+// Without this the dashboard's GET /api/v1/Simulations/{id} blew up with
+// JsonException mid-stream, the client got malformed JSON, parsing returned
+// null, and the page stayed on "Loading Simulation Dashboard..." forever.
+builder.Services.AddControllers()
+    .AddJsonOptions(o =>
+    {
+        o.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+    });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 

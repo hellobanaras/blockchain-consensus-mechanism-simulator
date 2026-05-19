@@ -138,6 +138,13 @@ public class SimulationService : ISimulationService
                 runtime.Simulation.StartedAt = DateTime.UtcNow;
             }
 
+            // Persist the Running status to the DB so the dashboard counter
+            // cards (Running / Completed / Failed) reflect reality during a
+            // live run. Without this, the DB row stayed at Ready throughout
+            // and the live run never appeared in any counter bucket until
+            // PersistSimulationCompletedAsync fired at the very end.
+            await PersistSimulationStatusAsync(simulationId);
+
             // Start the simulation execution in the background
             _ = Task.Run(() => ExecuteSimulationAsync(simulationId));
 
@@ -678,6 +685,31 @@ public class SimulationService : ISimulationService
         {
             _logger.LogWarning(ex, "Persistence of round {RoundNumber} for simulation {SimulationId} failed",
                 round.RoundNumber, simulation.Id);
+        }
+    }
+
+    private async Task PersistSimulationStatusAsync(Guid simulationId)
+    {
+        if (!_persistToDb) return;
+
+        try
+        {
+            var runtime = GetSimulationRuntime(simulationId);
+            if (runtime == null) return;
+
+            using var scope = _scopeFactory.CreateScope();
+            var simRepo = scope.ServiceProvider.GetRequiredService<ISimulationRunRepository>();
+            var stored = await simRepo.GetByIdAsync(simulationId);
+            if (stored == null) return;
+
+            stored.Status = runtime.Simulation.Status;
+            stored.StartedAt = runtime.Simulation.StartedAt;
+            stored.UpdatedAt = DateTime.UtcNow;
+            await simRepo.UpdateAsync(stored);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Status persistence update for simulation {SimulationId} failed", simulationId);
         }
     }
 
