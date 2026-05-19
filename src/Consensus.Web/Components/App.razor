@@ -29,12 +29,12 @@
 </head>
 
 <body>
-    @* MudBlazor providers MUST live inside the interactive render tree (see
-       MainLayout.razor). Placing them here in the static SSR host caused
-       pages declared `@rendermode InteractiveServer` to throw
-       "Missing <MudPopoverProvider />" when opening any MudDialog and
-       prevented the theme toggle from re-rendering. *@
-    <Routes />
+    @* Render mode set at the Routes level so MainLayout (and the MudBlazor
+       providers it hosts) run interactively without each page needing its
+       own @rendermode declaration. Account/Login and Account/Register use
+       `<EditForm data-enhance="false">` so their HTTP form POSTs continue
+       to work the same whether the surrounding tree is SSR or interactive. *@
+    <Routes @rendermode="InteractiveServer" />
     <script src="_framework/blazor.web.js"></script>
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="js/blazor-debug.js"></script>

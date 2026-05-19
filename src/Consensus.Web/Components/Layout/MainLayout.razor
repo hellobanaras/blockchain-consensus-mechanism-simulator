@@ -1,20 +1,17 @@
 @inherits LayoutComponentBase
-@rendermode InteractiveServer
 @inject Consensus.Web.Services.ThemeService ThemeSvc
 @inject NavigationManager Navigation
 @implements IDisposable
 
 @*
-   The layout itself must run interactively for the MudBlazor providers
-   below to activate their client-side popover / dialog / snackbar
-   infrastructure. Moving the providers into the layout (Bundle 1, R-001)
-   was necessary but insufficient: the layout was still SSR-rendered, so
-   MudPopoverProvider mounted statically and threw
-   "Missing <MudPopoverProvider />" the moment any interactive page tried
-   to open a MudDialog. The `@rendermode InteractiveServer` line above
-   fixes that — the layout (and the providers it hosts) now run in the
-   interactive server circuit. The theme toggle re-evaluates correctly
-   for the same reason.
+   Render mode is set at the <Routes /> level in App.razor (not here on
+   the layout) — declaring the layout interactive directly fails with a
+   "Cannot pass the parameter 'Body' to component 'MainLayout' …
+   RenderFragment is arbitrary code and cannot be serialized" error,
+   because the Body delegate cannot cross the SSR→interactive boundary.
+   Hoisting the rendermode to Routes means the layout (and the providers
+   below) run inside the same interactive circuit as the pages, and the
+   Body delegate is passed within that boundary, never serialized.
 *@
 
 @* MudBlazor providers belong at the root of the interactive render tree.
