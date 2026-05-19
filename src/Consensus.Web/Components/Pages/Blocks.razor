@@ -6,6 +6,7 @@
 @using Microsoft.AspNetCore.Authorization
 @inject IJSRuntime JSRuntime
 @inject IBlockExplorerService BlockExplorerService
+@inject IConsensusApiClient ApiClient
 @inject NavigationManager Navigation
 @implements IDisposable
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
@@ -507,24 +508,8 @@
             blocksResponse = await BlockExplorerService.GetBlocksAsync(request);
             statistics = await BlockExplorerService.GetBlockStatisticsAsync(selectedSimulationId);
 
-            // Mock simulations for now (TODO: Add API endpoint for simulations)
-            availableSimulations = new List<SimulationRun>
-            {
-                new SimulationRun 
-                { 
-                    Id = Guid.NewGuid(), 
-                    Name = "PoW Test Simulation",
-                    ConsensusAlgorithm = ConsensusAlgorithm.ProofOfWork,
-                    Status = SimulationStatus.Completed
-                },
-                new SimulationRun 
-                { 
-                    Id = Guid.NewGuid(), 
-                    Name = "PBFT Network Test",
-                    ConsensusAlgorithm = ConsensusAlgorithm.PracticalByzantineFaultTolerance,
-                    Status = SimulationStatus.Running
-                }
-            };
+            // Populate the simulation-filter dropdown from the Api host (DB-backed).
+            availableSimulations = (await ApiClient.GetSimulationsAsync()).ToList();
 
             StateHasChanged();
         }

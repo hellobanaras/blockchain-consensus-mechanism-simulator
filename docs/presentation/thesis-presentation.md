@@ -197,7 +197,7 @@ All seven scenario templates ship as JSON under `docs/experiments/` and now hono
 
 # 9 · Live Demo (Switch to browser)
 
-1. `docker compose up --build` → http://localhost:3000
+1. `docker compose up --build` → http://localhost:8080
 2. Log in (`admin@consensus-lab.dev` / `Admin@123!`)
 3. **Simulations → New Simulation** → PoW, 10 nodes, 2 Byzantine, seed = **42**
 4. Watch live rounds tick on `/simulation/{id}` via SignalR
@@ -314,6 +314,6 @@ round 04 → Node_5              round 04 → Node_5
 `umesh_25s03res52@iitp.ac.in`
 
 **Code:** github.com/hellobanaras/blockchain-consensus-mechanism-simulator (branch `release`)
-**Demo:** `docker compose up --build` → http://localhost:3000
+**Demo:** `docker compose up --build` → http://localhost:8080
 
 <span class="small">All five protocols. One simulator. Seeded for reproducibility.</span>

@@ -11,7 +11,7 @@
 @inject IJSRuntime JSRuntime
 @inject ILogger<SimulationDashboard> Logger
 @inject ISimulationService SimService
-@inject ISimulationRunRepository SimulationRepo
+@inject Consensus.Web.Services.IConsensusApiClient ApiClient
 @inject INodeRepository NodeRepo
 @implements IAsyncDisposable
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
@@ -377,9 +377,11 @@
     {
         try
         {
-            // Live in-memory state first (current runtime); fall back to DB row if the run already finished.
+            // Live in-memory state first (so the page reflects writes that haven't
+            // yet flushed to DB); fall back to the Api host (the canonical READ
+            // surface — backed by Postgres) when the run has completed.
             simulation = await SimService.GetSimulationAsync(SimulationId)
-                         ?? await SimulationRepo.GetByIdAsync(SimulationId);
+                         ?? await ApiClient.GetSimulationAsync(SimulationId);
 
             if (simulation == null)
             {
@@ -435,76 +437,57 @@
 
     private void InitializeMetricsTimer()
     {
-        // Update metrics every second with mock data
-        metricsUpdateTimer = new Timer(UpdateMockMetrics, null, TimeSpan.Zero, TimeSpan.FromSeconds(1));
+        // Poll real metrics every 2s: in-memory runtime from ISimulationService if
+        // the run is live, otherwise the Api host's DB-backed view. SignalR pushes
+        // also update currentMetrics in real time (see OnMetricsUpdate); the timer
+        // is a safety net so the dashboard stays fresh if a hub event is missed.
+        metricsUpdateTimer = new Timer(async _ => await RefreshMetricsAsync(),
+            null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(2));
     }
 
-    private void UpdateMockMetrics(object? state)
+    private async Task RefreshMetricsAsync()
     {
-        // Generate mock real-time data
-        var random = new Random();
-        
-        currentMetrics.BlockHeight++;
-        currentMetrics.CurrentRound = currentMetrics.BlockHeight + random.Next(0, 3);
-        currentMetrics.BlocksPerSecond = (decimal)(random.NextDouble() * 2 + 0.5);
+        try
+        {
+            var live = await SimService.GetSimulationMetricsAsync(SimulationId);
+            if (live != null)
+            {
+                ApplyMetricsSnapshot(live);
+            }
+            else
+            {
+                var sim = await ApiClient.GetSimulationAsync(SimulationId);
+                if (sim != null)
+                {
+                    currentMetrics.BlockHeight = sim.Blocks?.Count ?? 0;
+                    currentMetrics.CurrentRound = sim.ConsensusRounds?.Count ?? 0;
+                    overallProgress = (int)Math.Clamp(sim.Progress * 100, 0, 100);
+                }
+            }
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Metrics refresh failed for simulation {Id}", SimulationId);
+        }
+    }
+
+    // Note: SimulationMetrics is intentionally fully-qualified — the local nested
+    // class with the same name (used for the dashboard's render-side fields) would
+    // otherwise shadow the Core model returned by ISimulationService.
+    private void ApplyMetricsSnapshot(Consensus.Core.Models.SimulationMetrics metrics)
+    {
+        currentMetrics.TotalNodes = metrics.TotalNodes;
+        currentMetrics.ActiveNodes = metrics.ActiveNodes;
+        currentMetrics.CurrentRound = metrics.ConsensusRounds;
+        currentMetrics.BlockHeight = metrics.ConsensusRounds;
+        currentMetrics.AverageLatency = (int)Math.Round(metrics.NetworkLatency);
+        currentMetrics.BlocksPerSecond = (decimal)Math.Round(metrics.ThroughputTps, 2);
         currentMetrics.RoundsPerMinute = currentMetrics.BlocksPerSecond * 60;
-        currentMetrics.AverageLatency = random.Next(50, 200);
-        currentMetrics.MessageCount += random.Next(5, 15);
-        
-        overallProgress = Math.Min(100, overallProgress + random.Next(0, 2));
-
-        // Add random activity
-        if (random.NextDouble() < 0.3)
+        if (simulation != null)
         {
-            var activities = new[]
-            {
-                ("consensus", "Node 3 proposed new block"),
-                ("consensus", "Round 45 consensus reached"),
-                ("block", $"Block #{currentMetrics.BlockHeight} validated"),
-                ("network", "Node 2 reconnected"),
-                ("consensus", "Leader election completed")
-            };
-            
-            var activity = activities[random.Next(activities.Length)];
-            currentActivity.Add(new ActivityEvent
-            {
-                Timestamp = DateTime.UtcNow,
-                Type = activity.Item1,
-                Message = activity.Item2
-            });
-            
-            // Keep only last 50 activities
-            if (currentActivity.Count > 50)
-                currentActivity.RemoveAt(0);
+            overallProgress = (int)Math.Clamp(simulation.Progress * 100, 0, 100);
         }
-
-        // Add random log entries
-        if (random.NextDouble() < 0.4)
-        {
-            var logEntries = new[]
-            {
-                ("INFO", "consensus", "Consensus round completed successfully"),
-                ("DEBUG", "blocks", $"Block #{currentMetrics.BlockHeight} added to chain"),
-                ("INFO", "network", "All nodes responding normally"),
-                ("WARN", "consensus", "Minor delay in consensus protocol"),
-                ("INFO", "blocks", "Block validation passed")
-            };
-            
-            var entry = logEntries[random.Next(logEntries.Length)];
-            eventLogs.Add(new LogEntry
-            {
-                Timestamp = DateTime.UtcNow,
-                Level = entry.Item1,
-                Category = entry.Item2,
-                Message = entry.Item3
-            });
-            
-            // Keep only last 100 logs
-            if (eventLogs.Count > 100)
-                eventLogs.RemoveAt(0);
-        }
-
-        InvokeAsync(StateHasChanged);
     }
 
     // SignalR event handlers

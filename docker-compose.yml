@@ -1,5 +1,11 @@
-# One-click stack for the M.Tech thesis demo: Postgres 16 + Blazor Web app.
-# `docker compose up --build` brings everything online; web on http://localhost:3000.
+# One-click stack for the M.Tech thesis demo: Postgres 16 + REST Api + Blazor Web.
+# Host port mappings are picked to avoid common dev-machine collisions
+# (3000 → Next.js, 5432 → local Postgres install, 5000/5001 → other .NET apps).
+#
+#   Web UI / Blazor / Auth:   http://localhost:8080
+#   REST Api + Swagger:       http://localhost:5101
+#   Postgres (host-side):     localhost:5433   (containers use 5432 internally)
+#   pgAdmin (debug only):     http://localhost:5050 (with `--profile debug`)
 
 services:
   postgres:
@@ -11,7 +17,8 @@ services:
       POSTGRES_DB: consensusdb
       POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
     ports:
-      - "5432:5432"
+      # Host 5433 → container 5432 (avoid colliding with a local Postgres install).
+      - "5433:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
       - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
@@ -22,6 +29,30 @@ services:
       retries: 12
     restart: unless-stopped
 
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: consensus-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      # Inside the compose network Postgres always listens on 5432.
+      ConnectionStrings__DefaultConnection: "Host=postgres;Port=5432;Database=consensusdb;Username=consensus_user;Password=consensus_password"
+      ConsensusSimulator__AutoMigrateDatabase: "true"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: consensus_user
+      POSTGRES_DB: consensusdb
+    ports:
+      # Host 5101 matches Consensus.Api/Properties/launchSettings.json so local
+      # `dotnet run` and the container expose the same URL.
+      - "5101:8080"
+    restart: unless-stopped
+
   web:
     build:
       context: .
@@ -30,6 +61,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      api:
+        condition: service_started
     environment:
       ASPNETCORE_ENVIRONMENT: Development
       ASPNETCORE_URLS: http://+:8080
@@ -37,15 +70,20 @@ services:
       ConsensusSimulator__AutoMigrateDatabase: "true"
       ConsensusSimulator__SeedTestData: "false"
       Simulation__PersistToDb: "true"
+      # The Web host calls the Api over the internal compose network for read
+      # data (lists, dashboards, exports). Inside the network the Api is on
+      # http://api:8080; from the host browser it's http://localhost:5101.
+      ConsensusApi__BaseUrl: "http://api:8080"
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
       POSTGRES_USER: consensus_user
       POSTGRES_DB: consensusdb
     ports:
-      - "3000:8080"
+      # Host 8080 → container 8080 (avoid Next.js on 3000).
+      - "8080:8080"
     restart: unless-stopped
 
-  # Optional pgAdmin for inspecting tables during the demo. Enabled with `--profile debug`.
+  # Optional pgAdmin for inspecting tables. Enabled with `--profile debug`.
   pgadmin:
     image: dpage/pgadmin4:latest
     container_name: consensus-pgadmin

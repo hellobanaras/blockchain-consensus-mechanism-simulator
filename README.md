@@ -160,8 +160,8 @@ The Consensus Lab provides an interactive environment for:
    ```
 
 3. **Access the application**
-   - Web UI: http://localhost:3000
-   - API Documentation: http://localhost:3000/swagger
+   - Web UI: http://localhost:8080
+   - API Documentation: http://localhost:8080/swagger
 
 ### **Authentication**
 

@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1.6
+# Multi-stage build for Consensus.Api (REST surface backed by the same Postgres
+# as Consensus.Web; see DbBackedSimulationService for why this is read-only).
+# Stage 1 uses the .NET 9 SDK image; Stage 2 the slimmer ASP.NET runtime.
+
+FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+WORKDIR /src
+
+COPY BlockchainConsensusSimulator.sln ./
+COPY src/Consensus.Core/Consensus.Core.csproj    src/Consensus.Core/
+COPY src/Consensus.Data/Consensus.Data.csproj    src/Consensus.Data/
+COPY src/Consensus.Api/Consensus.Api.csproj      src/Consensus.Api/
+COPY src/Consensus.Web/Consensus.Web.csproj      src/Consensus.Web/
+
+RUN dotnet restore src/Consensus.Api/Consensus.Api.csproj
+
+COPY src/ src/
+RUN dotnet publish src/Consensus.Api/Consensus.Api.csproj \
+    -c Release \
+    -o /app/publish \
+    --no-restore \
+    /p:UseAppHost=false
+
+# ---------- Runtime stage ----------
+FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS runtime
+WORKDIR /app
+
+# pg_isready lets the entrypoint wait for the shared Postgres container.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /app/publish ./
+COPY scripts/api-startup.sh /app/startup.sh
+RUN chmod +x /app/startup.sh
+
+ENV ASPNETCORE_URLS=http://+:8080 \
+    ASPNETCORE_ENVIRONMENT=Development \
+    DOTNET_RUNNING_IN_CONTAINER=true
+
+EXPOSE 8080
+
+ENTRYPOINT ["/app/startup.sh"]

@@ -186,10 +186,20 @@ builder.Services.AddScoped<Consensus.Core.Services.IPayloadService, Consensus.Co
 // Register Chart.js service for interactive charts
 builder.Services.AddScoped<ChartJsService>();
 
-// Register HTTP client for Block Explorer API
+// Register HTTP clients pointing at the Consensus.Api host. In Docker compose
+// the URL is `http://api:8080`; for `dotnet run` against a locally-started Api
+// it falls back to `http://localhost:5101` (see Api/Properties/launchSettings.json).
+var apiBaseUrl = builder.Configuration["ConsensusApi:BaseUrl"] ?? "http://localhost:5101";
+
 builder.Services.AddHttpClient<IBlockExplorerService, BlockExplorerService>(client =>
 {
-    client.BaseAddress = new Uri("http://localhost:5101/");
+    client.BaseAddress = new Uri(apiBaseUrl + (apiBaseUrl.EndsWith('/') ? "" : "/"));
+    client.Timeout = TimeSpan.FromSeconds(30);
+});
+
+builder.Services.AddHttpClient<IConsensusApiClient, ConsensusApiClient>(client =>
+{
+    client.BaseAddress = new Uri(apiBaseUrl + (apiBaseUrl.EndsWith('/') ? "" : "/"));
     client.Timeout = TimeSpan.FromSeconds(30);
 });
 

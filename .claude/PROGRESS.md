@@ -2,7 +2,7 @@
 
 > **Append-only log of meaningful units of work.** Future sessions read top-to-bottom and pick up at the first incomplete item. Update on every commit and after every multi-step task.
 
-**Last updated:** 2026-05-18
+**Last updated:** 2026-05-19
 
 ---
 
@@ -74,6 +74,19 @@
 - `.claude/settings.json` with pre-approved safe commands.
 
 ---
+
+### ✅ Three-service Docker stack (web + api + postgres, safe ports) — May 19
+
+- `.github/` removed (broken workflows referencing deleted tests + stale Copilot instructions).
+- Empty `tests/` directory removed; `docs/presentation/assets/.gitkeep` added.
+- New file: `src/Consensus.Core/Services/DbBackedSimulationService.cs` — read-only `ISimulationService` impl. Throws on writes; serves reads from repositories.
+- `src/Consensus.Api/Program.cs` rewritten: registers DbContext + repos + `IAnalyticsService` + `ISimulationService` (→ `DbBackedSimulationService`), permissive `DevAlwaysAllow` auth handler so `[Authorize]` resolves without JWT, auto-migrate on startup, CORS open in dev.
+- New `Dockerfile.api` + `scripts/api-startup.sh` (mirrors web's wait-for-Postgres pattern).
+- `docker-compose.yml`: three services on safe host ports — **web:8080**, **api:5101**, **postgres:5433** (containers all use their internal defaults). Web env `ConsensusApi__BaseUrl=http://api:8080` for service-to-service calls.
+- New `src/Consensus.Web/Services/ConsensusApiClient.cs` — typed HttpClient targeting `api/v1/Simulations`. Registered in `Program.cs` alongside the existing `BlockExplorerService`.
+- READ-path refactor: `Simulations.razor.LoadSimulations()` now merges Api list with the in-memory active runtime; `SimulationDashboard.razor.LoadSimulationAsync()` falls back from in-memory to Api (not direct repo); `Blocks.razor` populates its filter dropdown via `ApiClient.GetSimulationsAsync()` instead of hardcoded mock list.
+- `SimulationDashboard.razor.InitializeMetricsTimer()` replaced: the 1-second `UpdateMockMetrics` random-data timer is gone. New `RefreshMetricsAsync()` polls `ISimulationService.GetSimulationMetricsAsync` (live) with Api fallback for completed runs.
+- Smoke test (May 19, both Docker daemons running): all four containers up; Web 200 on `/` and `/Account/Login`; Api Swagger 200; Api `/api/v1/Simulations` returns DB-backed JSON (verified with a synthetic row that round-tripped through the chain incl. `RandomSeed=42`); `__EFMigrationsHistory` has the three expected rows.
 
 ## Cursor: NEXT STEP
 

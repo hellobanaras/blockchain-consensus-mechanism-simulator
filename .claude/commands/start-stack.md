@@ -26,9 +26,11 @@ and report what's wrong rather than letting the container loop. Likely causes:
 - Connection refused → postgres healthcheck hasn't passed yet; wait another 10s and retry.
 
 Once healthy, report the four URLs from `DOCKER_GUIDE.md`:
-- UI: http://localhost:3000
-- Swagger: http://localhost:3000/swagger
-- Postgres: `localhost:5432` (`consensus_user` / `consensus_password` / `consensusdb`)
+- UI: http://localhost:8080
+- Swagger: http://localhost:8080/swagger
+- Postgres (host): `localhost:5433` (`consensus_user` / `consensus_password` / `consensusdb`)
 - pgAdmin (only if started with `--profile debug`): http://localhost:5050
+
+Host ports 8080 / 5433 are chosen to avoid common collisions: 3000 (Next.js dev servers) and 5432 (a local Postgres install). Override via `docker-compose.override.yml` if needed; that file is git-ignored.
 
 If Docker Desktop is not running, ask the user to start it; do NOT try `colima` or other alternatives without explicit permission.

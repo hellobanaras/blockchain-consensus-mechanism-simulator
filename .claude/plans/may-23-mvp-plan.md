@@ -24,7 +24,7 @@ User decisions (asked & answered):
 - **DB:** PostgreSQL 16 in docker-compose (matches existing migrations + `scripts/startup.sh`).
 - **Tests:** intentionally deferred to post-thesis; not in MVP.
 
-Outcome we are aiming at on Sat 23 morning: `git clone` → `docker compose up` → browser to `localhost:3000` → log in → start a seeded PoW + PBFT simulation from the UI → watch live rounds → export JSON containing real rounds, Gini, entropy, p95/p99 → re-run with same seed and get identical leader sequence.
+Outcome we are aiming at on Sat 23 morning: `git clone` → `docker compose up` → browser to `localhost:8080` → log in → start a seeded PoW + PBFT simulation from the UI → watch live rounds → export JSON containing real rounds, Gini, entropy, p95/p99 → re-run with same seed and get identical leader sequence.
 
 ---
 
@@ -94,7 +94,7 @@ Author three new files at repo root:
 
 **`docker-compose.yml`** (3 services):
 - `postgres` (image `postgres:16-alpine`, env: `POSTGRES_USER=consensus_user`, `POSTGRES_PASSWORD=consensus_pass`, `POSTGRES_DB=consensusdb`, volume `postgres-data`, mount `./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql`, port `5432:5432`, healthcheck `pg_isready -U consensus_user`).
-- `web` (build `.`, depends_on `postgres` healthy, env: `ASPNETCORE_ENVIRONMENT=Development`, `ConnectionStrings__DefaultConnection=Host=postgres;Database=consensusdb;Username=consensus_user;Password=consensus_pass`, `Simulation__PersistToDb=true`, port `3000:8080`).
+- `web` (build `.`, depends_on `postgres` healthy, env: `ASPNETCORE_ENVIRONMENT=Development`, `ConnectionStrings__DefaultConnection=Host=postgres;Database=consensusdb;Username=consensus_user;Password=consensus_password`, `Simulation__PersistToDb=true`, port `8080:8080`).
 - `pgadmin` (image `dpage/pgadmin4`, port `5050:80`, env: `PGADMIN_DEFAULT_EMAIL=admin@consensus-lab.dev`, `PGADMIN_DEFAULT_PASSWORD=Admin@123!`, profiles: `["debug"]` so it stays off by default).
 
 **`.dockerignore`** (exclude `bin/`, `obj/`, `.git/`, `.vscode/`, `tests/`, `mtech/`, `docs/experiments/results/`).
@@ -216,7 +216,7 @@ To be run at 8:00 AM Sat 23 May on the demo machine.
 2. `docker pull mcr.microsoft.com/dotnet/sdk:9.0 mcr.microsoft.com/dotnet/aspnet:9.0 postgres:16-alpine` (warm cache).
 3. `docker compose down -v && docker compose up -d`; wait until `docker compose ps` shows `postgres` healthy and `web` running.
 4. `docker compose logs web | head -50` — no startup exception; migrations applied; admin user seeded.
-5. Browser → `http://localhost:3000/login` → sign in with `admin@consensus-lab.dev` / `Admin@123!`.
+5. Browser → `http://localhost:8080/login` → sign in with `admin@consensus-lab.dev` / `Admin@123!`.
 6. `/simulations` → "New Simulation" → fill: name=`Demo-PoW`, algorithm=`ProofOfWork`, nodes=`10`, byzantine=`2`, blockTime=`2000`, duration=`60`, **randomSeed=`42`** → Submit → page navigates to `/simulations/dashboard/{id}`.
 7. Dashboard shows live round-completed updates within 5 seconds; node list shows 10 nodes; round counter increments.
 8. Open second tab → start `Demo-PBFT` (PracticalByzantineFaultTolerance, same params, seed=42); both run concurrently.

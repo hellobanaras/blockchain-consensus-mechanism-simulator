@@ -22,16 +22,27 @@ The approved problem statement is in [`mtech/ANNEXURE_I_ABSTRACT_OF_PROBLEM_STAT
 
 ## 3. Solution layout
 
+Two ASP.NET hosts share a single Postgres. **Api is read-only**; **Web owns the
+simulation runtime and writes**. See `Consensus.Core/Services/DbBackedSimulationService.cs`
+for why this split is encoded as two different `ISimulationService` implementations.
+
 ```
 src/
-├── Consensus.Core    Domain entities, 5 protocol implementations, SimulationService,
+├── Consensus.Core    Domain entities, 5 protocol implementations, SimulationService
+│                     (in-memory runtime), DbBackedSimulationService (read-only),
 │                     AnalyticsService, FairnessMetrics, repository interfaces
 ├── Consensus.Data    EF Core DbContext, Postgres migrations, repository implementations,
 │                     IdentitySeeder
-├── Consensus.Api     REST controllers (SimulationController, AnalyticsController,
-│                     BlocksController, SimulationResultsController, ...)
+├── Consensus.Api     READ-only REST host. Registers DbBackedSimulationService so its
+│                     controllers (SimulationController, AnalyticsController,
+│                     BlocksController, SimulationResultsController, SimulationsController,
+│                     DashboardAnalyticsController) serve DB-backed data without holding
+│                     a simulation runtime. Write endpoints return NotSupported by design.
 └── Consensus.Web     Blazor Server UI + SignalR hubs (SimulationHub, AnalyticsHub) +
-                      hosted background runner (SimulationHostedService)
+                      hosted background runner (SimulationHostedService). Owns the
+                      in-memory SimulationService runtime + persists rounds/blocks/events.
+                      Fetches DISPLAY data (lists, dashboards) from Api via
+                      ConsensusApiClient (Services/ConsensusApiClient.cs).
 
 docs/
 ├── THESIS_SCOPE_SPECIFICATION.md    Single source of truth for thesis scope
@@ -56,8 +67,17 @@ Clean Architecture: **Core has no project reference to Data**. Persistence happe
 ## 4. Quick start (one command)
 
 ```bash
-docker compose up --build           # browse to http://localhost:3000
+docker compose up --build
 ```
+
+| Surface              | URL                          |
+|----------------------|------------------------------|
+| Blazor UI (Web)      | http://localhost:8080        |
+| REST Api + Swagger   | http://localhost:5101        |
+| Postgres (host-side) | localhost:5433               |
+| pgAdmin (optional)   | http://localhost:5050 (with `--profile debug`) |
+
+Ports picked to dodge common dev-box collisions (3000 → Next.js, 5432 → local Postgres, 5000/5001 → other .NET apps).
 
 Seeded admin user: `admin@consensus-lab.dev` / `Admin@123!` (created on every fresh DB by `IdentitySeeder`).
 

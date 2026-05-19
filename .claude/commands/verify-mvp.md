@@ -13,7 +13,7 @@ Use the `Bash` tool for shell commands. Use `Read` to inspect files. Report stat
    `docker pull mcr.microsoft.com/dotnet/sdk:9.0 mcr.microsoft.com/dotnet/aspnet:9.0 postgres:16-alpine`
 3. `docker compose down -v && docker compose up -d --build`. Wait until `docker compose ps` shows `postgres` healthy and `web` running.
 4. `docker compose logs web | head -80` — should contain `Auto-migrating database`, `Database migration completed`, an `IdentitySeeder` success line, and `Now listening on: http://[::]:8080`. No stack traces.
-5. Open http://localhost:3000/login → sign in as `admin@consensus-lab.dev` / `Admin@123!`.
+5. Open http://localhost:8080/Account/Login → sign in as `admin@consensus-lab.dev` / `Admin@123!`.
 6. Navigate to `/simulations` → click **New Simulation** → fill: name=`Demo-PoW`, algorithm=`ProofOfWork`, nodes=`10`, faulty=`2`, rounds=`60`, topology=`FullMesh`, **randomSeed=`42`** → Submit. Page navigates to `/simulation/{id}`.
 7. Dashboard shows live round-completed updates within ~5 s. Node count = 10, round counter increments.
 8. Open a second browser tab → start `Demo-PBFT` (`PracticalByzantineFaultTolerance`, same params, seed=42). Both run concurrently.

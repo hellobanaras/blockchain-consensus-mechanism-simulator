@@ -11,7 +11,7 @@
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Navigation
 @inject ISimulationService SimulationService
-@inject ISimulationRunRepository SimulationRepo
+@inject Consensus.Web.Services.IConsensusApiClient ApiClient
 @inject INodeRepository NodeRepo
 @inject IBlockRepository BlockRepo
 @inject IConsensusRoundRepository RoundRepo
@@ -335,13 +335,14 @@
     {
         try
         {
-            // Merge: live in-memory sims from the service + recent persisted sims from DB.
-            // The service holds the running runtime; the repo holds completed history.
+            // READ path goes through the Api host (DB-backed truth). The in-memory
+            // runtime on this Web host is merged in case a fresh sim hasn't yet been
+            // persisted, so the user sees their click immediately.
+            var apiList = await ApiClient.GetSimulationsAsync();
             var liveSims = (await SimulationService.GetSimulationsAsync()).ToList();
-            var persisted = (await SimulationRepo.GetRecentAsync(50)).ToList();
 
-            simulations = liveSims
-                .Concat(persisted.Where(p => liveSims.All(l => l.Id != p.Id)))
+            simulations = apiList
+                .Concat(liveSims.Where(l => apiList.All(a => a.Id != l.Id)))
                 .OrderByDescending(s => s.CreatedAt)
                 .ToList();
 

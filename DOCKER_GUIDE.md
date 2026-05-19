@@ -10,10 +10,12 @@ Wait ~30–60 s for the image build and first-time migration, then open:
 
 | Surface              | URL                         | Notes                                                            |
 |----------------------|-----------------------------|------------------------------------------------------------------|
-| Blazor UI            | http://localhost:3000       | Login → start a simulation → live dashboard                      |
-| Swagger / REST API   | http://localhost:3000/swagger | Interactive API docs (dev mode only)                            |
-| Postgres             | `localhost:5432`            | `consensus_user` / `consensus_password` / db `consensusdb`       |
+| Blazor UI (Web)      | http://localhost:8080       | Login → start a simulation → live dashboard                      |
+| REST Api + Swagger   | http://localhost:5101       | Read-only HTTP surface; `Consensus.Api` host. Web fetches reads from here. |
+| Postgres (host)      | `localhost:5433`            | `consensus_user` / `consensus_password` / db `consensusdb` (containers use 5432 internally) |
 | pgAdmin (optional)   | http://localhost:5050       | Enable with `docker compose --profile debug up` (admin@consensus-lab.dev / Admin@123!) |
+
+**Architecture inside the compose network:** Web on `http://web:8080`, Api on `http://api:8080`, Postgres on `postgres:5432`. The Web host calls the Api over the internal network for all read data (lists, dashboards, exports — see `Consensus.Web/Services/ConsensusApiClient.cs`); write/orchestration paths (start, stop, round loop, SignalR) stay in the Web host. Both Web and Api connect to the shared Postgres.
 
 Seeded admin user (created by `IdentitySeeder` at startup):
 
