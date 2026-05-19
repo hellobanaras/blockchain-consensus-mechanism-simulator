@@ -1,0 +1,208 @@
+@page "/learn/pbft"
+@layout Consensus.Web.Components.Layout.MainLayout
+
+<PageTitle>PBFT · Tutorials · Consensus Lab</PageTitle>
+
+<TutorialPage Title="Practical Byzantine Fault Tolerance (PBFT)"
+              Lede="Nodes vote in three rounds to agree on every block — even when up to a third of them lie, crash, or vanish."
+              Difficulty="Advanced"
+              ReadTime="~12 min">
+
+    <h2>The basic idea</h2>
+
+    <p>
+        PoW and PoS choose <em>one</em> winner per block. PBFT does something different: it
+        gets <strong>everyone to vote</strong> on every block, and only adds a block once a
+        supermajority agrees. The trade-off is that PBFT works with a small, known set of
+        validators — usually a few dozen — rather than thousands.
+    </p>
+
+    <p>
+        The name comes from a classic computer-science problem called the
+        <strong>Byzantine Generals Problem</strong>: imagine generals camped around an enemy
+        city, who can only communicate by messenger, where some generals are traitors. How do
+        they agree on a single attack plan? PBFT is the practical solution — a voting protocol
+        that reaches agreement as long as fewer than 1/3 of the participants are dishonest.
+    </p>
+
+    <div class="analogy">
+        <strong>Analogy:</strong> A class of 10 students has to vote on what game to play at
+        recess. The teacher (the "primary") proposes "tag". Each student writes their vote on
+        a card and shows it to everyone else. Once at least 7 students have shown "yes",
+        everyone knows enough students saw enough votes, and they all play tag. Liars are
+        outvoted because there are at most 3 of them.
+    </div>
+
+    <h2>The three phases</h2>
+
+    <p>
+        Every block goes through three voting rounds in PBFT. The voting roles are:
+    </p>
+
+    <ul>
+        <li><strong>Primary</strong> — the proposer for this round (rotates each block)</li>
+        <li><strong>Replicas</strong> — everyone else, who verify and vote</li>
+    </ul>
+
+    <MermaidDiagram Caption="The three-phase PBFT commit protocol.">
+sequenceDiagram
+    autonumber
+    participant C as Client
+    participant P as Primary
+    participant R1 as Replica 1
+    participant R2 as Replica 2
+    participant R3 as Replica 3
+    C->>P: Send transaction
+    Note over P,R3: Phase 1 — Pre-Prepare
+    P->>R1: Pre-Prepare(block)
+    P->>R2: Pre-Prepare(block)
+    P->>R3: Pre-Prepare(block)
+    Note over P,R3: Phase 2 — Prepare
+    R1-->>P: Prepare
+    R1-->>R2: Prepare
+    R1-->>R3: Prepare
+    R2-->>P: Prepare
+    R2-->>R1: Prepare
+    R2-->>R3: Prepare
+    R3-->>P: Prepare
+    R3-->>R1: Prepare
+    R3-->>R2: Prepare
+    Note over P,R3: Phase 3 — Commit
+    P->>R1: Commit
+    P->>R2: Commit
+    P->>R3: Commit
+    R1-->>R2: Commit
+    R1-->>R3: Commit
+    R2-->>R1: Commit
+    R2-->>R3: Commit
+    R3-->>R1: Commit
+    R3-->>R2: Commit
+    Note over C,R3: Block committed once 2f+1 commits collected
+    P-->>C: Reply
+    </MermaidDiagram>
+
+    <p>
+        Let's walk through it for a network of <strong>n = 4</strong> nodes, of which one might
+        be Byzantine (lying or crashed). In PBFT we need <em>3f+1</em> nodes to tolerate
+        <em>f</em> faults, so n=4 tolerates f=1.
+    </p>
+
+    <h3>Phase 1 — Pre-Prepare</h3>
+    <p>
+        The primary collects pending transactions, packages them into a candidate block, and
+        sends a <code>PRE-PREPARE</code> message to every replica. This is the proposal.
+    </p>
+
+    <h3>Phase 2 — Prepare</h3>
+    <p>
+        Each replica that receives the PRE-PREPARE verifies the block (does it match the
+        expected sequence number? are all transactions valid?) and broadcasts a
+        <code>PREPARE</code> message to every other node. A node is "prepared" once it has
+        received <strong>2f matching Prepares</strong> from peers (so 2 prepares when f=1,
+        plus its own PRE-PREPARE).
+    </p>
+
+    <h3>Phase 3 — Commit</h3>
+    <p>
+        Once a node is prepared, it broadcasts a <code>COMMIT</code> message to everyone.
+        Each node waits to receive <strong>2f+1 matching Commits</strong> (3 when f=1).
+        At that point the block is <em>committed</em> — it will never be reverted, even if
+        the primary turns out to be Byzantine.
+    </p>
+
+    <h2>Why two rounds of voting?</h2>
+
+    <p>
+        It feels redundant, doesn't it? The reason is subtle. <strong>Prepare</strong>
+        guarantees that everyone has the same block <em>for this round</em>.
+        <strong>Commit</strong> guarantees that <em>future</em> rounds — even with a different
+        primary — won't accidentally pick a different block for the same height. Without
+        Commit, a network partition followed by a primary change could create two committed
+        blocks at the same height. With Commit, that's mathematically impossible while
+        f &lt; n/3.
+    </p>
+
+    <h2>The 1/3 threshold, explained</h2>
+
+    <p>
+        Why exactly 1/3? Imagine n = 3f + 1. The protocol needs to reach a quorum of size 2f + 1
+        — strictly more than 2/3 of the nodes. If f of them are Byzantine, the remaining 2f + 1
+        honest nodes are still a quorum. And two different quorums must always overlap in at
+        least one honest node, which is what prevents conflicting decisions.
+    </p>
+
+    <p>
+        Bump the Byzantine fraction past 1/3, and the math breaks. That's the famous
+        "Byzantine fault tolerance bound" first proved by Lamport, Shostak, and Pease in 1982.
+    </p>
+
+    <h2>What if the primary is Byzantine?</h2>
+
+    <p>
+        If the primary stops sending PRE-PREPAREs (or sends conflicting ones), replicas
+        time out and trigger a <strong>view change</strong>: they elect a new primary (the
+        next node in the rotation) and the protocol resumes. This is what makes PBFT
+        "practical" — earlier Byzantine fault-tolerant protocols couldn't recover from a
+        faulty primary.
+    </p>
+
+    <h2>The real-world picture</h2>
+
+    <p>
+        PBFT was published by Miguel Castro and Barbara Liskov in <strong>1999</strong>. Most
+        production-grade blockchains today use a descendant of PBFT:
+    </p>
+
+    <ul>
+        <li><strong>Hyperledger Fabric</strong> — permissioned blockchain for enterprises</li>
+        <li><strong>Tendermint</strong> (Cosmos) — PBFT-derived consensus engine</li>
+        <li><strong>Diem/Libra</strong> — Facebook's HotStuff variant</li>
+        <li><strong>Algorand</strong> — uses a randomized BFT variant</li>
+    </ul>
+
+    <h2>Strengths and trade-offs</h2>
+
+    <div class="pro-con-grid">
+        <div class="pro-card">
+            <h4>✅ Strengths</h4>
+            <ul>
+                <li>Immediate finality — once committed, blocks never roll back</li>
+                <li>Tolerates up to 1/3 actively-malicious participants</li>
+                <li>No energy waste; no large stake required</li>
+                <li>Mathematically proven safety properties</li>
+            </ul>
+        </div>
+        <div class="con-card">
+            <h4>⚠️ Trade-offs</h4>
+            <ul>
+                <li>Communication is O(n²) — every node talks to every other node</li>
+                <li>Doesn't scale past ~100 nodes without bandwidth pain</li>
+                <li>Requires a known, fixed set of participants</li>
+                <li>View changes can pause the network during failover</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="try-it">
+        <h3>🎮 Try it in the simulator</h3>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Run a PBFT simulation with 10 nodes and 3 Byzantine nodes (right at the f &lt; n/3
+            edge). Open the PBFT analytics tab — round duration is the
+            commit-latency proxy, so you can compare PBFT's voting overhead against PoW's
+            puzzle-solving time on the Performance Baselines page.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.PlayCircle"
+                   Href="/simulations">Run a PBFT simulation</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.QueryStats"
+                   Href="/specialized-analytics">View PBFT analytics</MudButton>
+    </div>
+
+    <h2>Where next?</h2>
+    <ul>
+        <li><a href="/learn/pow">Proof of Work</a> — single-leader instead of quorum voting</li>
+        <li><a href="/learn/poet">Proof of Elapsed Time</a> — also uses a fixed validator set</li>
+        <li><a href="/learn">All tutorials</a></li>
+    </ul>
+</TutorialPage>

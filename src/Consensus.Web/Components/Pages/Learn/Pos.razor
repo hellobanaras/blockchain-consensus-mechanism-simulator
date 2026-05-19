@@ -1,0 +1,154 @@
+@page "/learn/pos"
+@layout Consensus.Web.Components.Layout.MainLayout
+
+<PageTitle>Proof of Stake · Tutorials · Consensus Lab</PageTitle>
+
+<TutorialPage Title="Proof of Stake (PoS)"
+              Lede="Skip the puzzles. Validators lock up money as a deposit, and the protocol picks one at random — weighted by how much they staked — to add the next block."
+              Difficulty="Beginner"
+              ReadTime="~10 min">
+
+    <h2>The basic idea</h2>
+
+    <p>
+        Proof of Work asked computers to <em>burn</em> energy to prove they were serious about
+        the network. Proof of Stake takes a different approach: instead of burning electricity,
+        participants put their <em>own money</em> on the line.
+    </p>
+
+    <p>
+        Anyone who wants to help validate transactions has to deposit a chunk of coins into a
+        special on-chain account. This deposit is their <strong>stake</strong>. The protocol
+        then picks a validator at random to propose the next block — but the lottery isn't
+        fair: the bigger your stake, the higher your chance of being picked.
+    </p>
+
+    <div class="analogy">
+        <strong>Analogy:</strong> Imagine a raffle where each ticket costs ₹100. If you buy 50
+        tickets and your friend buys 5, you're 10× more likely to win that round than they
+        are. PoS is that raffle — except the "prize" is the right to add the next block (and
+        earn a small reward for it), and if you cheat, the protocol burns your tickets.
+    </div>
+
+    <h2>How a round works, step by step</h2>
+
+    <MermaidDiagram Caption="A Proof-of-Stake round: weighted lottery + slashing.">
+flowchart TD
+    Start([New transactions arrive]) --> Stake[Validators have already<br/>deposited their stake]
+    Stake --> Pick[Protocol runs a weighted<br/>lottery — bigger stake<br/>= higher chance]
+    Pick --> Propose[Selected validator<br/>proposes a block]
+    Propose --> Vote{Other validators<br/>verify the block}
+    Vote -- "Looks good" --> Attest[Validators sign<br/>attestations]
+    Vote -- "Looks invalid" --> Reject[Block rejected]
+    Attest --> Finalize[Block added to chain]
+    Reject --> Slash[Proposer's stake<br/>is slashed]
+    Finalize --> Reward[Proposer earns<br/>a small reward]
+    Reward --> Start
+    Slash --> Start
+    </MermaidDiagram>
+
+    <h2>What "slashing" means</h2>
+
+    <p>
+        The key insight in PoS is that bad behaviour <em>costs the cheater money</em>. If a
+        validator:
+    </p>
+
+    <ul>
+        <li>proposes a fake or invalid block,</li>
+        <li>signs two conflicting blocks at the same time, or</li>
+        <li>vanishes from the network for too long,</li>
+    </ul>
+
+    <p>
+        … the protocol automatically destroys (or <strong>slashes</strong>) part of their stake.
+        So while in PoW the deterrent is "you'll waste electricity for nothing", in PoS the
+        deterrent is "you'll lose the money you put down". Both make attacks economically
+        irrational, but PoS does it without burning energy.
+    </p>
+
+    <h2>The weighted lottery</h2>
+
+    <p>
+        How does the protocol pick a winner randomly while staying verifiable by everyone?
+        It uses a special kind of random number generator called a <strong>VRF</strong>
+        (Verifiable Random Function). Roughly:
+    </p>
+
+    <ol>
+        <li>Every validator generates a random number tied to the block height.</li>
+        <li>Whoever generated the lowest number, weighted by their stake, wins this slot.</li>
+        <li>Anyone in the network can check that the winner's number is valid — no central
+        coordinator needed.</li>
+    </ol>
+
+    <h2>The real-world picture</h2>
+
+    <p>
+        <strong>Ethereum</strong> switched from PoW to PoS in September 2022 in an event called
+        "The Merge". The change cut Ethereum's electricity use by roughly 99.95% overnight —
+        from a country's worth of energy to a small office building's worth. Other PoS chains
+        include <strong>Cardano</strong>, <strong>Polkadot</strong>,
+        <strong>Solana</strong>, and <strong>Avalanche</strong>.
+    </p>
+
+    <h2>Strengths and trade-offs</h2>
+
+    <div class="pro-con-grid">
+        <div class="pro-card">
+            <h4>✅ Strengths</h4>
+            <ul>
+                <li>Tiny electricity footprint compared to PoW</li>
+                <li>Faster block times — Ethereum produces a block every 12 seconds</li>
+                <li>Slashing creates a strong financial deterrent against cheating</li>
+                <li>Lower barrier to entry — no need for expensive mining hardware</li>
+            </ul>
+        </div>
+        <div class="con-card">
+            <h4>⚠️ Trade-offs</h4>
+            <ul>
+                <li>"Rich get richer" — bigger stakes earn proportionally more rewards</li>
+                <li>Less battle-tested than PoW (15 years vs ~3 years at scale)</li>
+                <li>Big exchanges sometimes accumulate huge stakes, recentralizing power</li>
+                <li>Complex to implement correctly — many subtle attack vectors</li>
+            </ul>
+        </div>
+    </div>
+
+    <h2>The "Nakamoto Coefficient" question</h2>
+
+    <p>
+        A common worry: what if a few wealthy participants own most of the stake? The
+        <strong>Nakamoto Coefficient</strong> measures this — it's the minimum number of
+        validators that would need to collude to control more than 50% of the stake.
+    </p>
+
+    <p>
+        On Ethereum it's around 2 (just the two largest staking pools). On Bitcoin it's around
+        4 (mining pools, not validators, but the same idea). A higher number is more
+        decentralized. The simulator computes this for every PoS run — check it on the
+        Specialized Analytics page after running a sim.
+    </p>
+
+    <div class="try-it">
+        <h3>🎮 Try it in the simulator</h3>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Start a PoS simulation with 10 nodes. Watch the leader distribution donut — it
+            should look more even than a PoW run because the simulator gives every node equal
+            "stake" by default. Compare the Gini coefficient between PoW and PoS runs.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.PlayCircle"
+                   Href="/simulations">Run a PoS simulation</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.QueryStats"
+                   Href="/specialized-analytics">View PoS analytics</MudButton>
+    </div>
+
+    <h2>Where next?</h2>
+    <ul>
+        <li><a href="/learn/pow">Proof of Work</a> — the protocol PoS replaced</li>
+        <li><a href="/learn/dpos">Delegated Proof of Stake</a> — adds elections on top</li>
+        <li><a href="/learn">All tutorials</a></li>
+    </ul>
+</TutorialPage>

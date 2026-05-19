@@ -1,0 +1,175 @@
+@page "/learn/dpos"
+@layout Consensus.Web.Components.Layout.MainLayout
+
+<PageTitle>Delegated Proof of Stake · Tutorials · Consensus Lab</PageTitle>
+
+<TutorialPage Title="Delegated Proof of Stake (DPoS)"
+              Lede="Like a representative democracy for blockchains. Token holders vote for a small group of delegates who take turns adding blocks."
+              Difficulty="Intermediate"
+              ReadTime="~10 min">
+
+    <h2>The basic idea</h2>
+
+    <p>
+        In Proof of Stake, anyone with enough coins can validate blocks directly. That's
+        democratic, but it can be <em>slow</em> when thousands of validators have to coordinate.
+        Delegated Proof of Stake solves that by adding a layer of indirection: instead of
+        everyone validating, token holders <strong>vote</strong> for a small fixed-size committee
+        — typically 21 to 101 delegates — who then take turns producing blocks in a strict
+        rotation.
+    </p>
+
+    <p>
+        Think of it like school council elections. The whole student body votes; the top few
+        candidates take office; they make decisions for the year. If they do a bad job, next
+        election they're voted out.
+    </p>
+
+    <div class="analogy">
+        <strong>Analogy:</strong> If PoS is "everyone votes on every law", DPoS is "everyone
+        votes for parliament, and parliament votes on the laws". Faster, but you have to trust
+        the small group of representatives — and replace them if they misbehave.
+    </div>
+
+    <h2>How a round works, step by step</h2>
+
+    <MermaidDiagram Caption="A DPoS round: elections + round-robin block production.">
+flowchart TD
+    Start([Election phase]) --> Vote[Token holders cast votes<br/>weighted by their balance]
+    Vote --> Top[Top N candidates become<br/>active delegates]
+    Top --> Schedule[Delegates are assigned<br/>a round-robin schedule]
+    Schedule --> Slot[Each slot, the next<br/>delegate in line proposes a block]
+    Slot --> Network[Other delegates verify<br/>and accept the block]
+    Network --> NextSlot{More slots<br/>this term?}
+    NextSlot -- Yes --> Slot
+    NextSlot -- No --> Reelect[Re-run the election<br/>so unhappy voters can swap delegates]
+    Reelect --> Start
+    </MermaidDiagram>
+
+    <h2>The election cycle</h2>
+
+    <p>
+        Two phases run continuously:
+    </p>
+
+    <ol>
+        <li>
+            <strong>Voting.</strong> Anyone holding tokens can vote for delegates. Votes are
+            weighted by token balance — 1 token = 1 vote. Voters can change their vote any
+            time; if a delegate starts misbehaving, voters can pull support from them within
+            minutes.
+        </li>
+        <li>
+            <strong>Production.</strong> The top-ranked delegates rotate through fixed-length
+            slots (often 0.5 to 3 seconds each). In each slot, exactly one delegate produces a
+            block. The others verify it.
+        </li>
+    </ol>
+
+    <p>
+        Because slots are fixed and short, DPoS chains can finalize blocks <em>very</em> fast.
+        EOS, for example, produces a new block every 500 milliseconds.
+    </p>
+
+    <h2>What happens if a delegate misbehaves?</h2>
+
+    <p>
+        Three layers of protection:
+    </p>
+
+    <ul>
+        <li>
+            <strong>Missed blocks are visible.</strong> Every delegate's track record (uptime,
+            blocks produced vs missed) is public. A delegate who flakes out gets a bad
+            reputation immediately.
+        </li>
+        <li>
+            <strong>Voters can swap them.</strong> Token holders can withdraw their vote
+            instantly and shift it to a more reliable candidate. Bad delegates drop out of the
+            top N and stop earning.
+        </li>
+        <li>
+            <strong>Slashing.</strong> Many DPoS chains also penalize delegates who sign two
+            blocks at the same height (a double-sign attack) by destroying their staked
+            collateral.
+        </li>
+    </ul>
+
+    <h2>The real-world picture</h2>
+
+    <p>
+        DPoS was invented by Daniel Larimer for <strong>BitShares</strong> in 2014. The big
+        examples since then:
+    </p>
+
+    <ul>
+        <li><strong>EOS</strong> — 21 elected "Block Producers", 0.5-second slots</li>
+        <li><strong>TRON</strong> — 27 "Super Representatives"</li>
+        <li><strong>Steem</strong> — DPoS-powered social media platform</li>
+        <li><strong>Cosmos</strong> — uses a hybrid PoS/DPoS approach via Tendermint</li>
+    </ul>
+
+    <h2>Strengths and trade-offs</h2>
+
+    <div class="pro-con-grid">
+        <div class="pro-card">
+            <h4>✅ Strengths</h4>
+            <ul>
+                <li>Very fast — sub-second block times</li>
+                <li>High throughput — thousands of transactions per second</li>
+                <li>Energy-efficient like PoS</li>
+                <li>Bad actors can be voted out within minutes</li>
+            </ul>
+        </div>
+        <div class="con-card">
+            <h4>⚠️ Trade-offs</h4>
+            <ul>
+                <li>More centralized — only N delegates produce blocks (often 21–101)</li>
+                <li>Voter apathy: many token holders never vote</li>
+                <li>Large token holders dominate elections</li>
+                <li>"Cartel" risk: delegates can collude to share rewards</li>
+            </ul>
+        </div>
+    </div>
+
+    <h2>Why the fairness metric matters here</h2>
+
+    <p>
+        Because only the elected delegates produce blocks, the leader distribution should be
+        <em>even</em> across them — each delegate should propose roughly the same number of
+        blocks per term. The simulator computes this with the <strong>Gini coefficient</strong>:
+    </p>
+
+    <ul>
+        <li>Gini = 0 → perfectly even rotation (ideal)</li>
+        <li>Gini = 1 → one delegate hogs everything (broken)</li>
+    </ul>
+
+    <p>
+        A healthy DPoS simulation should show Gini close to zero. If it's high, either the
+        scheduler is buggy or some delegates are silently dropping their slots.
+    </p>
+
+    <div class="try-it">
+        <h3>🎮 Try it in the simulator</h3>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Run a DPoS simulation with 21 nodes (the classic EOS-style witness count) and a
+            seed of your choice. Open the Specialized Analytics → DPoS tab and check the
+            witness performance bar chart. Then check the Gini coefficient in the
+            Performance Baselines page.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.PlayCircle"
+                   Href="/simulations">Run a DPoS simulation</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.QueryStats"
+                   Href="/specialized-analytics">View DPoS analytics</MudButton>
+    </div>
+
+    <h2>Where next?</h2>
+    <ul>
+        <li><a href="/learn/pos">Proof of Stake</a> — the parent protocol that DPoS extends</li>
+        <li><a href="/learn/pbft">PBFT</a> — voting-based finality, different trust model</li>
+        <li><a href="/learn">All tutorials</a></li>
+    </ul>
+</TutorialPage>

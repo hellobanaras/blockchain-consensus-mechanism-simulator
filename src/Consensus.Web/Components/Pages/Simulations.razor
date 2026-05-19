@@ -27,7 +27,12 @@
     <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
         <MudStack Spacing="1">
             <MudText Typo="Typo.h4" Class="font-weight-bold">Consensus Simulations</MudText>
-            <MudText Typo="Typo.body1" Color="Color.Default">Create, monitor, and analyse consensus protocol runs.</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Default">
+                Create, monitor, and analyse consensus protocol runs.
+                <MudLink Href="/learn" Underline="Underline.Always">
+                    <MudIcon Icon="@Icons.Material.Filled.School" Size="Size.Small" /> New to consensus? Read the tutorials
+                </MudLink>
+            </MudText>
         </MudStack>
         <AuthorizeView Roles="Admin,Operator">
             <Authorized>
@@ -212,6 +217,10 @@
                     <MudSelectItem Value="@ConsensusAlgorithm.PracticalByzantineFaultTolerance">PBFT</MudSelectItem>
                     <MudSelectItem Value="@ConsensusAlgorithm.ProofOfElapsedTime">Proof of Elapsed Time (PoET)</MudSelectItem>
                 </MudSelect>
+                <MudLink Href="@GetTutorialUrl(newSimulationAlgorithm)" Target="_blank" Class="mt-1" Typo="Typo.caption">
+                    <MudIcon Icon="@Icons.Material.Filled.OpenInNew" Size="Size.Small" />
+                    What is @GetAlgorithmShortName(newSimulationAlgorithm)? Open the tutorial
+                </MudLink>
             </MudItem>
             <MudItem xs="12">
                 <MudTextField @bind-Value="newSimulationDescription" Label="Description (optional)"
@@ -255,6 +264,26 @@
 </MudDialog>
 
 @code {
+    private static string GetTutorialUrl(ConsensusAlgorithm algo) => algo switch
+    {
+        ConsensusAlgorithm.ProofOfWork => "/learn/pow",
+        ConsensusAlgorithm.ProofOfStake => "/learn/pos",
+        ConsensusAlgorithm.DelegatedProofOfStake => "/learn/dpos",
+        ConsensusAlgorithm.PracticalByzantineFaultTolerance => "/learn/pbft",
+        ConsensusAlgorithm.ProofOfElapsedTime => "/learn/poet",
+        _ => "/learn"
+    };
+
+    private static string GetAlgorithmShortName(ConsensusAlgorithm algo) => algo switch
+    {
+        ConsensusAlgorithm.ProofOfWork => "PoW",
+        ConsensusAlgorithm.ProofOfStake => "PoS",
+        ConsensusAlgorithm.DelegatedProofOfStake => "DPoS",
+        ConsensusAlgorithm.PracticalByzantineFaultTolerance => "PBFT",
+        ConsensusAlgorithm.ProofOfElapsedTime => "PoET",
+        _ => algo.ToString()
+    };
+
     private List<SimulationRun> simulations = new();
     private List<SimulationRun> filteredSimulations = new();
 

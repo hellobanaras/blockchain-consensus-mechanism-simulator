@@ -1,0 +1,284 @@
+@page "/learn"
+@layout Consensus.Web.Components.Layout.MainLayout
+
+<PageTitle>Tutorials · Consensus Lab</PageTitle>
+
+<div class="learn-home">
+    <MudStack Spacing="2" Class="mb-6">
+        <MudText Typo="Typo.h3" Class="font-weight-bold">Blockchain Tutorials</MudText>
+        <MudText Typo="Typo.h6" Color="Color.Default" Style="font-weight: 400; max-width: 60ch;">
+            Plain-English guides to blockchain consensus, written for curious high-school students
+            and anyone new to the field. Read, then jump into the simulator and watch the protocols
+            play out on real nodes.
+        </MudText>
+    </MudStack>
+
+    <MudPaper Elevation="0" Outlined="true" Class="pa-6 mb-6">
+        <MudText Typo="Typo.h5" Class="mb-3">What is a blockchain?</MudText>
+
+        <p>
+            A <strong>blockchain</strong> is a special kind of shared notebook. It doesn't live on
+            one computer — instead, hundreds or thousands of computers (called <em>nodes</em>) all
+            keep their own copy. Every page of the notebook records a list of recent transactions
+            (who paid whom, how much) and is glued to the previous page using a cryptographic
+            <em>hash</em> — basically, a digital fingerprint of the page before it.
+        </p>
+
+        <p>
+            Each new page is called a <strong>block</strong>. Lining the blocks up in order, with
+            each block fingerprinting the last, gives us a <strong>chain</strong> of blocks —
+            hence, "blockchain". Once a block is in the chain, tampering with it would change its
+            fingerprint, which would break the link to the next block, which would break the link
+            to the block after that, and so on. So everyone watching the chain would notice
+            instantly.
+        </p>
+
+        <div class="blockchain-svg-wrapper">
+            <svg viewBox="0 0 720 140" preserveAspectRatio="xMidYMid meet" role="img"
+                 aria-label="Three blocks chained together. Each block has a number, a list of transactions, and a hash of the previous block.">
+                <defs>
+                    <linearGradient id="blkGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#1f7ad8"/>
+                        <stop offset="100%" stop-color="#0a3d62"/>
+                    </linearGradient>
+                </defs>
+                <g font-family="Inter, system-ui, sans-serif" font-size="11" fill="white">
+                    <!-- Block 1 -->
+                    <rect x="10" y="20" width="180" height="100" rx="10" fill="url(#blkGrad)"/>
+                    <text x="100" y="42" text-anchor="middle" font-weight="700">Block #1</text>
+                    <text x="100" y="62" text-anchor="middle">Prev hash: 0000…</text>
+                    <text x="100" y="78" text-anchor="middle">Alice → Bob, 5</text>
+                    <text x="100" y="92" text-anchor="middle">Carol → Dan, 2</text>
+                    <text x="100" y="110" text-anchor="middle" font-style="italic">Hash: 8f3a…</text>
+
+                    <!-- Block 2 -->
+                    <rect x="270" y="20" width="180" height="100" rx="10" fill="url(#blkGrad)"/>
+                    <text x="360" y="42" text-anchor="middle" font-weight="700">Block #2</text>
+                    <text x="360" y="62" text-anchor="middle">Prev hash: 8f3a…</text>
+                    <text x="360" y="78" text-anchor="middle">Eve → Frank, 7</text>
+                    <text x="360" y="92" text-anchor="middle">Bob → Alice, 1</text>
+                    <text x="360" y="110" text-anchor="middle" font-style="italic">Hash: c9b1…</text>
+
+                    <!-- Block 3 -->
+                    <rect x="530" y="20" width="180" height="100" rx="10" fill="url(#blkGrad)"/>
+                    <text x="620" y="42" text-anchor="middle" font-weight="700">Block #3</text>
+                    <text x="620" y="62" text-anchor="middle">Prev hash: c9b1…</text>
+                    <text x="620" y="78" text-anchor="middle">Frank → Eve, 3</text>
+                    <text x="620" y="92" text-anchor="middle">Dan → Carol, 4</text>
+                    <text x="620" y="110" text-anchor="middle" font-style="italic">Hash: 4e2d…</text>
+                </g>
+
+                <!-- Arrows -->
+                <g stroke="#666" stroke-width="2" fill="none" marker-end="url(#arrow)">
+                    <line x1="195" y1="70" x2="265" y2="70"/>
+                    <line x1="455" y1="70" x2="525" y2="70"/>
+                </g>
+                <defs>
+                    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                        <path d="M 0 0 L 10 5 L 0 10 z" fill="#666"/>
+                    </marker>
+                </defs>
+            </svg>
+            <div class="diagram-caption">
+                Each block points to the previous one using its hash. Change any transaction and
+                every following hash breaks.
+            </div>
+        </div>
+
+        <MudText Typo="Typo.h5" Class="mt-6 mb-3">What is "consensus"?</MudText>
+
+        <p>
+            If thousands of computers all keep their own copy of the notebook, who decides which
+            page comes next? If two nodes write a different page at the same time, which one wins?
+            That decision-making process is called <strong>consensus</strong> — agreeing, without
+            a central boss, on the next block to add.
+        </p>
+
+        <p>
+            Consensus has to work even when some nodes are slow, offline, broken, or actively
+            <strong>malicious</strong> (lying on purpose). Different blockchains pick different
+            strategies. The five most influential ones are below.
+        </p>
+    </MudPaper>
+
+    <MudText Typo="Typo.h5" Class="mb-4">Pick a protocol to learn about</MudText>
+
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudCard Outlined="true" Class="protocol-card">
+                <MudCardContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Memory" Color="Color.Warning" Size="Size.Large" />
+                        <MudText Typo="Typo.h5">Proof of Work</MudText>
+                        <MudSpacer />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Beginner</MudChip>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Color="Color.Default" Class="mb-3">
+                        The original Bitcoin protocol. Computers race to solve a math puzzle —
+                        whoever wins gets to write the next page.
+                    </MudText>
+                    <MudText Typo="Typo.caption">Used by: Bitcoin, Litecoin, Dogecoin</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               EndIcon="@Icons.Material.Filled.ArrowForward"
+                               Href="/learn/pow">Read the tutorial</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard Outlined="true" Class="protocol-card">
+                <MudCardContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountBalance" Color="Color.Success" Size="Size.Large" />
+                        <MudText Typo="Typo.h5">Proof of Stake</MudText>
+                        <MudSpacer />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Beginner</MudChip>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Color="Color.Default" Class="mb-3">
+                        Validators put money on the line. The protocol picks one at random,
+                        weighted by how much they staked.
+                    </MudText>
+                    <MudText Typo="Typo.caption">Used by: Ethereum, Cardano, Polkadot</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               EndIcon="@Icons.Material.Filled.ArrowForward"
+                               Href="/learn/pos">Read the tutorial</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard Outlined="true" Class="protocol-card">
+                <MudCardContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Groups" Color="Color.Secondary" Size="Size.Large" />
+                        <MudText Typo="Typo.h5">Delegated Proof of Stake</MudText>
+                        <MudSpacer />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">Intermediate</MudChip>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Color="Color.Default" Class="mb-3">
+                        Like a representative democracy. Token holders vote for a small group of
+                        delegates who take turns writing pages.
+                    </MudText>
+                    <MudText Typo="Typo.caption">Used by: EOS, TRON, BitShares</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               EndIcon="@Icons.Material.Filled.ArrowForward"
+                               Href="/learn/dpos">Read the tutorial</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard Outlined="true" Class="protocol-card">
+                <MudCardContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Verified" Color="Color.Info" Size="Size.Large" />
+                        <MudText Typo="Typo.h5">PBFT</MudText>
+                        <MudSpacer />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Advanced</MudChip>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Color="Color.Default" Class="mb-3">
+                        Practical Byzantine Fault Tolerance. Nodes vote in three rounds to agree on
+                        every block, even with some liars in the group.
+                    </MudText>
+                    <MudText Typo="Typo.caption">Used by: Hyperledger Fabric, Tendermint</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               EndIcon="@Icons.Material.Filled.ArrowForward"
+                               Href="/learn/pbft">Read the tutorial</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard Outlined="true" Class="protocol-card">
+                <MudCardContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.Schedule" Color="Color.Tertiary" Size="Size.Large" />
+                        <MudText Typo="Typo.h5">Proof of Elapsed Time</MudText>
+                        <MudSpacer />
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">Advanced</MudChip>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Color="Color.Default" Class="mb-3">
+                        Each computer rolls a fair "wait timer" inside a tamper-proof chip.
+                        Whoever waits the shortest wins.
+                    </MudText>
+                    <MudText Typo="Typo.caption">Used by: Hyperledger Sawtooth (Intel)</MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                               EndIcon="@Icons.Material.Filled.ArrowForward"
+                               Href="/learn/poet">Read the tutorial</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudCard Outlined="true" Class="protocol-card cta-card">
+                <MudCardContent>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-2">
+                        <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Color="Color.Primary" Size="Size.Large" />
+                        <MudText Typo="Typo.h5">Try it yourself</MudText>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Color="Color.Default" Class="mb-3">
+                        Once you've read a tutorial, jump into the simulator. Pick a protocol,
+                        choose how many nodes, run it, and watch the blocks come in.
+                    </MudText>
+                </MudCardContent>
+                <MudCardActions>
+                    <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                               EndIcon="@Icons.Material.Filled.ArrowForward"
+                               Href="/simulations">Run a simulation</MudButton>
+                </MudCardActions>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+</div>
+
+<style>
+    .learn-home {
+        max-width: 1100px;
+        margin: 0 auto;
+        padding: 1rem 0 3rem;
+    }
+
+    .learn-home .protocol-card {
+        height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .learn-home .protocol-card .mud-card-content {
+        flex-grow: 1;
+    }
+
+    .learn-home .blockchain-svg-wrapper {
+        margin: 1.5rem 0 0.5rem;
+    }
+
+    .learn-home .blockchain-svg-wrapper svg {
+        width: 100%;
+        height: auto;
+        max-height: 200px;
+    }
+
+    .learn-home .diagram-caption {
+        text-align: center;
+        font-size: 0.85rem;
+        font-style: italic;
+        color: var(--mud-palette-text-secondary);
+        margin-top: 0.5rem;
+    }
+
+    .learn-home p {
+        font-size: 1.05rem;
+        line-height: 1.65;
+        margin-bottom: 1rem;
+    }
+</style>

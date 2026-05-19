@@ -39,6 +39,12 @@
     <script src="_content/MudBlazor/MudBlazor.min.js"></script>
     <script src="js/blazor-debug.js"></script>
     <script src="js/dashboard.js"></script>
+    @* Mermaid powers the diagram blocks on the /learn tutorial pages.
+       Self-hosted (~2.5MB) — the demo venue blocks external CDNs. The init
+       script registers a window.mermaidRunOnPage() helper that razor pages
+       call from OnAfterRenderAsync. *@
+    <script src="lib/mermaid/mermaid.min.js"></script>
+    <script src="js/mermaid-init.js"></script>
 </body>
 
 </html>

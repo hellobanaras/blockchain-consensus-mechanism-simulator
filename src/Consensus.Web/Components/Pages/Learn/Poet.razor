@@ -1,0 +1,186 @@
+@page "/learn/poet"
+@layout Consensus.Web.Components.Layout.MainLayout
+
+<PageTitle>Proof of Elapsed Time · Tutorials · Consensus Lab</PageTitle>
+
+<TutorialPage Title="Proof of Elapsed Time (PoET)"
+              Lede="Each computer rolls a fair wait timer inside a tamper-proof chip. Whoever waits the shortest wins the round — no electricity bonfire required."
+              Difficulty="Advanced"
+              ReadTime="~10 min">
+
+    <h2>The basic idea</h2>
+
+    <p>
+        Proof of Work wastes energy because every miner has to actually <em>compute</em>
+        billions of hashes to prove they "tried hard". What if you could skip the computing
+        but keep the lottery? That's what Intel asked when they invented Proof of Elapsed Time
+        in 2016.
+    </p>
+
+    <p>
+        PoET runs inside a special hardware feature called a <strong>Trusted Execution
+        Environment</strong> (TEE) — a tamper-proof region of an Intel CPU. Each round, every
+        participant asks their TEE to generate a random wait time. They sleep that long. When
+        their timer expires, they get a signed certificate from the TEE saying "Yes, this
+        machine really did wait that long". The shortest waiter wins the round.
+    </p>
+
+    <div class="analogy">
+        <strong>Analogy:</strong> Imagine a board game where everyone draws a random number
+        from 1 to 60 from a sealed envelope. Whoever drew the smallest number goes first this
+        turn. The envelope is sealed so nobody can peek; the rules say everyone has to wait
+        their number of seconds before claiming victory; everyone watching can verify the
+        signature on the envelope. No racing, no shouting — just fair waiting.
+    </div>
+
+    <h2>How a round works, step by step</h2>
+
+    <MermaidDiagram Caption="A PoET round: each node's TEE issues a random wait time, shortest waiter wins.">
+flowchart TD
+    Start([Round starts]) --> Request[Every node asks its TEE<br/>for a random wait time]
+    Request --> Wait[Each node sleeps<br/>until its timer expires]
+    Wait --> Race{Whose timer<br/>expires first?}
+    Race --> Winner[Winner asks TEE<br/>for a signed certificate]
+    Winner --> Broadcast[Winner broadcasts<br/>block + TEE attestation]
+    Broadcast --> Verify[Others verify the<br/>TEE signature is valid]
+    Verify --> Accept{Signature OK?}
+    Accept -- Yes --> Commit[Block is added<br/>to the chain]
+    Accept -- No --> Reject[Block rejected,<br/>round restarts]
+    Commit --> Start
+    Reject --> Start
+    </MermaidDiagram>
+
+    <h2>The Trusted Execution Environment</h2>
+
+    <p>
+        The whole protocol hinges on a TEE — a feature on certain Intel CPUs called
+        <strong>SGX</strong> (Software Guard Extensions). Think of SGX as a tiny vault inside
+        your CPU. Code running inside the vault is cryptographically isolated from the rest
+        of the operating system — even from a privileged attacker who owns the machine.
+        Programs outside the vault can <em>ask</em> the vault to do things and get back signed
+        answers, but they can't see inside or modify what's there.
+    </p>
+
+    <p>
+        For PoET, the TEE does two jobs:
+    </p>
+
+    <ol>
+        <li>
+            <strong>Generates a fair random wait time</strong> from a verified random source.
+            Because the code runs inside the vault, the participant can't peek at their own
+            number ahead of time or bias the lottery.
+        </li>
+        <li>
+            <strong>Issues a signed certificate</strong> when the timer truly expires — not a
+            millisecond earlier. The certificate uses the TEE's hardware-attested key, which
+            other nodes can verify.
+        </li>
+    </ol>
+
+    <h2>Why this is clever</h2>
+
+    <p>
+        PoET gives you most of the security properties of PoW — random fair leader selection,
+        verifiable proof that the winner "did the work" — without the electricity cost. The
+        "work" in PoET is just waiting, which is essentially free. Yet you still can't cheat
+        the lottery, because the TEE controls the timer and the OS can't tamper with it.
+    </p>
+
+    <p>
+        It's also fast: rounds typically take 1–5 seconds compared to Bitcoin's 10 minutes.
+        And every node's chance of winning is uniform regardless of CPU power — a Raspberry Pi
+        with SGX (in theory) has the same odds as a giant data centre.
+    </p>
+
+    <h2>The catch — TEE trust</h2>
+
+    <p>
+        PoET's biggest weakness is its dependency on Intel. By using SGX, the entire network
+        is implicitly trusting that:
+    </p>
+
+    <ul>
+        <li>Intel's SGX implementation is secure (it has had several vulnerabilities — see Foreshadow, Plundervolt, ÆPIC Leak).</li>
+        <li>Intel hasn't backdoored the platform.</li>
+        <li>Intel's attestation servers (used to verify SGX certificates) stay online and uncompromised.</li>
+    </ul>
+
+    <p>
+        This is the opposite philosophy from PoW, where the only trust is in cryptographic
+        math. PoET trades cryptographic purity for energy efficiency — and it's only as
+        secure as the underlying hardware platform.
+    </p>
+
+    <h2>The real-world picture</h2>
+
+    <p>
+        PoET was designed for <strong>Hyperledger Sawtooth</strong>, an enterprise blockchain
+        framework. Sawtooth was used by Walmart and a handful of others for supply-chain
+        tracking, but adoption has been muted — partly because the SGX requirement limits
+        which hardware can participate, and partly because Hyperledger Fabric (which uses
+        PBFT) has been more popular for the same use cases.
+    </p>
+
+    <h2>Strengths and trade-offs</h2>
+
+    <div class="pro-con-grid">
+        <div class="pro-card">
+            <h4>✅ Strengths</h4>
+            <ul>
+                <li>Energy-efficient — waiting is free</li>
+                <li>Faster block times than PoW</li>
+                <li>Hardware-enforced fair lottery, no stake required</li>
+                <li>Familiar PoW-like security model without the energy cost</li>
+            </ul>
+        </div>
+        <div class="con-card">
+            <h4>⚠️ Trade-offs</h4>
+            <ul>
+                <li>Requires Intel SGX (or compatible TEE) on every validator</li>
+                <li>Trusts Intel as a hardware authority</li>
+                <li>Historical SGX vulnerabilities undermine the trust model</li>
+                <li>Less battle-tested than PoW, PoS, or PBFT</li>
+            </ul>
+        </div>
+    </div>
+
+    <h2>What our simulator does (and doesn't) capture</h2>
+
+    <p>
+        The simulator implements PoET's <em>algorithmic</em> behaviour — random wait times,
+        shortest waiter wins — but it doesn't have real TEE hardware to attest to anything.
+        Instead, we use a seeded software RNG, which makes the protocol reproducible (the
+        thesis values determinism) but means we're not really proving the wait. We document
+        this limitation in the thesis as a deferred item: integrating a real TEE attestation
+        path is future work.
+    </p>
+
+    <p>
+        For the demo this is fine — what we're studying is fairness across leaders, throughput,
+        and round-time variance, all of which the simulator captures faithfully.
+    </p>
+
+    <div class="try-it">
+        <h3>🎮 Try it in the simulator</h3>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Run a PoET simulation with 10 nodes and seed=42. The Specialized Analytics → PoET
+            tab shows a histogram of wait times — that distribution should look roughly
+            exponential (a property of fair Poisson processes), which is the same shape PoW
+            block intervals follow.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.PlayCircle"
+                   Href="/simulations">Run a PoET simulation</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.QueryStats"
+                   Href="/specialized-analytics">View PoET analytics</MudButton>
+    </div>
+
+    <h2>Where next?</h2>
+    <ul>
+        <li><a href="/learn/pow">Proof of Work</a> — PoET's spiritual predecessor</li>
+        <li><a href="/learn/pbft">PBFT</a> — Hyperledger Fabric's alternative</li>
+        <li><a href="/learn">All tutorials</a></li>
+    </ul>
+</TutorialPage>

@@ -1,0 +1,66 @@
+@namespace Consensus.Web.Components.Tutorial
+@inject IJSRuntime JSRuntime
+
+@*
+    Reusable diagram block for the /learn tutorial wiki. The parent page hosts
+    the Mermaid source as a child fragment; this component drops it into a
+    <div class="mermaid"> and asks the global window.mermaidRunOnPage() helper
+    to render it after the page commits. Use like:
+
+        <MermaidDiagram>
+        flowchart LR
+            A --> B
+        </MermaidDiagram>
+*@
+
+<div class="mermaid-wrapper my-4">
+    <pre class="mermaid">@ChildContent</pre>
+    @if (!string.IsNullOrEmpty(Caption))
+    {
+        <div class="mermaid-caption text-muted">@Caption</div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public RenderFragment? ChildContent { get; set; }
+    [Parameter] public string? Caption { get; set; }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Mermaid skips already-processed diagrams (data-processed="true")
+        // so we can call run() on every render without re-rendering blocks
+        // that already have an SVG. Wrapping in try/catch — if the library
+        // fails to load (e.g. the script tag was blocked by CSP) the page
+        // still shows the source pre block, which is at least readable.
+        try
+        {
+            await JSRuntime.InvokeVoidAsync("mermaidRunOnPage");
+        }
+        catch
+        {
+            // ignored — the <pre class="mermaid"> source text remains visible
+        }
+    }
+}
+
+<style>
+    .mermaid-wrapper {
+        background: var(--mud-palette-background-grey);
+        border-radius: 8px;
+        padding: 1rem 1rem 0.5rem;
+        overflow-x: auto;
+    }
+
+    .mermaid-wrapper pre.mermaid {
+        background: transparent;
+        margin: 0;
+        text-align: center;
+    }
+
+    .mermaid-caption {
+        text-align: center;
+        font-size: 0.85rem;
+        padding-top: 0.5rem;
+        font-style: italic;
+    }
+</style>

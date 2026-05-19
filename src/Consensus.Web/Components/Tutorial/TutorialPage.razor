@@ -1,0 +1,134 @@
+@namespace Consensus.Web.Components.Tutorial
+
+@*
+    Outer page chrome used by every /learn/* page. Renders the page title,
+    a brief one-line lede, navigation back to /learn, and a max-width
+    reading column so dense text on the protocol pages stays readable.
+
+    Usage:
+        <TutorialPage Title="Proof of Work" Lede="The original Bitcoin protocol — racing computers to win the right to add a block.">
+            ... page body ...
+        </TutorialPage>
+*@
+
+<div class="tutorial-page">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Class="mb-3" Spacing="2">
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.ArrowBack"
+                   Href="/learn" Size="Size.Small">Back to Tutorials</MudButton>
+        @if (!string.IsNullOrEmpty(Difficulty))
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">@Difficulty</MudChip>
+        }
+        @if (!string.IsNullOrEmpty(ReadTime))
+        {
+            <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Text"
+                     Icon="@Icons.Material.Filled.Schedule">@ReadTime</MudChip>
+        }
+    </MudStack>
+
+    <MudText Typo="Typo.h3" Class="font-weight-bold mb-1">@Title</MudText>
+    @if (!string.IsNullOrEmpty(Lede))
+    {
+        <MudText Typo="Typo.h6" Color="Color.Default" Class="mb-6"
+                 Style="font-weight: 400; max-width: 60ch;">@Lede</MudText>
+    }
+
+    <div class="tutorial-body">
+        @ChildContent
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public string? Lede { get; set; }
+    [Parameter] public string? Difficulty { get; set; }   // e.g. "Beginner", "Intermediate"
+    [Parameter] public string? ReadTime { get; set; }      // e.g. "~10 min"
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+}
+
+<style>
+    .tutorial-page {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 1rem 0 3rem;
+    }
+
+    .tutorial-body {
+        font-size: 1.05rem;
+        line-height: 1.65;
+    }
+
+    .tutorial-body h2,
+    .tutorial-body h3 {
+        margin-top: 2.25rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .tutorial-body p {
+        margin-bottom: 1rem;
+    }
+
+    .tutorial-body .analogy {
+        background: var(--mud-palette-info-lighten);
+        border-left: 4px solid var(--mud-palette-info);
+        padding: 1rem 1.25rem;
+        margin: 1.5rem 0;
+        border-radius: 4px;
+    }
+
+    .tutorial-body .analogy strong {
+        color: var(--mud-palette-info-darken);
+    }
+
+    .tutorial-body .pro-con-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        margin: 1.5rem 0;
+    }
+
+    @@media (max-width: 600px) {
+        .tutorial-body .pro-con-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .tutorial-body .pro-card,
+    .tutorial-body .con-card {
+        padding: 1rem;
+        border-radius: 8px;
+        border: 1px solid var(--mud-palette-lines-default);
+    }
+
+    .tutorial-body .pro-card {
+        background: var(--mud-palette-success-lighten);
+    }
+
+    .tutorial-body .con-card {
+        background: var(--mud-palette-warning-lighten);
+    }
+
+    .tutorial-body .pro-card h4,
+    .tutorial-body .con-card h4 {
+        margin: 0 0 0.5rem;
+        font-size: 1rem;
+    }
+
+    .tutorial-body .pro-card ul,
+    .tutorial-body .con-card ul {
+        margin: 0;
+        padding-left: 1.2rem;
+    }
+
+    .tutorial-body .try-it {
+        background: var(--mud-palette-primary-lighten);
+        border: 1px solid var(--mud-palette-primary);
+        padding: 1.25rem;
+        border-radius: 8px;
+        margin: 1.5rem 0;
+    }
+
+    .tutorial-body .try-it h3 {
+        margin: 0 0 0.5rem;
+    }
+</style>

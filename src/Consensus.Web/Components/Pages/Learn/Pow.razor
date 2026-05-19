@@ -1,0 +1,160 @@
+@page "/learn/pow"
+@layout Consensus.Web.Components.Layout.MainLayout
+
+<PageTitle>Proof of Work · Tutorials · Consensus Lab</PageTitle>
+
+<TutorialPage Title="Proof of Work (PoW)"
+              Lede="The original Bitcoin protocol — computers race to solve a math puzzle, and the winner gets to add the next block."
+              Difficulty="Beginner"
+              ReadTime="~10 min">
+
+    <h2>The basic idea</h2>
+
+    <p>
+        Imagine you're playing a game with 1,000 other kids in a giant classroom. The teacher
+        says: "I'm thinking of a number between 1 and 10 trillion. First person to guess it
+        gets to write the next page in the class journal." Everyone starts guessing as fast as
+        they can — flipping calculators, scribbling numbers, trying combination after
+        combination. Eventually one kid shouts the right number. They get to write the page;
+        the teacher checks their answer in one second; everyone moves on.
+    </p>
+
+    <p>
+        That's Proof of Work in a nutshell. Computers (called <strong>miners</strong>) race to
+        find a special number that, when combined with the latest list of transactions,
+        produces a cryptographic hash starting with a certain number of zeros. The puzzle is
+        easy to <em>verify</em> (anyone can check the answer in milliseconds) but very hard to
+        <em>solve</em> (you have to try billions of guesses).
+    </p>
+
+    <div class="analogy">
+        <strong>Analogy:</strong> It's like a giant sudoku puzzle that takes hours to solve but
+        takes ten seconds to check. Whoever cracks the puzzle first earns the right to add the
+        next page to the shared notebook — plus a reward of newly-minted coins.
+    </div>
+
+    <h2>How a round works, step by step</h2>
+
+    <MermaidDiagram Caption="One round of Proof of Work mining.">
+flowchart TD
+    Start([New transactions arrive]) --> Pool[Each miner gathers them<br/>into a candidate block]
+    Pool --> Guess{Miner guesses<br/>a 'nonce' number}
+    Guess --> Hash[Computes hash of block + nonce]
+    Hash --> Check{Does the hash start<br/>with N zeros?}
+    Check -- No --> Guess
+    Check -- Yes --> Broadcast[Miner broadcasts<br/>the winning block]
+    Broadcast --> Verify[Other miners verify<br/>in a few milliseconds]
+    Verify --> Accept[Block is added to the chain]
+    Accept --> Reward[Winner earns a coin reward]
+    Reward --> Start
+    </MermaidDiagram>
+
+    <p>
+        The hash function is the key. PoW uses a function called <strong>SHA-256</strong>
+        which acts like a number scrambler: feed it any input, get a 256-bit output that looks
+        completely random. The only way to find an input whose output starts with, say,
+        20 zeros is to try inputs one at a time until you get lucky.
+    </p>
+
+    <h2>Why this works</h2>
+
+    <p>
+        Three properties make Proof of Work secure:
+    </p>
+
+    <ol>
+        <li>
+            <strong>Costly to attack.</strong> If a bad actor wanted to rewrite history (say,
+            replace the page where they paid Alice with a page where they paid themselves),
+            they'd need to re-mine that block <em>plus every block after it</em>, all faster
+            than the rest of the network combined. That requires owning more than half of the
+            world's mining computers — wildly expensive.
+        </li>
+        <li>
+            <strong>Cheap to verify.</strong> Anyone can check a block in milliseconds. So even
+            phones can keep the network honest.
+        </li>
+        <li>
+            <strong>Self-adjusting difficulty.</strong> If miners get faster collectively (because
+            new hardware appears), the protocol automatically raises the number of leading zeros
+            so the average time between blocks stays around 10 minutes (in Bitcoin's case).
+        </li>
+    </ol>
+
+    <h2>The real-world picture</h2>
+
+    <p>
+        <strong>Bitcoin</strong>, the most famous use of PoW, has been running this way since 2009.
+        Globally, the Bitcoin network performs <em>roughly half a quintillion</em> hash guesses
+        per second — a number with 18 zeros. That's why people sometimes talk about Bitcoin
+        using as much electricity as a small country. Other PoW chains include
+        <strong>Litecoin</strong>, <strong>Dogecoin</strong>, and (until 2022)
+        <strong>Ethereum</strong>.
+    </p>
+
+    <h2>Strengths and trade-offs</h2>
+
+    <div class="pro-con-grid">
+        <div class="pro-card">
+            <h4>✅ Strengths</h4>
+            <ul>
+                <li>Extremely battle-tested — Bitcoin has run uninterrupted since 2009</li>
+                <li>No central authority can shut it down or veto a block</li>
+                <li>Attacks are economically irrational at scale</li>
+                <li>Anyone with a computer can join the network</li>
+            </ul>
+        </div>
+        <div class="con-card">
+            <h4>⚠️ Trade-offs</h4>
+            <ul>
+                <li>Enormous electricity consumption — environmental cost</li>
+                <li>Slow: Bitcoin processes ~7 transactions per second</li>
+                <li>Mining tends to centralize where electricity is cheapest</li>
+                <li>Specialized hardware (ASICs) gives big players an edge</li>
+            </ul>
+        </div>
+    </div>
+
+    <h2>A bit of math: the puzzle, simplified</h2>
+
+    <p>
+        In our simulator, a PoW round looks like this. The miner takes the block's data and tries
+        a "nonce" (a counter), computes the hash, and checks for leading zeros:
+    </p>
+
+    <pre style="background: var(--mud-palette-background-grey); padding: 1rem; border-radius: 6px; overflow-x: auto;"><code>nonce = 0
+while True:
+    candidate = block_data + str(nonce)
+    h = sha256(candidate)
+    if h.startswith("0000"):     # difficulty = 4 leading zeros
+        return nonce, h          # found it — broadcast!
+    nonce += 1                   # try the next number
+</code></pre>
+
+    <p>
+        On a real Bitcoin miner the difficulty is much higher — closer to 19 or 20 leading zeros
+        in hex — and the loop runs trillions of times per second on dedicated hardware.
+    </p>
+
+    <div class="try-it">
+        <h3>🎮 Try it in the simulator</h3>
+        <MudText Typo="Typo.body2" Class="mb-2">
+            Start a Proof of Work simulation with 10 nodes and watch the round-time tile fluctuate
+            — that's the puzzle-finding luck in action. Use seed=42 to get reproducible numbers,
+            then compare the leader distribution against the Gini-fairness metric.
+        </MudText>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.PlayCircle"
+                   Href="/simulations">Run a PoW simulation</MudButton>
+        <MudButton Variant="Variant.Text" Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.QueryStats"
+                   Href="/specialized-analytics">View PoW analytics</MudButton>
+    </div>
+
+    <h2>Where next?</h2>
+    <ul>
+        <li><a href="/learn/pos">Proof of Stake</a> — replaces mining with staking</li>
+        <li><a href="/learn/pbft">PBFT</a> — voting-based consensus, no puzzles needed</li>
+        <li><a href="/learn">All tutorials</a></li>
+    </ul>
+</TutorialPage>
