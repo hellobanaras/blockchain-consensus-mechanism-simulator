@@ -13,308 +13,324 @@
 @inject ISimulationService SimService
 @inject Consensus.Web.Services.IConsensusApiClient ApiClient
 @inject INodeRepository NodeRepo
+@inject ISnackbar Snackbar
 @implements IAsyncDisposable
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
-@* Real-time Simulation Dashboard *@
+<PageTitle>@(simulation?.Name ?? "Simulation") · Consensus Lab</PageTitle>
 
-<div class="container-fluid">
-    <!-- Header Section -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <div class="d-flex align-items-center gap-3">
-                        <button class="btn btn-outline-secondary" @onclick="GoBack">
-                            <i class="bi bi-arrow-left"></i> Back
-                        </button>
-                        <div>
-                            <h1 class="mb-0">
-                                <i class="bi bi-speedometer2 me-2"></i>
-                                @(simulation?.Name ?? "Loading...")
-                            </h1>
-                            @if (simulation != null)
-                            {
-                                <div class="d-flex align-items-center gap-3 mt-2">
-                                    <span class="badge @GetStatusBadgeClass(simulation.Status) fs-6">
-                                        @simulation.Status
-                                    </span>
-                                    <span class="text-muted">
-                                        @GetAlgorithmDisplayName(simulation.ConsensusAlgorithm)
-                                    </span>
-                                    <span class="text-muted">
-                                        Started: @simulation.CreatedAt.ToString("MMM dd, yyyy HH:mm:ss")
-                                    </span>
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </div>
-                <div class="d-flex gap-2">
-                    @* Pause / Resume removed for the demo build: the underlying
-                       ISimulationService has no Pause/Resume yet (see
-                       .claude/PROGRESS.md item 5 in the Phase-4 backlog). Stop
-                       and Export are now wired to real service / API endpoints
-                       so clicking them is no longer a 1-2s fake delay. *@
-                    @if (simulation?.Status == SimulationStatus.Running)
-                    {
-                        <button class="btn btn-danger" @onclick="StopSimulation" disabled="@isControllingSimulation">
-                            <i class="bi bi-stop-circle me-1"></i>
-                            @(isControllingSimulation ? "Stopping..." : "Stop")
-                        </button>
-                    }
-                    <button class="btn btn-info" @onclick="ExportData" disabled="@isExporting">
-                        <i class="bi bi-download me-1"></i>
-                        @(isExporting ? "Exporting..." : "Export JSON")
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+@*
+    Real-time Simulation Dashboard. Backend wiring (SignalR hubConnection,
+    LoadSimulationAsync, InitializeMetricsTimer, RefreshMetricsAsync, the Stop
+    and Export handlers shipped in commit d7f7d1b) is preserved verbatim in
+    the @code block below. Only the markup is refactored to MudBlazor.
+
+    Canvas IDs (performanceChart, participationChart) are preserved byte-for-byte
+    so the Phase-4 Chart.js interop work can drop into the same anchors.
+*@
+
+<MudStack Spacing="4">
+
+    @* Header *@
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start" Spacing="3">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="3">
+            <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" Color="Color.Default"
+                           OnClick="GoBack" aria-label="Back" />
+            <MudStack Spacing="1">
+                <MudText Typo="Typo.h4" Class="font-weight-bold">@(simulation?.Name ?? "Loading…")</MudText>
+                @if (simulation != null)
+                {
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColor(simulation.Status)">
+                            @simulation.Status
+                        </MudChip>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">
+                            @GetAlgorithmDisplayName(simulation.ConsensusAlgorithm)
+                        </MudChip>
+                        @if (simulation.RandomSeed.HasValue)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                                seed: @simulation.RandomSeed
+                            </MudChip>
+                        }
+                        <MudText Typo="Typo.caption" Color="Color.Default">
+                            Started @simulation.CreatedAt.ToLocalTime().ToString("MMM dd, HH:mm:ss")
+                        </MudText>
+                    </MudStack>
+                }
+            </MudStack>
+        </MudStack>
+
+        @* Pause / Resume intentionally absent — ISimulationService has no
+           equivalents yet (Phase-4 backlog item 5). *@
+        <MudStack Row="true" Spacing="2">
+            @if (simulation?.Status == SimulationStatus.Running)
+            {
+                <MudButton Variant="Variant.Filled" Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.StopCircle"
+                           Disabled="@isControllingSimulation"
+                           OnClick="StopSimulation">
+                    @(isControllingSimulation ? "Stopping…" : "Stop")
+                </MudButton>
+            }
+            <MudButton Variant="Variant.Filled" Color="Color.Info"
+                       StartIcon="@Icons.Material.Filled.Download"
+                       Disabled="@isExporting"
+                       OnClick="ExportData">
+                @(isExporting ? "Exporting…" : "Export JSON")
+            </MudButton>
+        </MudStack>
+    </MudStack>
 
     @if (simulation == null)
     {
-        <!-- Loading State -->
-        <div class="d-flex justify-content-center align-items-center" style="min-height: 400px;">
-            <div class="text-center">
-                <div class="spinner-border text-primary mb-3" role="status" style="width: 3rem; height: 3rem;">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <h4>Loading Simulation Dashboard...</h4>
-                <p class="text-muted">Connecting to real-time data stream</p>
-            </div>
-        </div>
+        @* Loading state — replaced the spinner div with MudProgressCircular and
+           kept the messaging so anyone debugging from logs sees the same string. *@
+        <MudStack AlignItems="AlignItems.Center" Spacing="3" Class="pa-12">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Typo="Typo.h6">Loading simulation dashboard…</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Default">Connecting to real-time data stream</MudText>
+        </MudStack>
     }
     else
     {
-        <!-- Connection Status -->
-        <div class="row mb-3">
-            <div class="col-12">
-                <div class="alert @GetConnectionAlertClass() d-flex align-items-center" role="alert">
-                    <i class="bi @GetConnectionIcon() me-2"></i>
-                    <span>@GetConnectionStatusText()</span>
-                    @if (hubConnection?.State == HubConnectionState.Disconnected)
+        @* Connection-status alert *@
+        <MudAlert Severity="@ConnectionSeverity()" Variant="Variant.Outlined" Dense="true" Class="my-0">
+            <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Spacing="2">
+                <MudText Typo="Typo.body2">@GetConnectionStatusText()</MudText>
+                @if (hubConnection?.State == HubConnectionState.Disconnected)
+                {
+                    <MudButton Variant="Variant.Text" Size="Size.Small" StartIcon="@Icons.Material.Filled.Refresh"
+                               OnClick="ReconnectAsync">Reconnect</MudButton>
+                }
+            </MudStack>
+        </MudAlert>
+
+        @* Hero metric tiles — same fields the old Bootstrap version drove from
+           currentMetrics so the timer-driven updates still drop right in. *@
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-primary);">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <div>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold">@currentMetrics.ActiveNodes</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default">Active Nodes</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default" Class="d-block">of @currentMetrics.TotalNodes total</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Hub" Color="Color.Primary" Size="Size.Large" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-success);">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <div>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold">@currentMetrics.BlockHeight</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default">Block Height</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default" Class="d-block">@currentMetrics.BlocksPerSecond.ToString("F1") blocks/s</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Layers" Color="Color.Success" Size="Size.Large" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-info);">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <div>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold">@currentMetrics.CurrentRound</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default">Consensus Round</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default" Class="d-block">@currentMetrics.RoundsPerMinute.ToString("F1") rounds/min</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Loop" Color="Color.Info" Size="Size.Large" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-warning);">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                        <div>
+                            <MudText Typo="Typo.h4" Class="font-weight-bold">@currentMetrics.AverageLatency</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default">Avg Latency (ms)</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default" Class="d-block">@currentMetrics.MessageCount messages</MudText>
+                        </div>
+                        <MudIcon Icon="@Icons.Material.Filled.Timer" Color="Color.Warning" Size="Size.Large" />
+                    </MudStack>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        @* Progress + Activity *@
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.BarChart" Class="me-2" />
+                        Simulation progress
+                    </MudText>
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" Class="mb-1">
+                        <MudText Typo="Typo.body2">Overall</MudText>
+                        <MudText Typo="Typo.body2" Class="font-weight-bold">@overallProgress%</MudText>
+                    </MudStack>
+                    <MudProgressLinear Color="@ProgressColor()" Value="@overallProgress" Class="mb-4" Size="Size.Large" />
+
+                    <MudGrid>
+                        <MudItem xs="4" Class="text-center">
+                            <MudText Typo="Typo.caption" Color="Color.Default">Elapsed</MudText>
+                            <MudText Typo="Typo.body1" Class="font-weight-bold">@GetElapsedTime()</MudText>
+                        </MudItem>
+                        <MudItem xs="4" Class="text-center">
+                            <MudText Typo="Typo.caption" Color="Color.Default">Remaining (est.)</MudText>
+                            <MudText Typo="Typo.body1" Class="font-weight-bold">@GetEstimatedTimeRemaining()</MudText>
+                        </MudItem>
+                        <MudItem xs="4" Class="text-center">
+                            <MudText Typo="Typo.caption" Color="Color.Default">Target</MudText>
+                            <MudText Typo="Typo.body1" Class="font-weight-bold">@GetTargetDuration()</MudText>
+                        </MudItem>
+                    </MudGrid>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4" Style="height: 100%;">
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.PlayArrow" Class="me-2" />
+                        Current activity
+                    </MudText>
+                    @if (currentActivity.Any())
                     {
-                        <button class="btn btn-sm btn-outline-secondary ms-auto" @onclick="ReconnectAsync">
-                            <i class="bi bi-arrow-clockwise me-1"></i>
-                            Reconnect
-                        </button>
+                        <MudTimeline TimelineOrientation="TimelineOrientation.Vertical" TimelinePosition="TimelinePosition.Start">
+                            @foreach (var activity in currentActivity.TakeLast(5).Reverse())
+                            {
+                                <MudTimelineItem Color="@ActivityColor(activity.Type)" Size="Size.Small" Variant="Variant.Filled">
+                                    <ItemContent>
+                                        <MudText Typo="Typo.body2">@activity.Message</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Default">@activity.Timestamp.ToLocalTime().ToString("HH:mm:ss")</MudText>
+                                    </ItemContent>
+                                </MudTimelineItem>
+                            }
+                        </MudTimeline>
                     }
-                </div>
-            </div>
-        </div>
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+                            <MudIcon Icon="@Icons.Material.Filled.RemoveCircleOutline" Color="Color.Default" />
+                            <MudText Typo="Typo.body2" Color="Color.Default">No recent activity</MudText>
+                        </MudStack>
+                    }
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
 
-        <!-- Metrics Row -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card border-primary">
-                    <div class="card-body text-center">
-                        <i class="bi bi-nodes text-primary fs-2"></i>
-                        <h3 class="mt-2 mb-0">@currentMetrics.ActiveNodes</h3>
-                        <p class="text-muted mb-0">Active Nodes</p>
-                        <small class="text-muted">of @currentMetrics.TotalNodes total</small>
+        @* Network + Event log *@
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.AccountTree" Class="me-2" />
+                        Network topology
+                    </MudText>
+                    <div id="networkVisualization" style="height: 300px; background-color: var(--mud-palette-background-grey); border-radius: 8px;">
+                        <MudStack AlignItems="AlignItems.Center" Class="pa-8" Style="height: 100%; justify-content: center;">
+                            <MudIcon Icon="@Icons.Material.Filled.AccountTree" Size="Size.Large" Color="Color.Default" />
+                            <MudText Typo="Typo.body2" Color="Color.Default">Network visualization (Phase 4)</MudText>
+                            <MudText Typo="Typo.caption" Color="Color.Default">Real-time node status and connections</MudText>
+                        </MudStack>
                     </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-success">
-                    <div class="card-body text-center">
-                        <i class="bi bi-layers text-success fs-2"></i>
-                        <h3 class="mt-2 mb-0">@currentMetrics.BlockHeight</h3>
-                        <p class="text-muted mb-0">Current Block</p>
-                        <small class="text-muted">@currentMetrics.BlocksPerSecond.ToString("F1") blocks/sec</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-info">
-                    <div class="card-body text-center">
-                        <i class="bi bi-arrow-repeat text-info fs-2"></i>
-                        <h3 class="mt-2 mb-0">@currentMetrics.CurrentRound</h3>
-                        <p class="text-muted mb-0">Consensus Round</p>
-                        <small class="text-muted">@currentMetrics.RoundsPerMinute.ToString("F1") rounds/min</small>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card border-warning">
-                    <div class="card-body text-center">
-                        <i class="bi bi-clock text-warning fs-2"></i>
-                        <h3 class="mt-2 mb-0">@currentMetrics.AverageLatency</h3>
-                        <p class="text-muted mb-0">Avg Latency (ms)</p>
-                        <small class="text-muted">@currentMetrics.MessageCount messages</small>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Progress & Status Row -->
-        <div class="row mb-4">
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-bar-chart me-2"></i>
-                            Simulation Progress
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="mb-3">
-                            <div class="d-flex justify-content-between mb-1">
-                                <span>Overall Progress</span>
-                                <span>@overallProgress%</span>
-                            </div>
-                            <div class="progress" style="height: 20px;">
-                                <div class="progress-bar @GetProgressBarClass()" 
-                                     role="progressbar" 
-                                     style="width: @(overallProgress)%"
-                                     aria-valuenow="@overallProgress" 
-                                     aria-valuemin="0" 
-                                     aria-valuemax="100">
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <!-- Time Information -->
-                        <div class="row text-center">
-                            <div class="col-md-4">
-                                <small class="text-muted">Elapsed Time</small>
-                                <div class="fw-bold">@GetElapsedTime()</div>
-                            </div>
-                            <div class="col-md-4">
-                                <small class="text-muted">Estimated Remaining</small>
-                                <div class="fw-bold">@GetEstimatedTimeRemaining()</div>
-                            </div>
-                            <div class="col-md-4">
-                                <small class="text-muted">Target Duration</small>
-                                <div class="fw-bold">@GetTargetDuration()</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-4">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-activity me-2"></i>
-                            Current Activity
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        @if (currentActivity.Any())
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+                        <MudText Typo="Typo.h6">
+                            <MudIcon Icon="@Icons.Material.Filled.Terminal" Class="me-2" />
+                            Live event log
+                        </MudText>
+                        <MudButtonGroup Variant="Variant.Outlined" Size="Size.Small">
+                            <MudButton Color="@(logFilter == "all" ? Color.Primary : Color.Default)" OnClick='() => SetLogFilter("all")'>All</MudButton>
+                            <MudButton Color="@(logFilter == "consensus" ? Color.Primary : Color.Default)" OnClick='() => SetLogFilter("consensus")'>Consensus</MudButton>
+                            <MudButton Color="@(logFilter == "blocks" ? Color.Primary : Color.Default)" OnClick='() => SetLogFilter("blocks")'>Blocks</MudButton>
+                            <MudButton Color="@(logFilter == "errors" ? Color.Primary : Color.Default)" OnClick='() => SetLogFilter("errors")'>Errors</MudButton>
+                        </MudButtonGroup>
+                    </MudStack>
+                    <div id="eventLog" class="console-log" style="height: 300px; overflow-y: auto; font-family: 'JetBrains Mono', 'Menlo', monospace; font-size: 0.78rem; background: var(--mud-palette-background-grey); border-radius: 8px; padding: 0.5rem;">
+                        @foreach (var logEntry in GetFilteredLogs().TakeLast(20))
                         {
-                            @foreach (var activity in currentActivity.TakeLast(5))
-                            {
-                                <div class="d-flex justify-content-between align-items-center mb-2">
-                                    <div>
-                                        <i class="bi @GetActivityIcon(activity.Type) me-2"></i>
-                                        <span class="small">@activity.Message</span>
-                                    </div>
-                                    <small class="text-muted">@activity.Timestamp.ToString("HH:mm:ss")</small>
-                                </div>
-                            }
-                        }
-                        else
-                        {
-                            <div class="text-center text-muted py-3">
-                                <i class="bi bi-dash-circle fs-4"></i>
-                                <p class="mb-0">No recent activity</p>
+                            <div class="log-entry @GetLogEntryClass(logEntry.Level)">
+                                <span class="timestamp">@logEntry.Timestamp.ToString("HH:mm:ss.fff")</span>
+                                <span class="level">[@logEntry.Level]</span>
+                                <span class="message">@logEntry.Message</span>
                             </div>
                         }
                     </div>
-                </div>
-            </div>
-        </div>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
 
-        <!-- Network Visualization & Logs Row -->
-        <div class="row mb-4">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-diagram-3 me-2"></i>
-                            Network Topology
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <div id="networkVisualization" style="height: 300px; background-color: #f8f9fa; border-radius: 0.375rem;">
-                            <div class="d-flex justify-content-center align-items-center h-100">
-                                <div class="text-center text-muted">
-                                    <i class="bi bi-diagram-3 fs-1"></i>
-                                    <p>Network visualization will appear here</p>
-                                    <small>Real-time node status and connections</small>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        <h5 class="mb-0">
-                            <i class="bi bi-terminal me-2"></i>
-                            Live Event Log
-                        </h5>
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn @(logFilter == "all" ? "btn-primary" : "btn-outline-secondary")" 
-                                    @onclick='() => SetLogFilter("all")'>All</button>
-                            <button class="btn @(logFilter == "consensus" ? "btn-primary" : "btn-outline-secondary")" 
-                                    @onclick='() => SetLogFilter("consensus")'>Consensus</button>
-                            <button class="btn @(logFilter == "blocks" ? "btn-primary" : "btn-outline-secondary")" 
-                                    @onclick='() => SetLogFilter("blocks")'>Blocks</button>
-                            <button class="btn @(logFilter == "errors" ? "btn-primary" : "btn-outline-secondary")" 
-                                    @onclick='() => SetLogFilter("errors")'>Errors</button>
-                        </div>
-                    </div>
-                    <div class="card-body p-0">
-                        <div id="eventLog" class="console-log" style="height: 300px; overflow-y: auto;">
-                            @foreach (var logEntry in GetFilteredLogs().TakeLast(20))
-                            {
-                                <div class="log-entry @GetLogEntryClass(logEntry.Level)">
-                                    <span class="timestamp">@logEntry.Timestamp.ToString("HH:mm:ss.fff")</span>
-                                    <span class="level">[@logEntry.Level]</span>
-                                    <span class="message">@logEntry.Message</span>
-                                </div>
-                            }
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Real-time Charts Row -->
-        <div class="row">
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-graph-up me-2"></i>
-                            Performance Metrics
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="performanceChart" width="400" height="200"></canvas>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card">
-                    <div class="card-header">
-                        <h5 class="mb-0">
-                            <i class="bi bi-pie-chart me-2"></i>
-                            Node Participation
-                        </h5>
-                    </div>
-                    <div class="card-body">
-                        <canvas id="participationChart" width="400" height="200"></canvas>
-                    </div>
-                </div>
-            </div>
-        </div>
+        @* Charts row — canvas IDs preserved byte-for-byte for Phase-4 JS interop. *@
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.ShowChart" Class="me-2" />
+                        Performance metrics
+                    </MudText>
+                    <canvas id="performanceChart" width="400" height="200"></canvas>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+                    <MudText Typo="Typo.h6" Class="mb-3">
+                        <MudIcon Icon="@Icons.Material.Filled.PieChart" Class="me-2" />
+                        Node participation
+                    </MudText>
+                    <canvas id="participationChart" width="400" height="200"></canvas>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
     }
-</div>
+</MudStack>
+
+@* MudBlazor colour-helpers for status / activity / progress / connection alert.
+   Kept inline to avoid spraying small static helpers across the @code block
+   that hosts the working backend wiring. *@
+@functions {
+    private static Color StatusColor(SimulationStatus s) => s switch
+    {
+        SimulationStatus.Running => Color.Success,
+        SimulationStatus.Completed => Color.Primary,
+        SimulationStatus.Failed => Color.Error,
+        SimulationStatus.Stopped => Color.Warning,
+        SimulationStatus.Paused => Color.Info,
+        _ => Color.Default,
+    };
+
+    private Severity ConnectionSeverity() => hubConnection?.State switch
+    {
+        HubConnectionState.Connected => Severity.Success,
+        HubConnectionState.Connecting => Severity.Info,
+        HubConnectionState.Reconnecting => Severity.Warning,
+        _ => Severity.Error,
+    };
+
+    private Color ProgressColor()
+    {
+        if (simulation == null) return Color.Primary;
+        return simulation.Status switch
+        {
+            SimulationStatus.Completed => Color.Primary,
+            SimulationStatus.Failed => Color.Error,
+            SimulationStatus.Stopped => Color.Warning,
+            _ => Color.Success,
+        };
+    }
+
+    private static Color ActivityColor(string type) => type?.ToLowerInvariant() switch
+    {
+        "consensus" => Color.Primary,
+        "block" => Color.Success,
+        "network" => Color.Info,
+        _ => Color.Default,
+    };
+}
 
 @code {
     [Parameter] public Guid SimulationId { get; set; }

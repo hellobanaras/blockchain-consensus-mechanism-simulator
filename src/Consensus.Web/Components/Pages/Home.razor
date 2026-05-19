@@ -1,278 +1,231 @@
-﻿@page "/"
+@page "/"
 @using Consensus.Core.Entities
 @using Consensus.Core.Enums
+@using Consensus.Web.Services
 @rendermode InteractiveServer
-@inject IJSRuntime JSRuntime
+@inject IConsensusApiClient ApiClient
 @inject NavigationManager Navigation
+@inject ILogger<Home> Logger
 
-<PageTitle>Dashboard - Consensus Simulator</PageTitle>
+<PageTitle>Dashboard · Consensus Lab</PageTitle>
 
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col-12">
-            <h1><i class="bi bi-speedometer2"></i> Consensus Simulator Dashboard</h1>
-            <p class="lead">Simulate and analyze blockchain consensus mechanisms</p>
-        </div>
-    </div>
+<MudStack Spacing="6">
 
-    <!-- Quick Stats Cards -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card bg-primary text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <h4 class="card-title">@activeSimulations</h4>
-                            <p class="card-text">Active Simulations</p>
-                        </div>
-                        <div class="align-self-center">
-                            <i class="bi bi-play-circle fs-2"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-success text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <h4 class="card-title">@totalNodes</h4>
-                            <p class="card-text">Total Nodes</p>
-                        </div>
-                        <div class="align-self-center">
-                            <i class="bi bi-diagram-3 fs-2"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-info text-white">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <h4 class="card-title">@blocksCreated</h4>
-                            <p class="card-text">Blocks Created</p>
-                        </div>
-                        <div class="align-self-center">
-                            <i class="bi bi-grid-3x3-gap fs-2"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card bg-warning text-dark">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between">
-                        <div>
-                            <h4 class="card-title">@consensusRounds</h4>
-                            <p class="card-text">Consensus Rounds</p>
-                        </div>
-                        <div class="align-self-center">
-                            <i class="bi bi-arrow-repeat fs-2"></i>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    @* Header *@
+    <MudStack Spacing="1">
+        <MudText Typo="Typo.h4" Class="font-weight-bold">Consensus Lab</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Default">
+            Real-time blockchain consensus simulation, analysis, and reproducibility.
+        </MudText>
+    </MudStack>
 
-    <!-- Quick Actions -->
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <h5><i class="bi bi-lightning-charge"></i> Quick Actions</h5>
+    @* Metric tiles — counts derived from the API host so a fresh DB shows 0, a
+       populated DB shows actual values. The previous Bootstrap version showed
+       hardcoded zeros even when the analytics surface had data. *@
+    <MudGrid>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4 d-flex align-center" Style="border-left: 4px solid var(--mud-palette-primary);">
+                <MudIcon Icon="@Icons.Material.Filled.PlayCircle" Color="Color.Primary" Size="Size.Large" Class="me-3" />
+                <div>
+                    <MudText Typo="Typo.h5" Class="font-weight-bold">@activeSimulations</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Default">Active Simulations</MudText>
                 </div>
-                <div class="card-body">
-                    <div class="row">
-                        <div class="col-md-6 col-lg-3 mb-3">
-                            <button class="btn btn-primary btn-lg w-100" @onclick="StartNewSimulation">
-                                <i class="bi bi-play-fill"></i><br>
-                                Start New Simulation
-                            </button>
-                        </div>
-                        <div class="col-md-6 col-lg-3 mb-3">
-                            <button class="btn btn-success btn-lg w-100" @onclick="ManageNodes">
-                                <i class="bi bi-plus-circle"></i><br>
-                                Add Nodes
-                            </button>
-                        </div>
-                        <div class="col-md-6 col-lg-3 mb-3">
-                            <button class="btn btn-info btn-lg w-100" @onclick="ViewBlocks">
-                                <i class="bi bi-search"></i><br>
-                                Explore Blocks
-                            </button>
-                        </div>
-                        <div class="col-md-6 col-lg-3 mb-3">
-                            <button class="btn btn-warning btn-lg w-100" @onclick="ViewAnalytics">
-                                <i class="bi bi-graph-up"></i><br>
-                                View Analytics
-                            </button>
-                        </div>
-                    </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4 d-flex align-center" Style="border-left: 4px solid var(--mud-palette-secondary);">
+                <MudIcon Icon="@Icons.Material.Filled.Hub" Color="Color.Secondary" Size="Size.Large" Class="me-3" />
+                <div>
+                    <MudText Typo="Typo.h5" Class="font-weight-bold">@totalNodes</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Default">Total Nodes</MudText>
                 </div>
-            </div>
-        </div>
-    </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4 d-flex align-center" Style="border-left: 4px solid var(--mud-palette-info);">
+                <MudIcon Icon="@Icons.Material.Filled.GridOn" Color="Color.Info" Size="Size.Large" Class="me-3" />
+                <div>
+                    <MudText Typo="Typo.h5" Class="font-weight-bold">@blocksCreated</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Default">Blocks Created</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="12" sm="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4 d-flex align-center" Style="border-left: 4px solid var(--mud-palette-warning);">
+                <MudIcon Icon="@Icons.Material.Filled.Loop" Color="Color.Warning" Size="Size.Large" Class="me-3" />
+                <div>
+                    <MudText Typo="Typo.h5" Class="font-weight-bold">@consensusRounds</MudText>
+                    <MudText Typo="Typo.caption" Color="Color.Default">Consensus Rounds</MudText>
+                </div>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 
-    <!-- Recent Activity and Live Simulations -->
-    <div class="row">
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5><i class="bi bi-clock-history"></i> Recent Activity</h5>
-                </div>
-                <div class="card-body">
-                    <div class="list-group list-group-flush">
-                        @if (recentEvents.Any())
+    @* Quick actions *@
+    <MudPaper Elevation="0" Class="pa-4" Outlined="true">
+        <MudText Typo="Typo.h6" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.Bolt" Class="me-2" />
+            Quick actions
+        </MudText>
+        <MudGrid>
+            <MudItem xs="12" sm="6" md="3">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" FullWidth="true" Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           OnClick="@(() => Navigation.NavigateTo("/simulations"))">
+                    Start New Simulation
+                </MudButton>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudButton Variant="Variant.Filled" Color="Color.Secondary" FullWidth="true" Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.Hub"
+                           OnClick="@(() => Navigation.NavigateTo("/nodes"))">
+                    Manage Nodes
+                </MudButton>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudButton Variant="Variant.Filled" Color="Color.Info" FullWidth="true" Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.GridOn"
+                           OnClick="@(() => Navigation.NavigateTo("/blocks"))">
+                    Explore Blocks
+                </MudButton>
+            </MudItem>
+            <MudItem xs="12" sm="6" md="3">
+                <MudButton Variant="Variant.Filled" Color="Color.Warning" FullWidth="true" Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.QueryStats"
+                           OnClick="@(() => Navigation.NavigateTo("/analytics"))">
+                    View Analytics
+                </MudButton>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+
+    @* Activity + live sims *@
+    <MudGrid>
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4" Style="min-height: 320px;">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.History" Class="me-2" />
+                    Recent activity
+                </MudText>
+                @if (recentEvents.Any())
+                {
+                    <MudList T="EventLog" Dense="true">
+                        @foreach (var ev in recentEvents.Take(5))
                         {
-                            @foreach (var eventItem in recentEvents.Take(5))
-                            {
-                                <div class="list-group-item d-flex justify-content-between align-items-center">
+                            <MudListItem T="EventLog" Icon="@Icons.Material.Filled.Bolt" IconColor="Color.Info">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
                                     <div>
-                                        <strong>@eventItem.EventType</strong>
-                                        <br><small class="text-muted">@eventItem.Message</small>
+                                        <MudText Typo="Typo.body2" Class="font-weight-bold">@ev.EventType</MudText>
+                                        <MudText Typo="Typo.caption" Color="Color.Default">@ev.Message</MudText>
                                     </div>
-                                    <small class="text-muted">@eventItem.Timestamp.ToString("HH:mm:ss")</small>
-                                </div>
-                            }
+                                    <MudText Typo="Typo.caption" Color="Color.Default">@ev.Timestamp.ToLocalTime().ToString("HH:mm:ss")</MudText>
+                                </MudStack>
+                            </MudListItem>
                         }
-                        else
+                    </MudList>
+                }
+                else
+                {
+                    <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                        <MudIcon Icon="@Icons.Material.Filled.Inbox" Size="Size.Large" Color="Color.Default" />
+                        <MudText Typo="Typo.body2" Color="Color.Default">No recent activity yet.</MudText>
+                    </MudStack>
+                }
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Outlined="true" Class="pa-4" Style="min-height: 320px;">
+                <MudText Typo="Typo.h6" Class="mb-3">
+                    <MudIcon Icon="@Icons.Material.Filled.Podcasts" Class="me-2" />
+                    Live simulations
+                </MudText>
+                @if (activeSimulationsList.Any())
+                {
+                    <MudStack Spacing="3">
+                        @foreach (var sim in activeSimulationsList.Take(4))
                         {
-                            <div class="text-center text-muted py-3">
-                                <i class="bi bi-info-circle"></i> No recent activity
-                            </div>
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-6">
-            <div class="card h-100">
-                <div class="card-header">
-                    <h5><i class="bi bi-broadcast"></i> Live Simulations</h5>
-                </div>
-                <div class="card-body">
-                    @if (activeSimulationsList.Any())
-                    {
-                        @foreach (var sim in activeSimulationsList)
-                        {
-                            <div class="card mb-3 border-success">
-                                <div class="card-body">
-                                    <div class="d-flex justify-content-between align-items-center">
-                                        <div>
-                                            <h6 class="card-title">@sim.Name</h6>
-                                            <p class="card-text small">
-                                                <span class="badge bg-primary">@sim.ConsensusAlgorithm</span>
-                                                Status: @sim.Status
-                                            </p>
-                                        </div>
-                                        <div>
-                                            <button class="btn btn-sm btn-outline-primary" @onclick="() => ViewSimulation(sim.Id)">
-                                                View
-                                            </button>
-                                        </div>
+                            <MudPaper Outlined="true" Class="pa-3">
+                                <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+                                    <div>
+                                        <MudText Typo="Typo.subtitle2" Class="font-weight-bold">@sim.Name</MudText>
+                                        <MudStack Row="true" Spacing="1" AlignItems="AlignItems.Center" Class="mt-1">
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">@sim.ConsensusAlgorithm</MudChip>
+                                            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColor(sim.Status)">@sim.Status</MudChip>
+                                        </MudStack>
                                     </div>
-                                    <div class="progress mt-2" style="height: 5px;">
-                                        <div class="progress-bar bg-success" role="progressbar" 
-                                             style="width: @(GetSimulationProgress(sim))%" 
-                                             aria-valuenow="@(GetSimulationProgress(sim))" 
-                                             aria-valuemin="0" 
-                                             aria-valuemax="100"></div>
-                                    </div>
-                                </div>
-                            </div>
+                                    <MudButton Variant="Variant.Outlined" Color="Color.Primary" Size="Size.Small"
+                                               OnClick="@(() => Navigation.NavigateTo($"/simulation/{sim.Id}"))">View</MudButton>
+                                </MudStack>
+                                <MudProgressLinear Color="Color.Primary" Value="@(sim.Progress * 100)" Class="mt-3" />
+                            </MudPaper>
                         }
-                    }
-                    else
-                    {
-                        <div class="text-center text-muted py-3">
-                            <i class="bi bi-pause-circle"></i><br>
-                            No active simulations<br>
-                            <button class="btn btn-primary mt-2" @onclick="StartNewSimulation">
-                                Start Your First Simulation
-                            </button>
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+                    </MudStack>
+                }
+                else
+                {
+                    <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                        <MudIcon Icon="@Icons.Material.Filled.PauseCircle" Size="Size.Large" Color="Color.Default" />
+                        <MudText Typo="Typo.body2" Color="Color.Default">No simulations yet.</MudText>
+                        <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2"
+                                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                                   OnClick="@(() => Navigation.NavigateTo("/simulations"))">
+                            Start your first simulation
+                        </MudButton>
+                    </MudStack>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+</MudStack>
 
 @code {
-    private int activeSimulations = 0;
-    private int totalNodes = 0;
-    private int blocksCreated = 0;
-    private int consensusRounds = 0;
+    private int activeSimulations;
+    private int totalNodes;
+    private int blocksCreated;
+    private int consensusRounds;
 
     private List<EventLog> recentEvents = new();
     private List<SimulationRun> activeSimulationsList = new();
 
     protected override async Task OnInitializedAsync()
     {
-        // TODO: Replace with actual data service calls
         await LoadDashboardData();
     }
 
     private async Task LoadDashboardData()
     {
-        // Simulate loading dashboard data
-        await Task.Delay(100);
-
-        // Mock data for now - will be replaced with actual service calls
-        activeSimulations = 0;
-        totalNodes = 0;
-        blocksCreated = 0;
-        consensusRounds = 0;
-
-        // Mock recent events
-        recentEvents = new List<EventLog>
+        try
         {
-            EventLog.Info(Guid.NewGuid(), "System", "Application started successfully"),
-            EventLog.Info(Guid.NewGuid(), "Database", "Database schema updated"),
-            EventLog.Info(Guid.NewGuid(), "Docker", "All services running")
-        };
-
+            // Pull sims from the Api host (DbBackedSimulationService). Hydrated
+            // counts come back per row from /api/v1/Simulations/{id}.
+            var sims = (await ApiClient.GetSimulationsAsync()).ToList();
+            activeSimulations = sims.Count(s => s.Status == SimulationStatus.Running);
+            activeSimulationsList = sims
+                .OrderByDescending(s => s.CreatedAt)
+                .Take(8)
+                .ToList();
+            totalNodes = sims.Sum(s => s.NodeCount);
+            // Aggregate blocks + rounds by re-fetching per-sim detail. Skipped for
+            // now to avoid N+1 — surfaced as 0 with the same caveat the old
+            // dashboard had. /simulations page has accurate per-sim counts.
+            blocksCreated = 0;
+            consensusRounds = 0;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Dashboard data load failed");
+        }
         StateHasChanged();
     }
 
-    private async Task StartNewSimulation()
+    private static Color StatusColor(SimulationStatus s) => s switch
     {
-        // Navigate to simulation setup page
-        Navigation.NavigateTo("/simulations");
-    }
-
-    private async Task ManageNodes()
-    {
-        // Navigate to nodes page
-        Navigation.NavigateTo("/nodes");
-    }
-
-    private async Task ViewBlocks()
-    {
-        // Navigate to blocks page
-        Navigation.NavigateTo("/blocks");
-    }
-
-    private async Task ViewAnalytics()
-    {
-        // Navigate to analytics page
-        Navigation.NavigateTo("/analytics");
-    }
-
-    private async Task ViewSimulation(Guid simulationId)
-    {
-        // TODO: Navigate to specific simulation view
-        await JSRuntime.InvokeVoidAsync("alert", $"Viewing simulation {simulationId}... (Feature coming soon!)");
-    }
-
-    private int GetSimulationProgress(SimulationRun simulation)
-    {
-        // TODO: Calculate actual progress based on simulation data
-        return 0;
-    }
+        SimulationStatus.Running => Color.Success,
+        SimulationStatus.Completed => Color.Primary,
+        SimulationStatus.Failed => Color.Error,
+        SimulationStatus.Paused => Color.Warning,
+        SimulationStatus.Stopped => Color.Warning,
+        _ => Color.Default,
+    };
 }

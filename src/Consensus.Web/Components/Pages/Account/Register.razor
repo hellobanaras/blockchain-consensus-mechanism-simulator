@@ -11,151 +11,121 @@
 @inject NavigationManager Navigation
 @inject ILogger<Register> Logger
 
-<PageTitle>Register - Consensus Simulator</PageTitle>
+<PageTitle>Create account · Consensus Lab</PageTitle>
 
-<div class="container-fluid p-0">
-    <div class="row min-vh-100 g-0">
-        <div class="col-md-6 d-flex align-items-center justify-content-center bg-light">
-            <div class="w-100" style="max-width: 450px;">
-                <div class="text-center mb-4">
-                    <h1 class="display-6 fw-bold text-primary">
-                        <i class="fas fa-cube me-2"></i>
-                        Consensus Lab
-                    </h1>
-                    <p class="text-muted">Blockchain Consensus Mechanism Simulator</p>
-                </div>
+@*
+    Mirrors Login.razor's two-column layout. The EditForm shell stays unchanged
+    so ASP.NET form-handler routing + antiforgery still bind correctly; only the
+    visible inputs are now MudBlazor components. The redirectUrl-outside-try
+    pattern from commit e023e25 is preserved in the @code block below.
+*@
+<MudGrid Class="ma-0" Style="min-height: calc(100vh - 64px);" Spacing="0">
+    <MudItem xs="12" md="6" Class="d-flex align-items-center justify-content-center pa-6"
+             Style="background: var(--mud-palette-background);">
+        <MudPaper Elevation="6" Class="pa-8 rounded-lg" Style="width: 100%; max-width: 480px;">
+            <MudStack Spacing="1" AlignItems="AlignItems.Center" Class="mb-4">
+                <MudIcon Icon="@Icons.Material.Filled.Hub" Color="Color.Primary" Size="Size.Large" />
+                <MudText Typo="Typo.h5" Align="Align.Center" Class="font-weight-bold">Consensus Lab</MudText>
+                <MudText Typo="Typo.body2" Align="Align.Center" Color="Color.Default">
+                    Blockchain Consensus Mechanism Simulator
+                </MudText>
+            </MudStack>
 
-                <div class="card shadow">
-                    <div class="card-body p-4">
-                        <h3 class="card-title text-center mb-4">Create Account</h3>
+            <MudDivider Class="my-4" />
 
-                        @if (!string.IsNullOrEmpty(ErrorMessage))
-                        {
-                            <div class="alert alert-danger" role="alert">
-                                <i class="fas fa-exclamation-triangle me-2"></i>
-                                @ErrorMessage
-                            </div>
-                        }
+            <MudText Typo="Typo.h6" Align="Align.Center" Class="mb-4">Create account</MudText>
 
-                        @if (!string.IsNullOrEmpty(SuccessMessage))
-                        {
-                            <div class="alert alert-success" role="alert">
-                                <i class="fas fa-check-circle me-2"></i>
-                                @SuccessMessage
-                            </div>
-                        }
+            @if (!string.IsNullOrEmpty(ErrorMessage))
+            {
+                <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-4" Dense="true">@ErrorMessage</MudAlert>
+            }
+            @if (!string.IsNullOrEmpty(SuccessMessage))
+            {
+                <MudAlert Severity="Severity.Success" Variant="Variant.Filled" Class="mb-4" Dense="true">@SuccessMessage</MudAlert>
+            }
 
-                        <EditForm Model="Input" OnValidSubmit="RegisterUser" FormName="register" data-enhance="false">
-                            <DataAnnotationsValidator />
-                            
-                            <div class="row">
-                                <div class="col-md-6 mb-3">
-                                    <label for="firstName" class="form-label">First Name</label>
-                                    <InputText @bind-Value="Input.FirstName" class="form-control" placeholder="John" />
-                                    <ValidationMessage For="() => Input.FirstName" class="text-danger" />
-                                </div>
-                                <div class="col-md-6 mb-3">
-                                    <label for="lastName" class="form-label">Last Name</label>
-                                    <InputText @bind-Value="Input.LastName" class="form-control" placeholder="Doe" />
-                                    <ValidationMessage For="() => Input.LastName" class="text-danger" />
-                                </div>
-                            </div>
+            <EditForm Model="Input" method="post" OnValidSubmit="RegisterUser" FormName="register" data-enhance="false">
+                <DataAnnotationsValidator />
 
-                            <div class="mb-3">
-                                <label for="email" class="form-label">Email</label>
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="fas fa-envelope"></i>
-                                    </span>
-                                    <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="john.doe@university.edu" />
-                                </div>
-                                <ValidationMessage For="() => Input.Email" class="text-danger" />
-                            </div>
+                <MudStack Spacing="3">
+                    <MudGrid Spacing="2">
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="Input.FirstName"
+                                          Label="First name" Variant="Variant.Outlined"
+                                          UserAttributes="@(new Dictionary<string, object?> { ["name"] = "Input.FirstName" })" />
+                            <ValidationMessage For="() => Input.FirstName" class="text-danger" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="Input.LastName"
+                                          Label="Last name" Variant="Variant.Outlined"
+                                          UserAttributes="@(new Dictionary<string, object?> { ["name"] = "Input.LastName" })" />
+                            <ValidationMessage For="() => Input.LastName" class="text-danger" />
+                        </MudItem>
+                    </MudGrid>
 
-                            <div class="mb-3">
-                                <label for="organization" class="form-label">Organization</label>
-                                <InputText @bind-Value="Input.Organization" class="form-control" placeholder="University or Company (Optional)" />
-                                <ValidationMessage For="() => Input.Organization" class="text-danger" />
-                            </div>
+                    <MudTextField @bind-Value="Input.Email"
+                                  Label="Email" Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Email"
+                                  InputType="InputType.Email"
+                                  UserAttributes="@(new Dictionary<string, object?> { ["autocomplete"] = "username", ["name"] = "Input.Email" })" />
+                    <ValidationMessage For="() => Input.Email" class="text-danger" />
 
-                            <div class="mb-3">
-                                <label for="password" class="form-label">Password</label>
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="fas fa-lock"></i>
-                                    </span>
-                                    <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="Enter a strong password" />
-                                </div>
-                                <div class="form-text">
-                                    Password must be at least 8 characters long, contain uppercase, lowercase, and numbers.
-                                </div>
-                                <ValidationMessage For="() => Input.Password" class="text-danger" />
-                            </div>
+                    <MudTextField @bind-Value="Input.Organization"
+                                  Label="Organization (optional)" Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.School"
+                                  UserAttributes="@(new Dictionary<string, object?> { ["name"] = "Input.Organization" })" />
 
-                            <div class="mb-4">
-                                <label for="confirmPassword" class="form-label">Confirm Password</label>
-                                <div class="input-group">
-                                    <span class="input-group-text">
-                                        <i class="fas fa-lock"></i>
-                                    </span>
-                                    <InputText type="password" @bind-Value="Input.ConfirmPassword" class="form-control" autocomplete="new-password" aria-required="true" placeholder="Confirm your password" />
-                                </div>
-                                <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
-                            </div>
+                    <MudTextField @bind-Value="Input.Password"
+                                  Label="Password" Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock"
+                                  InputType="InputType.Password"
+                                  HelperText="At least 8 characters, with uppercase, lowercase, and a number."
+                                  UserAttributes="@(new Dictionary<string, object?> { ["autocomplete"] = "new-password", ["name"] = "Input.Password" })" />
+                    <ValidationMessage For="() => Input.Password" class="text-danger" />
 
-                            <div class="d-grid">
-                                <button type="submit" class="btn btn-primary btn-lg">
-                                    <i class="fas fa-user-plus me-2"></i>
-                                    Create Account
-                                </button>
-                            </div>
-                        </EditForm>
+                    <MudTextField @bind-Value="Input.ConfirmPassword"
+                                  Label="Confirm password" Variant="Variant.Outlined"
+                                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Lock"
+                                  InputType="InputType.Password"
+                                  UserAttributes="@(new Dictionary<string, object?> { ["autocomplete"] = "new-password", ["name"] = "Input.ConfirmPassword" })" />
+                    <ValidationMessage For="() => Input.ConfirmPassword" class="text-danger" />
 
-                        <hr class="my-4">
+                    <MudButton ButtonType="ButtonType.Submit"
+                               Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                               FullWidth="true" StartIcon="@Icons.Material.Filled.PersonAdd">
+                        Create account
+                    </MudButton>
+                </MudStack>
+            </EditForm>
 
-                        <div class="text-center">
-                            <p class="mb-0">
-                                Already have an account? 
-                                <a href="@($"/Account/Login{(string.IsNullOrEmpty(ReturnUrl) ? "" : $"?returnUrl={ReturnUrl}")}")" class="text-decoration-none">
-                                    Sign in here
-                                </a>
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+            <MudDivider Class="my-4" />
 
-        <div class="col-md-6 bg-success d-none d-md-flex align-items-center justify-content-center">
-            <div class="text-white text-center p-5">
-                <i class="fas fa-users fa-5x mb-4 opacity-75"></i>
-                <h2 class="fw-bold mb-3">Join the Research Community</h2>
-                <p class="fs-5 opacity-75">
-                    Connect with researchers and developers exploring blockchain consensus 
-                    mechanisms. Collaborate on experiments and share insights.
-                </p>
-                <div class="row mt-5 text-start">
-                    <div class="col-12 mb-3">
-                        <i class="fas fa-graduation-cap me-3"></i>
-                        Educational simulations and tutorials
-                    </div>
-                    <div class="col-12 mb-3">
-                        <i class="fas fa-flask me-3"></i>
-                        Advanced research tools
-                    </div>
-                    <div class="col-12 mb-3">
-                        <i class="fas fa-share-alt me-3"></i>
-                        Export and share results
-                    </div>
-                    <div class="col-12">
-                        <i class="fas fa-shield-alt me-3"></i>
-                        Secure role-based access
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+            <MudText Typo="Typo.body2" Align="Align.Center">
+                Already have an account?
+                <MudLink Href="@($"/Account/Login{(string.IsNullOrEmpty(ReturnUrl) ? "" : $"?returnUrl={ReturnUrl}")}")">
+                    Sign in here
+                </MudLink>
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <MudItem xs="12" md="6" Class="d-none d-md-flex align-items-center justify-content-center pa-8"
+             Style="background: linear-gradient(135deg, #16a085 0%, #0a3d62 100%); color: white;">
+        <MudStack Spacing="4" AlignItems="AlignItems.Center" Style="max-width: 480px;">
+            <MudIcon Icon="@Icons.Material.Filled.Groups" Size="Size.Large" Style="font-size: 6rem; opacity: .9;" />
+            <MudText Typo="Typo.h4" Align="Align.Center" Class="font-weight-bold">Join the research community</MudText>
+            <MudText Typo="Typo.body1" Align="Align.Center" Style="opacity: .85;">
+                Run experiments, share configurations, and inspect simulation results.
+            </MudText>
+            <MudList T="string" Dense="true" Class="mt-2" Style="width: 100%;">
+                <MudListItem Icon="@Icons.Material.Filled.MenuBook" IconColor="Color.Success">Educational simulations and tutorials</MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Science" IconColor="Color.Success">Advanced research tools</MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Share" IconColor="Color.Success">Export and share results</MudListItem>
+                <MudListItem Icon="@Icons.Material.Filled.Shield" IconColor="Color.Success">Secure role-based access</MudListItem>
+            </MudList>
+        </MudStack>
+    </MudItem>
+</MudGrid>
 
 @code {
     private string? ErrorMessage;

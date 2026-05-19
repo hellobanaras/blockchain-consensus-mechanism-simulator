@@ -16,291 +16,239 @@
 @inject IBlockRepository BlockRepo
 @inject IConsensusRoundRepository RoundRepo
 @inject ILogger<Simulations> Logger
+@inject ISnackbar Snackbar
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
-@* Simulations Page *@
+<PageTitle>Simulations · Consensus Lab</PageTitle>
 
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h1><i class="bi bi-play-circle"></i> Consensus Simulations</h1>
-                    <p class="lead">Create, manage, and analyze consensus protocol simulations</p>
-                </div>
-                <div>
-                    <AuthorizeView Roles="Admin,Operator">
-                        <Authorized>
-                            <button class="btn btn-primary btn-lg" @onclick="ShowCreateSimulationModal">
-                                <i class="bi bi-plus-circle"></i> New Simulation
-                            </button>
-                        </Authorized>
-                        <NotAuthorized>
-                            <button class="btn btn-secondary btn-lg" disabled title="Insufficient permissions">
-                                <i class="bi bi-lock"></i> New Simulation (Admin/Operator Only)
-                            </button>
-                        </NotAuthorized>
-                    </AuthorizeView>
-                </div>
-            </div>
-        </div>
-    </div>
+<MudStack Spacing="6">
 
-    <!-- Simulation Statistics -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-white bg-success">
-                <div class="card-body text-center">
-                    <h3>@runningSimulations</h3>
-                    <p>Running</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-primary">
-                <div class="card-body text-center">
-                    <h3>@completedSimulations</h3>
-                    <p>Completed</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-warning">
-                <div class="card-body text-center">
-                    <h3>@failedSimulations</h3>
-                    <p>Failed</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-info">
-                <div class="card-body text-center">
-                    <h3>@totalSimulations</h3>
-                    <p>Total</p>
-                </div>
-            </div>
-        </div>
-    </div>
+    @* Header *@
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h4" Class="font-weight-bold">Consensus Simulations</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Default">Create, monitor, and analyse consensus protocol runs.</MudText>
+        </MudStack>
+        <AuthorizeView Roles="Admin,Operator">
+            <Authorized>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           OnClick="ShowCreateSimulationModal">
+                    New Simulation
+                </MudButton>
+            </Authorized>
+            <NotAuthorized>
+                <MudTooltip Text="Admin or Operator role required">
+                    <MudButton Variant="Variant.Outlined" Disabled="true" Size="Size.Large"
+                               StartIcon="@Icons.Material.Filled.Lock">
+                        New Simulation
+                    </MudButton>
+                </MudTooltip>
+            </NotAuthorized>
+        </AuthorizeView>
+    </MudStack>
 
-    <!-- Simulations List -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5><i class="bi bi-list"></i> All Simulations</h5>
-                        <div class="d-flex gap-2">
-                            <select class="form-select form-select-sm" @onchange="FilterByStatus">
-                                <option value="">All Status</option>
-                                <option value="Running">Running</option>
-                                <option value="Completed">Completed</option>
-                                <option value="Failed">Failed</option>
-                                <option value="Stopped">Stopped</option>
-                            </select>
-                            <select class="form-select form-select-sm" @onchange="FilterByAlgorithm">
-                                <option value="">All Algorithms</option>
-                                <option value="ProofOfWork">Proof of Work</option>
-                                <option value="ProofOfStake">Proof of Stake</option>
-                                <option value="PracticalByzantineFaultTolerance">PBFT</option>
-                                <option value="Raft">Raft</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-body">
-                    @if (filteredSimulations.Any())
-                    {
-                        @foreach (var simulation in filteredSimulations)
+    @* Status counter cards *@
+    <MudGrid>
+        <MudItem xs="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-success);">
+                <MudText Typo="Typo.h4" Class="font-weight-bold">@runningSimulations</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Default">Running</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-primary);">
+                <MudText Typo="Typo.h4" Class="font-weight-bold">@completedSimulations</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Default">Completed</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-error);">
+                <MudText Typo="Typo.h4" Class="font-weight-bold">@failedSimulations</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Default">Failed</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-info);">
+                <MudText Typo="Typo.h4" Class="font-weight-bold">@totalSimulations</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Default">Total</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @* Filter row + list *@
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.h6">All simulations</MudText>
+            <MudStack Row="true" Spacing="2">
+                <MudSelect T="string" Label="Status" Dense="true" Variant="Variant.Outlined"
+                           Value="@filterStatus" ValueChanged="@OnStatusFilterChanged" Style="min-width: 160px;">
+                    <MudSelectItem Value="@("")">All status</MudSelectItem>
+                    <MudSelectItem Value="@("Running")">Running</MudSelectItem>
+                    <MudSelectItem Value="@("Completed")">Completed</MudSelectItem>
+                    <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
+                    <MudSelectItem Value="@("Stopped")">Stopped</MudSelectItem>
+                </MudSelect>
+                <MudSelect T="string" Label="Algorithm" Dense="true" Variant="Variant.Outlined"
+                           Value="@filterAlgorithm" ValueChanged="@OnAlgorithmFilterChanged" Style="min-width: 200px;">
+                    <MudSelectItem Value="@("")">All algorithms</MudSelectItem>
+                    <MudSelectItem Value="@("ProofOfWork")">Proof of Work</MudSelectItem>
+                    <MudSelectItem Value="@("ProofOfStake")">Proof of Stake</MudSelectItem>
+                    <MudSelectItem Value="@("DelegatedProofOfStake")">DPoS</MudSelectItem>
+                    <MudSelectItem Value="@("PracticalByzantineFaultTolerance")">PBFT</MudSelectItem>
+                    <MudSelectItem Value="@("ProofOfElapsedTime")">PoET</MudSelectItem>
+                </MudSelect>
+            </MudStack>
+        </MudStack>
+
+        @if (filteredSimulations.Any())
+        {
+            <MudTable Items="filteredSimulations" Hover="true" Striped="false" Breakpoint="Breakpoint.Sm" Dense="false">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Algorithm</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh Style="text-align:right;">Nodes</MudTh>
+                    <MudTh Style="text-align:right;">Rounds</MudTh>
+                    <MudTh Style="text-align:right;">Blocks</MudTh>
+                    <MudTh>Created</MudTh>
+                    <MudTh Style="text-align:right;">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">
+                        <MudText Typo="Typo.body2" Class="font-weight-bold">@context.Name</MudText>
+                        @if (context.RandomSeed.HasValue)
                         {
-                            <div class="card mb-3 @(GetSimulationBorderClass(simulation.Status))">
-                                <div class="card-body">
-                                    <div class="row">
-                                        <div class="col-md-8">
-                                            <h5 class="card-title">
-                                                @simulation.Name
-                                                <span class="badge @GetStatusBadgeClass(simulation.Status) ms-2">
-                                                    @simulation.Status
-                                                </span>
-                                            </h5>
-                                            <p class="card-text">
-                                                @if (!string.IsNullOrEmpty(simulation.Description))
-                                                {
-                                                    <span>@simulation.Description</span><br>
-                                                }
-                                                <strong>Algorithm:</strong> @GetAlgorithmDisplayName(simulation.ConsensusAlgorithm)<br>
-                                                <strong>Started:</strong> @simulation.CreatedAt.ToString("MMM dd, yyyy HH:mm:ss")<br>
-                                                @if (simulation.CompletedAt.HasValue)
-                                                {
-                                                    <strong>Completed:</strong> @simulation.CompletedAt.Value.ToString("MMM dd, yyyy HH:mm:ss")<br>
-                                                    <strong>Duration:</strong> @GetDuration(simulation)
-                                                }
-                                                else if (simulation.Status == SimulationStatus.Running)
-                                                {
-                                                    <strong>Running for:</strong> @GetRunningDuration(simulation)
-                                                }
-                                            </p>
-                                        </div>
-                                        <div class="col-md-4">
-                                            <div class="text-end">
-                                                <div class="mb-3">
-                                                    @if (simulation.Status == SimulationStatus.Running)
-                                                    {
-                                                        <div class="progress mb-2">
-                                                            <div class="progress-bar progress-bar-striped progress-bar-animated bg-success" 
-                                                                 role="progressbar" 
-                                                                 style="width: @(GetSimulationProgress(simulation))%" 
-                                                                 aria-valuenow="@GetSimulationProgress(simulation)" 
-                                                                 aria-valuemin="0" 
-                                                                 aria-valuemax="100">
-                                                                @GetSimulationProgress(simulation)%
-                                                            </div>
-                                                        </div>
-                                                    }
-                                                    <small class="text-muted">
-                                                        <strong>Nodes:</strong> @GetNodeCount(simulation.Id)<br>
-                                                        <strong>Rounds:</strong> @GetRoundCount(simulation.Id)<br>
-                                                        <strong>Blocks:</strong> @GetBlockCount(simulation.Id)
-                                                    </small>
-                                                </div>
-                                                
-                                                <div class="btn-group" role="group">
-                                                    <button class="btn btn-outline-primary btn-sm" @onclick="() => ViewSimulation(simulation.Id)">
-                                                        <i class="bi bi-eye"></i> View
-                                                    </button>
-                                                    
-                                                    @if (simulation.Status == SimulationStatus.Running)
-                                                    {
-                                                        <button class="btn btn-outline-warning btn-sm" @onclick="() => PauseSimulation(simulation.Id)">
-                                                            <i class="bi bi-pause"></i> Pause
-                                                        </button>
-                                                        <button class="btn btn-outline-danger btn-sm" @onclick="() => StopSimulation(simulation.Id)">
-                                                            <i class="bi bi-stop"></i> Stop
-                                                        </button>
-                                                    }
-                                                    else if (simulation.Status == SimulationStatus.Paused)
-                                                    {
-                                                        <button class="btn btn-outline-success btn-sm" @onclick="() => ResumeSimulation(simulation.Id)">
-                                                            <i class="bi bi-play"></i> Resume
-                                                        </button>
-                                                    }
-                                                    else if (simulation.Status == SimulationStatus.Completed || simulation.Status == SimulationStatus.Failed)
-                                                    {
-                                                        <button class="btn btn-outline-info btn-sm" @onclick="() => ViewResults(simulation.Id)">
-                                                            <i class="bi bi-graph-up"></i> Results
-                                                        </button>
-                                                        <button class="btn btn-outline-secondary btn-sm" @onclick="() => CloneSimulation(simulation.Id)">
-                                                            <i class="bi bi-files"></i> Clone
-                                                        </button>
-                                                    }
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                            <MudText Typo="Typo.caption" Color="Color.Default">seed: @context.RandomSeed</MudText>
                         }
-                    }
-                    else
-                    {
-                        <div class="text-center text-muted py-4">
-                            <i class="bi bi-play-circle fs-1"></i>
-                            <h4>No Simulations Found</h4>
-                            <p>Create your first consensus protocol simulation to get started.</p>
-                            <button class="btn btn-primary btn-lg" @onclick="ShowCreateSimulationModal">
-                                <i class="bi bi-plus-circle"></i> Create First Simulation
-                            </button>
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+                    </MudTd>
+                    <MudTd DataLabel="Algorithm">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Primary">
+                            @GetAlgorithmDisplayName(context.ConsensusAlgorithm)
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColor(context.Status)">
+                            @context.Status
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Nodes" Style="text-align:right;">@GetNodeCount(context.Id)</MudTd>
+                    <MudTd DataLabel="Rounds" Style="text-align:right;">@GetRoundCount(context.Id)</MudTd>
+                    <MudTd DataLabel="Blocks" Style="text-align:right;">@GetBlockCount(context.Id)</MudTd>
+                    <MudTd DataLabel="Created">
+                        <MudText Typo="Typo.caption">@context.CreatedAt.ToLocalTime().ToString("MMM dd, HH:mm")</MudText>
+                    </MudTd>
+                    <MudTd Style="text-align:right;">
+                        <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                            <MudTooltip Text="View">
+                                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                                               Color="Color.Primary"
+                                               OnClick="@(() => ViewSimulation(context.Id))" />
+                            </MudTooltip>
+                            @if (context.Status == SimulationStatus.Running)
+                            {
+                                <MudTooltip Text="Stop">
+                                    <MudIconButton Icon="@Icons.Material.Filled.StopCircle" Size="Size.Small"
+                                                   Color="Color.Error"
+                                                   OnClick="@(() => StopSimulation(context.Id))" />
+                                </MudTooltip>
+                            }
+                            @if (context.Status == SimulationStatus.Completed || context.Status == SimulationStatus.Failed || context.Status == SimulationStatus.Stopped)
+                            {
+                                <MudTooltip Text="Results">
+                                    <MudIconButton Icon="@Icons.Material.Filled.ShowChart" Size="Size.Small"
+                                                   Color="Color.Info"
+                                                   OnClick="@(() => ViewResults(context.Id))" />
+                                </MudTooltip>
+                            }
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+        else
+        {
+            <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                <MudIcon Icon="@Icons.Material.Filled.PlayCircleOutline" Size="Size.Large" Color="Color.Default" />
+                <MudText Typo="Typo.h6">No simulations yet</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Default">Create your first consensus simulation to get started.</MudText>
+                <AuthorizeView Roles="Admin,Operator">
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2"
+                               StartIcon="@Icons.Material.Filled.Add"
+                               OnClick="ShowCreateSimulationModal">
+                        Create first simulation
+                    </MudButton>
+                </AuthorizeView>
+            </MudStack>
+        }
+    </MudPaper>
+</MudStack>
 
-<!-- Create Simulation Modal -->
-<div class="modal fade @(showCreateModal ? "show d-block" : "")" tabindex="-1" style="@(showCreateModal ? "background-color: rgba(0,0,0,0.5);" : "")">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-plus-circle"></i> Create New Simulation</h5>
-                <button type="button" class="btn-close" @onclick="HideCreateSimulationModal"></button>
-            </div>
-            <div class="modal-body">
-                <form>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Simulation Name</label>
-                                <input type="text" class="form-control" @bind="newSimulationName" placeholder="Enter simulation name">
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Consensus Algorithm</label>
-                                <select class="form-select" @bind="newSimulationAlgorithm">
-                                    <option value="@ConsensusAlgorithm.ProofOfWork">Proof of Work (PoW)</option>
-                                    <option value="@ConsensusAlgorithm.ProofOfStake">Proof of Stake (PoS)</option>
-                                    <option value="@ConsensusAlgorithm.DelegatedProofOfStake">Delegated PoS (DPoS)</option>
-                                    <option value="@ConsensusAlgorithm.PracticalByzantineFaultTolerance">PBFT</option>
-                                    <option value="@ConsensusAlgorithm.ProofOfElapsedTime">Proof of Elapsed Time (PoET)</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Description</label>
-                        <textarea class="form-control" rows="3" @bind="newSimulationDescription" placeholder="Optional description of the simulation"></textarea>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label class="form-label">Number of Nodes</label>
-                                <input type="number" class="form-control" @bind="newSimulationNodes" min="3" max="100">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label class="form-label">Max Rounds</label>
-                                <input type="number" class="form-control" @bind="newSimulationRounds" min="10" max="10000">
-                            </div>
-                        </div>
-                        <div class="col-md-4">
-                            <div class="mb-3">
-                                <label class="form-label">Faulty Nodes</label>
-                                <input type="number" class="form-control" @bind="newSimulationFaultyNodes" min="0">
-                            </div>
-                        </div>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Network Topology</label>
-                                <select class="form-select" @bind="newSimulationTopology">
-                                    <option value="@NetworkTopologyType.FullMesh">Full Mesh</option>
-                                    <option value="@NetworkTopologyType.Ring">Ring</option>
-                                    <option value="@NetworkTopologyType.Star">Star</option>
-                                    <option value="@NetworkTopologyType.Random">Random</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Random Seed <span class="text-muted small">(optional, for reproducibility)</span></label>
-                                <input type="number" class="form-control" @bind="newSimulationSeed" placeholder="e.g. 42">
-                            </div>
-                        </div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @onclick="HideCreateSimulationModal">Cancel</button>
-                <button type="button" class="btn btn-primary" @onclick="CreateSimulation">
-                    <i class="bi bi-play-circle"></i> Create & Start
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+@* New Simulation dialog. Bound to showCreateModal; same backing fields and the
+   same CreateSimulation() handler as the prior Bootstrap modal. *@
+<MudDialog @bind-Visible="showCreateModal" Options="@(new DialogOptions { MaxWidth = MaxWidth.Medium, FullWidth = true, CloseButton = true })">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.AddCircle" Color="Color.Primary" />
+            <MudText Typo="Typo.h6">Create New Simulation</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudTextField @bind-Value="newSimulationName" Label="Simulation name"
+                              Variant="Variant.Outlined" Required="true" Immediate="true" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect T="ConsensusAlgorithm" Label="Consensus algorithm" Variant="Variant.Outlined"
+                           @bind-Value="newSimulationAlgorithm">
+                    <MudSelectItem Value="@ConsensusAlgorithm.ProofOfWork">Proof of Work (PoW)</MudSelectItem>
+                    <MudSelectItem Value="@ConsensusAlgorithm.ProofOfStake">Proof of Stake (PoS)</MudSelectItem>
+                    <MudSelectItem Value="@ConsensusAlgorithm.DelegatedProofOfStake">Delegated PoS (DPoS)</MudSelectItem>
+                    <MudSelectItem Value="@ConsensusAlgorithm.PracticalByzantineFaultTolerance">PBFT</MudSelectItem>
+                    <MudSelectItem Value="@ConsensusAlgorithm.ProofOfElapsedTime">Proof of Elapsed Time (PoET)</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12">
+                <MudTextField @bind-Value="newSimulationDescription" Label="Description (optional)"
+                              Variant="Variant.Outlined" Lines="2" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudNumericField @bind-Value="newSimulationNodes" Label="Nodes" Variant="Variant.Outlined"
+                                 Min="3" Max="100" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudNumericField @bind-Value="newSimulationRounds" Label="Max rounds" Variant="Variant.Outlined"
+                                 Min="10" Max="10000" />
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudNumericField @bind-Value="newSimulationFaultyNodes" Label="Byzantine nodes" Variant="Variant.Outlined"
+                                 Min="0" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudSelect T="NetworkTopologyType" Label="Network topology" Variant="Variant.Outlined"
+                           @bind-Value="newSimulationTopology">
+                    <MudSelectItem Value="@NetworkTopologyType.FullMesh">Full Mesh</MudSelectItem>
+                    <MudSelectItem Value="@NetworkTopologyType.Ring">Ring</MudSelectItem>
+                    <MudSelectItem Value="@NetworkTopologyType.Star">Star</MudSelectItem>
+                    <MudSelectItem Value="@NetworkTopologyType.Random">Random</MudSelectItem>
+                </MudSelect>
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudNumericField T="int?" @bind-Value="newSimulationSeed" Label="Random seed (optional)"
+                                 Variant="Variant.Outlined" HelperText="Same seed → identical leader sequence" />
+            </MudItem>
+        </MudGrid>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="HideCreateSimulationModal">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.PlayArrow"
+                   OnClick="CreateSimulation">
+            Create &amp; Start
+        </MudButton>
+    </DialogActions>
+</MudDialog>
 
 @code {
     private List<SimulationRun> simulations = new();
@@ -322,6 +270,10 @@
     private int newSimulationFaultyNodes = 0;
     private NetworkTopologyType newSimulationTopology = NetworkTopologyType.FullMesh;
     private int? newSimulationSeed = 42;
+
+    // Filters
+    private string filterStatus = "";
+    private string filterAlgorithm = "";
 
     // Counts cache so the list view doesn't re-query per row on every render.
     private Dictionary<Guid, (int Nodes, int Rounds, int Blocks)> simulationCounts = new();
@@ -355,7 +307,7 @@
                 simulationCounts[sim.Id] = (nodes.Count(), rounds.Count(), blocks.Count());
             }
 
-            filteredSimulations = simulations.ToList();
+            ApplyFilters(filterStatus, filterAlgorithm);
             StateHasChanged();
         }
         catch (Exception ex)
@@ -366,16 +318,16 @@
         }
     }
 
-    private void FilterByStatus(ChangeEventArgs e)
+    private void OnStatusFilterChanged(string value)
     {
-        var status = e.Value?.ToString();
-        ApplyFilters(status, null);
+        filterStatus = value ?? "";
+        ApplyFilters(filterStatus, filterAlgorithm);
     }
 
-    private void FilterByAlgorithm(ChangeEventArgs e)
+    private void OnAlgorithmFilterChanged(string value)
     {
-        var algorithm = e.Value?.ToString();
-        ApplyFilters(null, algorithm);
+        filterAlgorithm = value ?? "";
+        ApplyFilters(filterStatus, filterAlgorithm);
     }
 
     private void ApplyFilters(string? status, string? algorithm)
@@ -387,12 +339,9 @@
         StateHasChanged();
     }
 
-    private async Task ShowCreateSimulationModal()
+    private void ShowCreateSimulationModal()
     {
-        Console.WriteLine("ShowCreateSimulationModal called");
-        await JSRuntime.InvokeVoidAsync("console.log", "ShowCreateSimulationModal called from Blazor");
-        showCreateModal = true;
-        // Reset form
+        // Reset form fields each time the dialog opens.
         newSimulationName = "";
         newSimulationDescription = "";
         newSimulationAlgorithm = ConsensusAlgorithm.ProofOfWork;
@@ -400,6 +349,8 @@
         newSimulationRounds = 100;
         newSimulationFaultyNodes = 0;
         newSimulationTopology = NetworkTopologyType.FullMesh;
+        newSimulationSeed = 42;
+        showCreateModal = true;
         StateHasChanged();
     }
 
@@ -413,7 +364,7 @@
     {
         if (string.IsNullOrWhiteSpace(newSimulationName))
         {
-            await JSRuntime.InvokeVoidAsync("alert", "Please enter a simulation name.");
+            Snackbar.Add("Please enter a simulation name.", Severity.Warning);
             return;
         }
 
@@ -425,7 +376,7 @@
                 Algorithm = newSimulationAlgorithm,
                 NodeCount = newSimulationNodes,
                 ByzantineNodeCount = newSimulationFaultyNodes,
-                DurationSeconds = Math.Max(10, newSimulationRounds * 2), // rough budget for live demo
+                DurationSeconds = Math.Max(10, newSimulationRounds * 2),
                 NetworkTopology = newSimulationTopology,
                 BlockTimeMs = 2000,
                 TransactionsPerBlock = 10,
@@ -443,27 +394,13 @@
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to create simulation {Name}", newSimulationName);
-            await JSRuntime.InvokeVoidAsync("alert", $"Could not start simulation: {ex.Message}");
+            Snackbar.Add($"Could not start simulation: {ex.Message}", Severity.Error);
         }
     }
 
-    private async Task ViewSimulation(Guid simulationId)
+    private void ViewSimulation(Guid simulationId)
     {
-        Console.WriteLine($"ViewSimulation called for {simulationId}");
-        await JSRuntime.InvokeVoidAsync("console.log", $"ViewSimulation called for {simulationId}");
         Navigation.NavigateTo($"/simulation/{simulationId}");
-    }
-
-    private async Task PauseSimulation(Guid simulationId)
-    {
-        Console.WriteLine($"PauseSimulation called for {simulationId}");
-        await JSRuntime.InvokeVoidAsync("console.log", $"PauseSimulation called for {simulationId}");
-        await JSRuntime.InvokeVoidAsync("alert", $"Pausing simulation {simulationId}... (Feature coming soon!)");
-    }
-
-    private async Task ResumeSimulation(Guid simulationId)
-    {
-        await JSRuntime.InvokeVoidAsync("alert", $"Resuming simulation {simulationId}... (Feature coming soon!)");
     }
 
     private async Task StopSimulation(Guid simulationId)
@@ -471,16 +408,14 @@
         try
         {
             var ok = await SimulationService.StopSimulationAsync(simulationId);
-            if (!ok)
-            {
-                await JSRuntime.InvokeVoidAsync("alert", "Simulation could not be stopped (already finished?)");
-            }
+            Snackbar.Add(ok ? "Simulation stopped" : "Could not be stopped (already finished?)",
+                ok ? Severity.Info : Severity.Warning);
             await LoadSimulations();
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to stop simulation {SimulationId}", simulationId);
-            await JSRuntime.InvokeVoidAsync("alert", $"Stop failed: {ex.Message}");
+            Snackbar.Add($"Stop failed: {ex.Message}", Severity.Error);
         }
     }
 
@@ -492,67 +427,27 @@
         Navigation.NavigateTo($"/simulation/{simulationId}");
     }
 
-    private async Task CloneSimulation(Guid simulationId)
-    {
-        await JSRuntime.InvokeVoidAsync("alert", $"Cloning simulation {simulationId}... (Feature coming soon!)");
-    }
+    // Helpers --------------------------------------------------------------
 
-    // Helper methods
-    private string GetAlgorithmDisplayName(ConsensusAlgorithm algorithm)
+    private string GetAlgorithmDisplayName(ConsensusAlgorithm algorithm) => algorithm switch
     {
-        return algorithm switch
-        {
-            ConsensusAlgorithm.ProofOfWork => "Proof of Work (PoW)",
-            ConsensusAlgorithm.ProofOfStake => "Proof of Stake (PoS)",
-            ConsensusAlgorithm.PracticalByzantineFaultTolerance => "PBFT",
-            ConsensusAlgorithm.Raft => "Raft",
-            _ => algorithm.ToString()
-        };
-    }
+        ConsensusAlgorithm.ProofOfWork => "PoW",
+        ConsensusAlgorithm.ProofOfStake => "PoS",
+        ConsensusAlgorithm.DelegatedProofOfStake => "DPoS",
+        ConsensusAlgorithm.PracticalByzantineFaultTolerance => "PBFT",
+        ConsensusAlgorithm.ProofOfElapsedTime => "PoET",
+        _ => algorithm.ToString()
+    };
 
-    private string GetStatusBadgeClass(SimulationStatus status)
+    private static Color StatusColor(SimulationStatus status) => status switch
     {
-        return status switch
-        {
-            SimulationStatus.Running => "bg-success",
-            SimulationStatus.Completed => "bg-primary",
-            SimulationStatus.Failed => "bg-danger",
-            SimulationStatus.Stopped => "bg-warning",
-            SimulationStatus.Paused => "bg-info",
-            _ => "bg-secondary"
-        };
-    }
-
-    private string GetSimulationBorderClass(SimulationStatus status)
-    {
-        return status switch
-        {
-            SimulationStatus.Running => "border-success",
-            SimulationStatus.Completed => "border-primary",
-            SimulationStatus.Failed => "border-danger",
-            _ => ""
-        };
-    }
-
-    private string GetDuration(SimulationRun simulation)
-    {
-        if (!simulation.CompletedAt.HasValue) return "N/A";
-        var duration = simulation.CompletedAt.Value - simulation.CreatedAt;
-        return $"{duration.TotalMinutes:F1} minutes";
-    }
-
-    private string GetRunningDuration(SimulationRun simulation)
-    {
-        var duration = DateTime.UtcNow - simulation.CreatedAt;
-        return $"{duration.TotalMinutes:F1} minutes";
-    }
-
-    private int GetSimulationProgress(SimulationRun simulation)
-    {
-        // Mock progress calculation
-        var runningTime = (DateTime.UtcNow - simulation.CreatedAt).TotalMinutes;
-        return Math.Min(100, (int)(runningTime * 5)); // 5% per minute
-    }
+        SimulationStatus.Running => Color.Success,
+        SimulationStatus.Completed => Color.Primary,
+        SimulationStatus.Failed => Color.Error,
+        SimulationStatus.Stopped => Color.Warning,
+        SimulationStatus.Paused => Color.Info,
+        _ => Color.Default
+    };
 
     private int GetNodeCount(Guid simulationId) =>
         simulationCounts.TryGetValue(simulationId, out var c) ? c.Nodes : 0;
