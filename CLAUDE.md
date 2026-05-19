@@ -15,7 +15,7 @@ The approved problem statement is in [`mtech/ANNEXURE_I_ABSTRACT_OF_PROBLEM_STAT
 ## 2. Tech stack
 
 - **.NET 9** · C# 13 · Blazor Server · ASP.NET Core · SignalR · Entity Framework Core 9 · PostgreSQL 16
-- UI: **MudBlazor 7.16** Material components + Inter webfont + Chart.js (self-hosted). Bootstrap 5 still loaded for the long secondary pages whose inner markup hasn't fully migrated yet — drop it once the Phase-4 inner-content rewrite lands. Dark/light theme toggle in the app-bar (localStorage-persisted via `Services/ThemeService.cs`).
+- UI: **MudBlazor 7.16** Material components (including **MudChart** — no Chart.js) + Inter webfont. Bootstrap 5 still loaded for the long secondary pages whose inner markup hasn't fully migrated yet — drop it once the Phase-4 inner-content rewrite lands. Dark/light theme toggle in the app-bar (localStorage-persisted via `Services/ThemeService.cs`).
 - Auth: ASP.NET Identity (RBAC: `Admin`, `Operator`, `Viewer`)
 - Container: Docker / Docker Compose
 - Presentation: Marp Markdown → `.pptx` + `.pdf`

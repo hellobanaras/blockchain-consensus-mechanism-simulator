@@ -224,7 +224,15 @@
                         <h5 class="mb-0"><i class="bi bi-graph-up"></i> Round Performance</h5>
                     </div>
                     <div class="card-body">
-                        <canvas id="roundPerformanceChart" style="height: 300px;"></canvas>
+                        @if (_roundChartSeries.Count > 0 && _roundChartSeries[0].Data.Length > 0)
+                        {
+                            <MudChart ChartType="ChartType.Line" ChartSeries="@_roundChartSeries"
+                                      XAxisLabels="@_roundChartLabels" Width="100%" Height="300px" />
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Default">No completed rounds to plot.</MudText>
+                        }
                     </div>
                 </div>
             </div>
@@ -234,7 +242,15 @@
                         <h5 class="mb-0"><i class="bi bi-pie-chart"></i> Block Distribution</h5>
                     </div>
                     <div class="card-body">
-                        <canvas id="blockDistributionChart" style="height: 300px;"></canvas>
+                        @if (_blockChartData.Length > 0)
+                        {
+                            <MudChart ChartType="ChartType.Donut" InputData="@_blockChartData"
+                                      InputLabels="@_blockChartLabels" Width="100%" Height="300px" />
+                        }
+                        else
+                        {
+                            <MudText Typo="Typo.body2" Color="Color.Default">No block-distribution data yet.</MudText>
+                        }
                     </div>
                 </div>
             </div>
@@ -466,40 +482,40 @@
         await JSRuntime.InvokeVoidAsync("downloadFile", fileName, contentType, base64);
     }
 
-    private async Task InitializeCharts()
+    private List<MudBlazor.ChartSeries> _roundChartSeries = new();
+    private string[] _roundChartLabels = Array.Empty<string>();
+    private double[] _blockChartData = Array.Empty<double>();
+    private string[] _blockChartLabels = Array.Empty<string>();
+
+    private Task InitializeCharts()
     {
         try
         {
             if (roundMetrics != null && roundMetrics.Any())
             {
-                // Round performance chart data
-                var roundData = roundMetrics.Select(r => new
+                var ordered = roundMetrics.OrderBy(r => r.RoundNumber).ToList();
+                _roundChartLabels = ordered.Select(r => r.RoundNumber.ToString()).ToArray();
+                _roundChartSeries = new List<MudBlazor.ChartSeries>
                 {
-                    round = r.RoundNumber,
-                    duration = r.Duration.TotalMilliseconds,
-                    blocks = r.BlocksAccepted,
-                    success = r.Success
-                }).ToArray();
-
-                await JSRuntime.InvokeVoidAsync("initializeRoundPerformanceChart", JsonSerializer.Serialize(roundData));
+                    new() { Name = "Round duration (ms)", Data = ordered.Select(r => r.Duration.TotalMilliseconds).ToArray() }
+                };
             }
 
             if (summary?.NodePerformance != null && summary.NodePerformance.Any())
             {
-                // Block distribution chart data
-                var blockData = summary.NodePerformance.Values.Select(n => new
-                {
-                    label = n.NodeName,
-                    value = n.TotalBlocksAccepted
-                }).ToArray();
-
-                await JSRuntime.InvokeVoidAsync("initializeBlockDistributionChart", JsonSerializer.Serialize(blockData));
+                var ordered = summary.NodePerformance.Values
+                    .OrderByDescending(n => n.TotalBlocksAccepted)
+                    .Where(n => n.TotalBlocksAccepted > 0)
+                    .ToList();
+                _blockChartLabels = ordered.Select(n => n.NodeName).ToArray();
+                _blockChartData = ordered.Select(n => (double)n.TotalBlocksAccepted).ToArray();
             }
         }
         catch (Exception ex)
         {
             Logger.LogWarning(ex, "Failed to initialize charts");
         }
+        return Task.CompletedTask;
     }
 
     #region Helper Methods

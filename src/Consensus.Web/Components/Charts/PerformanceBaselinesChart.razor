@@ -1,1072 +1,139 @@
 @namespace Consensus.Web.Components.Charts
-@using Microsoft.AspNetCore.Components
-@using Microsoft.JSInterop
-@inject IJSRuntime JSRuntime
+@using Consensus.Core.Enums
+@using Consensus.Core.Models
+@using Consensus.Core.Services
+@using Consensus.Web.Services
+@using MudBlazor
+@inject IAnalyticsService AnalyticsSvc
 
-<div class="performance-baselines-container">
-    <div class="row g-4">
-        <!-- Consensus Mechanism Selection -->
-        <div class="col-12">
-            <div class="baseline-selector-card">
-                <div class="card-header">
-                    <h5 class="card-title">
-                        <i class="fas fa-layer-group me-2"></i>
-                        Consensus Mechanism Selection
-                    </h5>
-                    <div class="selection-summary">
-                        <span class="selected-count">@selectedMechanisms.Count selected</span>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <div class="mechanism-grid">
-                        @foreach (var mechanism in availableMechanisms)
-                        {
-                            <div class="mechanism-card @(selectedMechanisms.Contains(mechanism.Id) ? "selected" : "")"
-                                 @onclick="() => ToggleMechanism(mechanism.Id)">
-                                <div class="mechanism-icon">
-                                    <i class="@mechanism.Icon"></i>
-                                </div>
-                                <div class="mechanism-info">
-                                    <div class="mechanism-name">@mechanism.Name</div>
-                                    <div class="mechanism-type">@mechanism.Type</div>
-                                </div>
-                                <div class="mechanism-status">
-                                    @if (selectedMechanisms.Contains(mechanism.Id))
-                                    {
-                                        <i class="fas fa-check-circle text-success"></i>
-                                    }
-                                    else
-                                    {
-                                        <i class="far fa-circle text-muted"></i>
-                                    }
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-            </div>
-        </div>
+@*
+    Cross-protocol performance baselines tile. Sourced from
+    GetProtocolComparisonAsync — aggregates across every completed run per
+    consensus algorithm so the bars reflect real DB rows, not preset values.
+*@
 
-        <!-- Performance Comparison Dashboard -->
-        @if (selectedMechanisms.Any())
-        {
-            <!-- Throughput Comparison -->
-            <div class="col-12 col-lg-6">
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h5 class="chart-title">
-                            <i class="fas fa-tachometer-alt me-2"></i>
-                            Throughput Comparison
-                        </h5>
-                        <div class="chart-actions">
-                            <div class="btn-group btn-group-sm" role="group">
-                                <input type="radio" class="btn-check" name="throughputMetric" id="tpsAvg" value="average" 
-                                       checked="@(throughputMetric == "average")" @onchange="UpdateThroughputMetric">
-                                <label class="btn btn-outline-primary" for="tpsAvg">Average</label>
-                                
-                                <input type="radio" class="btn-check" name="throughputMetric" id="tpsPeak" value="peak" 
-                                       checked="@(throughputMetric == "peak")" @onchange="UpdateThroughputMetric">
-                                <label class="btn btn-outline-primary" for="tpsPeak">Peak</label>
-                                
-                                <input type="radio" class="btn-check" name="throughputMetric" id="tpsSustained" value="sustained" 
-                                       checked="@(throughputMetric == "sustained")" @onchange="UpdateThroughputMetric">
-                                <label class="btn btn-outline-primary" for="tpsSustained">Sustained</label>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="throughputComparisonChart" width="400" height="300"></canvas>
-                    </div>
-                    <div class="performance-stats mt-3">
-                        <div class="row text-center">
-                            @foreach (var mechanism in selectedMechanisms.Take(3))
-                            {
-                                var perf = performanceData?.FirstOrDefault(p => p.MechanismId == mechanism);
-                                if (perf != null)
-                                {
-                                    <div class="col">
-                                        <div class="stat-value">@GetThroughputValue(perf).ToString("F0")</div>
-                                        <div class="stat-label">@availableMechanisms.First(m => m.Id == mechanism).ShortName TPS</div>
-                                    </div>
-                                }
-                            }
-                        </div>
-                    </div>
-                </div>
-            </div>
+<MudPaper Elevation="0" Class="pa-4 mb-4" Outlined="true">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Speed" Class="mr-2" />
+            Protocol Performance Baselines
+        </MudText>
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="RefreshAsync" Disabled="_loading">Refresh</MudButton>
+    </MudStack>
 
-            <!-- Latency Comparison -->
-            <div class="col-12 col-lg-6">
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h5 class="chart-title">
-                            <i class="fas fa-stopwatch me-2"></i>
-                            Latency Analysis
-                        </h5>
-                        <div class="chart-subtitle">
-                            Transaction confirmation times
-                        </div>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="latencyComparisonChart" width="400" height="300"></canvas>
-                    </div>
-                    <div class="latency-breakdown mt-3">
-                        <div class="row">
-                            @foreach (var mechanism in selectedMechanisms.Take(2))
-                            {
-                                var perf = performanceData?.FirstOrDefault(p => p.MechanismId == mechanism);
-                                if (perf != null)
-                                {
-                                    <div class="col-md-6">
-                                        <div class="breakdown-card">
-                                            <h6 class="breakdown-title">@availableMechanisms.First(m => m.Id == mechanism).ShortName</h6>
-                                            <div class="breakdown-metrics">
-                                                <div class="metric-row">
-                                                    <span class="metric-name">Average</span>
-                                                    <span class="metric-value">@perf.LatencyMs.ToString("F1")ms</span>
-                                                </div>
-                                                <div class="metric-row">
-                                                    <span class="metric-name">P95</span>
-                                                    <span class="metric-value">@((perf.LatencyMs * 1.8).ToString("F1"))ms</span>
-                                                </div>
-                                                <div class="metric-row">
-                                                    <span class="metric-name">P99</span>
-                                                    <span class="metric-value">@((perf.LatencyMs * 2.5).ToString("F1"))ms</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            }
-                        </div>
-                    </div>
-                </div>
-            </div>
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_rows.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            No completed simulations in the database. Run a sim from
+            <strong>/simulations</strong> to populate baselines.
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Mean block time (ms, lower = faster)</MudText>
+                <MudChart ChartType="ChartType.Bar" ChartSeries="@_meanSeries"
+                          XAxisLabels="@_protocolLabels" Width="100%" Height="280px" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Tail latency p95 / p99 (ms)</MudText>
+                <MudChart ChartType="ChartType.Bar" ChartSeries="@_tailSeries"
+                          XAxisLabels="@_protocolLabels" Width="100%" Height="280px" />
+            </MudItem>
+        </MudGrid>
 
-            <!-- Resource Efficiency -->
-            <div class="col-12 col-lg-6">
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h5 class="chart-title">
-                            <i class="fas fa-leaf me-2"></i>
-                            Resource Efficiency
-                        </h5>
-                        <div class="efficiency-indicator">
-                            <span class="efficiency-score">@CalculateOverallEfficiency().ToString("F1")%</span>
-                            <span class="efficiency-label">Combined Score</span>
-                        </div>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="resourceEfficiencyChart" width="400" height="300"></canvas>
-                    </div>
-                    <div class="efficiency-breakdown mt-3">
-                        <div class="efficiency-categories">
-                            <div class="category-item">
-                                <div class="category-icon">
-                                    <i class="fas fa-bolt"></i>
-                                </div>
-                                <div class="category-content">
-                                    <div class="category-name">Energy Usage</div>
-                                    <div class="category-comparison">
-                                        @foreach (var mechanism in selectedMechanisms.Take(3))
-                                        {
-                                            var perf = performanceData?.FirstOrDefault(p => p.MechanismId == mechanism);
-                                            if (perf != null)
-                                            {
-                                                <span class="comparison-badge @GetEfficiencyClass(perf.EnergyEfficiency)">
-                                                    @availableMechanisms.First(m => m.Id == mechanism).ShortName: @GetEnergyRating(perf.EnergyEfficiency)
-                                                </span>
-                                            }
-                                        }
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="category-item">
-                                <div class="category-icon">
-                                    <i class="fas fa-microchip"></i>
-                                </div>
-                                <div class="category-content">
-                                    <div class="category-name">CPU Usage</div>
-                                    <div class="category-comparison">
-                                        @foreach (var mechanism in selectedMechanisms.Take(3))
-                                        {
-                                            var perf = performanceData?.FirstOrDefault(p => p.MechanismId == mechanism);
-                                            if (perf != null)
-                                            {
-                                                <span class="comparison-badge @GetEfficiencyClass(100 - perf.CpuUsage)">
-                                                    @availableMechanisms.First(m => m.Id == mechanism).ShortName: @perf.CpuUsage.ToString("F0")%
-                                                </span>
-                                            }
-                                        }
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+        <MudDivider Class="my-3" />
 
-            <!-- Security & Decentralization -->
-            <div class="col-12 col-lg-6">
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h5 class="chart-title">
-                            <i class="fas fa-shield-alt me-2"></i>
-                            Security & Decentralization
-                        </h5>
-                        <div class="chart-actions">
-                            <button class="btn btn-sm btn-outline-info" @onclick="ToggleSecurityDetails">
-                                <i class="fas @(showSecurityDetails ? "fa-eye-slash" : "fa-eye")"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="securityDecentralizationChart" width="400" height="300"></canvas>
-                    </div>
-                    @if (showSecurityDetails)
-                    {
-                        <div class="security-details mt-3">
-                            <div class="security-grid">
-                                @foreach (var mechanism in selectedMechanisms)
-                                {
-                                    var perf = performanceData?.FirstOrDefault(p => p.MechanismId == mechanism);
-                                    if (perf != null)
-                                    {
-                                        <div class="security-card">
-                                            <h6 class="security-title">@availableMechanisms.First(m => m.Id == mechanism).Name</h6>
-                                            <div class="security-metrics">
-                                                <div class="security-metric">
-                                                    <span class="metric-label">Attack Resistance</span>
-                                                    <div class="metric-bar">
-                                                        <div class="bar-fill" style="width: @(perf.SecurityScore)%"></div>
-                                                        <span class="bar-value">@perf.SecurityScore%</span>
-                                                    </div>
-                                                </div>
-                                                <div class="security-metric">
-                                                    <span class="metric-label">Decentralization</span>
-                                                    <div class="metric-bar">
-                                                        <div class="bar-fill" style="width: @(perf.DecentralizationScore)%"></div>
-                                                        <span class="bar-value">@perf.DecentralizationScore%</span>
-                                                    </div>
-                                                </div>
-                                                <div class="security-metric">
-                                                    <span class="metric-label">Finality</span>
-                                                    <div class="metric-bar">
-                                                        <div class="bar-fill" style="width: @(perf.FinalityScore)%"></div>
-                                                        <span class="bar-value">@perf.FinalityScore%</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    }
-                                }
-                            </div>
-                        </div>
-                    }
-                </div>
-            </div>
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Leader fairness — Gini (lower = fairer)</MudText>
+                <MudChart ChartType="ChartType.Bar" ChartSeries="@_giniSeries"
+                          XAxisLabels="@_protocolLabels" Width="100%" Height="240px" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Success rate (% completed)</MudText>
+                <MudChart ChartType="ChartType.Bar" ChartSeries="@_successSeries"
+                          XAxisLabels="@_protocolLabels" Width="100%" Height="240px" />
+            </MudItem>
+        </MudGrid>
 
-            <!-- Historical Performance Trends -->
-            <div class="col-12">
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h5 class="chart-title">
-                            <i class="fas fa-chart-line me-2"></i>
-                            Historical Performance Trends
-                        </h5>
-                        <div class="chart-actions">
-                            <div class="btn-group btn-group-sm" role="group">
-                                <input type="radio" class="btn-check" name="timeframe" id="day" value="24h" 
-                                       checked="@(timeframe == "24h")" @onchange="UpdateTimeframe">
-                                <label class="btn btn-outline-secondary" for="day">24h</label>
-                                
-                                <input type="radio" class="btn-check" name="timeframe" id="week" value="7d" 
-                                       checked="@(timeframe == "7d")" @onchange="UpdateTimeframe">
-                                <label class="btn btn-outline-secondary" for="week">7d</label>
-                                
-                                <input type="radio" class="btn-check" name="timeframe" id="month" value="30d" 
-                                       checked="@(timeframe == "30d")" @onchange="UpdateTimeframe">
-                                <label class="btn btn-outline-secondary" for="month">30d</label>
-                            </div>
-                            <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="ExportPerformanceData">
-                                <i class="fas fa-download"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="chart-body">
-                        <canvas id="historicalTrendsChart" width="400" height="350"></canvas>
-                    </div>
-                    <div class="trend-summary mt-3">
-                        <div class="row">
-                            @foreach (var mechanism in selectedMechanisms.Take(4))
-                            {
-                                var perf = performanceData?.FirstOrDefault(p => p.MechanismId == mechanism);
-                                if (perf != null)
-                                {
-                                    <div class="col-md-3">
-                                        <div class="trend-card">
-                                            <div class="trend-header">
-                                                <span class="trend-name">@availableMechanisms.First(m => m.Id == mechanism).ShortName</span>
-                                                <span class="trend-change @(perf.PerformanceTrend >= 0 ? "positive" : "negative")">
-                                                    <i class="fas @(perf.PerformanceTrend >= 0 ? "fa-arrow-up" : "fa-arrow-down")"></i>
-                                                    @Math.Abs(perf.PerformanceTrend).ToString("F1")%
-                                                </span>
-                                            </div>
-                                            <div class="trend-metrics">
-                                                <div class="trend-metric">
-                                                    <span class="metric-name">Avg TPS</span>
-                                                    <span class="metric-value">@perf.AvgThroughput.ToString("F0")</span>
-                                                </div>
-                                                <div class="trend-metric">
-                                                    <span class="metric-name">Uptime</span>
-                                                    <span class="metric-value">@perf.Uptime.ToString("P1")</span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            }
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Performance Score Matrix -->
-            <div class="col-12">
-                <div class="chart-card">
-                    <div class="chart-header">
-                        <h5 class="chart-title">
-                            <i class="fas fa-th me-2"></i>
-                            Performance Score Matrix
-                        </h5>
-                        <div class="score-summary">
-                            <span class="best-performer">
-                                Best Overall: @GetBestPerformer()
-                            </span>
-                        </div>
-                    </div>
-                    <div class="chart-body">
-                        <div class="score-matrix">
-                            <div class="matrix-header">
-                                <div class="header-cell">Mechanism</div>
-                                <div class="header-cell">Throughput</div>
-                                <div class="header-cell">Latency</div>
-                                <div class="header-cell">Efficiency</div>
-                                <div class="header-cell">Security</div>
-                                <div class="header-cell">Decentralization</div>
-                                <div class="header-cell">Overall Score</div>
-                            </div>
-                            @foreach (var mechanism in selectedMechanisms)
-                            {
-                                var perf = performanceData?.FirstOrDefault(p => p.MechanismId == mechanism);
-                                if (perf != null)
-                                {
-                                    var mechanismInfo = availableMechanisms.First(m => m.Id == mechanism);
-                                    <div class="matrix-row">
-                                        <div class="mechanism-cell">
-                                            <div class="mechanism-info">
-                                                <i class="@mechanismInfo.Icon me-2"></i>
-                                                <span class="mechanism-name">@mechanismInfo.Name</span>
-                                            </div>
-                                        </div>
-                                        <div class="score-cell">
-                                            <div class="score-bar">
-                                                <div class="bar-fill throughput" style="width: @GetNormalizedScore(perf.AvgThroughput, 1000)%"></div>
-                                                <span class="score-value">@GetScoreRating(GetNormalizedScore(perf.AvgThroughput, 1000))</span>
-                                            </div>
-                                        </div>
-                                        <div class="score-cell">
-                                            <div class="score-bar">
-                                                <div class="bar-fill latency" style="width: @GetNormalizedScore(100 - perf.LatencyMs / 10, 100)%"></div>
-                                                <span class="score-value">@GetScoreRating(GetNormalizedScore(100 - perf.LatencyMs / 10, 100))</span>
-                                            </div>
-                                        </div>
-                                        <div class="score-cell">
-                                            <div class="score-bar">
-                                                <div class="bar-fill efficiency" style="width: @perf.EnergyEfficiency%"></div>
-                                                <span class="score-value">@GetScoreRating(perf.EnergyEfficiency)</span>
-                                            </div>
-                                        </div>
-                                        <div class="score-cell">
-                                            <div class="score-bar">
-                                                <div class="bar-fill security" style="width: @perf.SecurityScore%"></div>
-                                                <span class="score-value">@GetScoreRating(perf.SecurityScore)</span>
-                                            </div>
-                                        </div>
-                                        <div class="score-cell">
-                                            <div class="score-bar">
-                                                <div class="bar-fill decentralization" style="width: @perf.DecentralizationScore%"></div>
-                                                <span class="score-value">@GetScoreRating(perf.DecentralizationScore)</span>
-                                            </div>
-                                        </div>
-                                        <div class="overall-score-cell">
-                                            <div class="overall-score @GetOverallScoreClass(CalculateOverallScore(perf))">
-                                                @CalculateOverallScore(perf).ToString("F1")
-                                            </div>
-                                        </div>
-                                    </div>
-                                }
-                            }
-                        </div>
-                    </div>
-                </div>
-            </div>
-        }
-        else
-        {
-            <!-- Empty State -->
-            <div class="col-12">
-                <div class="empty-state">
-                    <div class="empty-icon">
-                        <i class="fas fa-chart-bar fa-3x"></i>
-                    </div>
-                    <h4 class="empty-title">Select Consensus Mechanisms</h4>
-                    <p class="empty-description">
-                        Choose one or more consensus mechanisms from the selection above to begin performance comparison analysis.
-                    </p>
-                </div>
-            </div>
-        }
-    </div>
-</div>
+        <MudTable T="ProtocolComparisonPoint" Items="_rows" Dense="true" Class="mt-4">
+            <HeaderContent>
+                <MudTh>Protocol</MudTh>
+                <MudTh>Sims</MudTh>
+                <MudTh>Mean (ms)</MudTh>
+                <MudTh>p95</MudTh>
+                <MudTh>p99</MudTh>
+                <MudTh>Gini</MudTh>
+                <MudTh>Entropy</MudTh>
+                <MudTh>Success %</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>@context.Protocol</MudTd>
+                <MudTd>@context.TotalSimulations</MudTd>
+                <MudTd>@context.MeanBlockTimeMs.ToString("F0")</MudTd>
+                <MudTd>@context.P95BlockTimeMs.ToString("F0")</MudTd>
+                <MudTd>@context.P99BlockTimeMs.ToString("F0")</MudTd>
+                <MudTd>@context.LeaderGini.ToString("F3")</MudTd>
+                <MudTd>@context.LeaderEntropy.ToString("F2")</MudTd>
+                <MudTd>@context.SuccessRate.ToString("F1")</MudTd>
+            </RowTemplate>
+        </MudTable>
+    }
+</MudPaper>
 
 @code {
+    [Parameter] public bool EnableRealTimeUpdates { get; set; }
     [Parameter] public EventCallback<string> OnDataExported { get; set; }
-    [Parameter] public bool EnableRealTimeUpdates { get; set; } = false;
-    
-    private IJSObjectReference? chartModule;
-    private IJSObjectReference? throughputChartInstance;
-    private IJSObjectReference? latencyChartInstance;
-    private IJSObjectReference? resourceEfficiencyChartInstance;
-    private IJSObjectReference? securityDecentralizationChartInstance;
-    private IJSObjectReference? historicalTrendsChartInstance;
-    
-    private string throughputMetric = "average";
-    private string timeframe = "24h";
-    private bool showSecurityDetails = false;
-    private List<string> selectedMechanisms = new();
-    private List<ConsensusMechanism> availableMechanisms = new();
-    private List<PerformanceData>? performanceData;
 
-    protected override async Task OnInitializedAsync()
+    private bool _loading = true;
+    private List<ProtocolComparisonPoint> _rows = new();
+    private string[] _protocolLabels = Array.Empty<string>();
+    private List<ChartSeries> _meanSeries = new();
+    private List<ChartSeries> _tailSeries = new();
+    private List<ChartSeries> _giniSeries = new();
+    private List<ChartSeries> _successSeries = new();
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
     {
+        _loading = true;
         try
         {
-            chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/chart-interop-v2.js");
-            InitializeAvailableMechanisms();
-            await LoadPerformanceData();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error initializing performance baselines: {ex.Message}");
-        }
-    }
+            _rows = await AnalyticsSvc.GetProtocolComparisonAsync();
+            if (_rows.Count == 0) return;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && chartModule != null && selectedMechanisms.Any())
-        {
-            await CreateCharts();
+            _protocolLabels = _rows.Select(r => r.Protocol.ToString()).ToArray();
+            _meanSeries = new List<ChartSeries>
+            {
+                new() { Name = "Mean block time (ms)", Data = _rows.Select(r => r.MeanBlockTimeMs).ToArray() },
+            };
+            _tailSeries = new List<ChartSeries>
+            {
+                new() { Name = "p95 (ms)", Data = _rows.Select(r => r.P95BlockTimeMs).ToArray() },
+                new() { Name = "p99 (ms)", Data = _rows.Select(r => r.P99BlockTimeMs).ToArray() },
+            };
+            _giniSeries = new List<ChartSeries>
+            {
+                new() { Name = "Leader Gini", Data = _rows.Select(r => r.LeaderGini).ToArray() },
+            };
+            _successSeries = new List<ChartSeries>
+            {
+                new() { Name = "Success %", Data = _rows.Select(r => r.SuccessRate).ToArray() },
+            };
         }
-    }
-
-    private void InitializeAvailableMechanisms()
-    {
-        availableMechanisms = new List<ConsensusMechanism>
+        finally
         {
-            new() { Id = "pow", Name = "Proof of Work", ShortName = "PoW", Type = "Computational", Icon = "fas fa-hammer" },
-            new() { Id = "pos", Name = "Proof of Stake", ShortName = "PoS", Type = "Economic", Icon = "fas fa-coins" },
-            new() { Id = "poet", Name = "Proof of Elapsed Time", ShortName = "PoET", Type = "Lottery", Icon = "fas fa-clock" },
-            new() { Id = "poa", Name = "Proof of Authority", ShortName = "PoA", Type = "Permissioned", Icon = "fas fa-user-shield" },
-            new() { Id = "pbft", Name = "Practical Byzantine Fault Tolerance", ShortName = "pBFT", Type = "Byzantine", Icon = "fas fa-shield-alt" },
-            new() { Id = "dpos", Name = "Delegated Proof of Stake", ShortName = "DPoS", Type = "Delegated", Icon = "fas fa-vote-yea" }
-        };
-        
-        // Select first 3 by default
-        selectedMechanisms = availableMechanisms.Take(3).Select(m => m.Id).ToList();
-    }
-
-    private async Task LoadPerformanceData()
-    {
-        // Generate mock performance data
-        performanceData = availableMechanisms.Select(mechanism => new PerformanceData
-        {
-            MechanismId = mechanism.Id,
-            AvgThroughput = mechanism.Id switch
-            {
-                "pow" => Random.Shared.Next(7, 15),
-                "pos" => Random.Shared.Next(300, 800),
-                "poet" => Random.Shared.Next(200, 600),
-                "poa" => Random.Shared.Next(500, 1200),
-                "pbft" => Random.Shared.Next(1000, 3000),
-                "dpos" => Random.Shared.Next(3000, 8000),
-                _ => Random.Shared.Next(100, 500)
-            },
-            PeakThroughput = 0, // Will be calculated
-            SustainedThroughput = 0, // Will be calculated
-            LatencyMs = mechanism.Id switch
-            {
-                "pow" => Random.Shared.NextDouble() * 1000 + 2000, // 2-3 seconds
-                "pos" => Random.Shared.NextDouble() * 500 + 500, // 0.5-1 second
-                "poet" => Random.Shared.NextDouble() * 800 + 1000, // 1-1.8 seconds
-                "poa" => Random.Shared.NextDouble() * 200 + 100, // 0.1-0.3 seconds
-                "pbft" => Random.Shared.NextDouble() * 300 + 200, // 0.2-0.5 seconds
-                "dpos" => Random.Shared.NextDouble() * 150 + 50, // 0.05-0.2 seconds
-                _ => Random.Shared.NextDouble() * 1000 + 500
-            },
-            EnergyEfficiency = mechanism.Id switch
-            {
-                "pow" => Random.Shared.NextDouble() * 20 + 10, // Very low
-                "pos" => Random.Shared.NextDouble() * 30 + 70, // High
-                "poet" => Random.Shared.NextDouble() * 25 + 65, // High
-                "poa" => Random.Shared.NextDouble() * 20 + 75, // Very high
-                "pbft" => Random.Shared.NextDouble() * 25 + 60, // Moderate
-                "dpos" => Random.Shared.NextDouble() * 30 + 65, // High
-                _ => Random.Shared.NextDouble() * 50 + 50
-            },
-            CpuUsage = Random.Shared.NextDouble() * 30 + 20,
-            SecurityScore = mechanism.Id switch
-            {
-                "pow" => Random.Shared.NextDouble() * 15 + 80, // Very high
-                "pos" => Random.Shared.NextDouble() * 20 + 70, // High
-                "poet" => Random.Shared.NextDouble() * 25 + 60, // Moderate
-                "poa" => Random.Shared.NextDouble() * 30 + 50, // Lower
-                "pbft" => Random.Shared.NextDouble() * 20 + 75, // High
-                "dpos" => Random.Shared.NextDouble() * 25 + 65, // Moderate
-                _ => Random.Shared.NextDouble() * 40 + 60
-            },
-            DecentralizationScore = mechanism.Id switch
-            {
-                "pow" => Random.Shared.NextDouble() * 20 + 75, // High
-                "pos" => Random.Shared.NextDouble() * 25 + 65, // Moderate
-                "poet" => Random.Shared.NextDouble() * 30 + 60, // Moderate
-                "poa" => Random.Shared.NextDouble() * 30 + 20, // Low
-                "pbft" => Random.Shared.NextDouble() * 35 + 40, // Lower
-                "dpos" => Random.Shared.NextDouble() * 30 + 50, // Lower
-                _ => Random.Shared.NextDouble() * 40 + 50
-            },
-            FinalityScore = mechanism.Id switch
-            {
-                "pow" => Random.Shared.NextDouble() * 20 + 60, // Probabilistic
-                "pos" => Random.Shared.NextDouble() * 25 + 70, // Economic
-                "poet" => Random.Shared.NextDouble() * 30 + 60, // Probabilistic
-                "poa" => Random.Shared.NextDouble() * 20 + 75, // Fast
-                "pbft" => Random.Shared.NextDouble() * 15 + 80, // Instant
-                "dpos" => Random.Shared.NextDouble() * 20 + 75, // Fast
-                _ => Random.Shared.NextDouble() * 40 + 60
-            },
-            Uptime = Random.Shared.NextDouble() * 0.05 + 0.95,
-            PerformanceTrend = (Random.Shared.NextDouble() - 0.5) * 10
-        }).ToList();
-        
-        // Calculate peak and sustained throughput
-        foreach (var perf in performanceData)
-        {
-            perf.PeakThroughput = perf.AvgThroughput * (1.5 + Random.Shared.NextDouble() * 0.5);
-            perf.SustainedThroughput = perf.AvgThroughput * (0.8 + Random.Shared.NextDouble() * 0.15);
+            _loading = false;
         }
     }
 
-    private void ToggleMechanism(string mechanismId)
-    {
-        if (selectedMechanisms.Contains(mechanismId))
-        {
-            selectedMechanisms.Remove(mechanismId);
-        }
-        else
-        {
-            selectedMechanisms.Add(mechanismId);
-        }
-        
-        StateHasChanged();
-        
-        if (selectedMechanisms.Any() && chartModule != null)
-        {
-            _ = Task.Run(async () => await CreateCharts());
-        }
-    }
-
-    private async Task CreateCharts()
-    {
-        if (chartModule == null || !selectedMechanisms.Any()) return;
-
-        try
-        {
-            await CreateThroughputChart();
-            await CreateLatencyChart();
-            await CreateResourceEfficiencyChart();
-            await CreateSecurityDecentralizationChart();
-            await CreateHistoricalTrendsChart();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error creating performance baseline charts: {ex.Message}");
-        }
-    }
-
-    private async Task CreateThroughputChart()
-    {
-        var selectedData = performanceData?.Where(p => selectedMechanisms.Contains(p.MechanismId)).ToList();
-        if (selectedData == null) return;
-
-        var data = selectedData.Select(p => GetThroughputValue(p)).ToArray();
-        var labels = selectedData.Select(p => availableMechanisms.First(m => m.Id == p.MechanismId).ShortName).ToArray();
-
-        var chartConfig = new
-        {
-            type = "bar",
-            data = new
-            {
-                labels = labels,
-                datasets = new[]
-                {
-                    new
-                    {
-                        label = $"{throughputMetric.ToUpper()} Throughput (TPS)",
-                        data = data,
-                        backgroundColor = selectedData.Select((_, i) => GetMechanismColor(i)).ToArray(),
-                        borderColor = selectedData.Select((_, i) => GetMechanismColor(i)).ToArray(),
-                        borderWidth = 2
-                    }
-                }
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = false },
-                    title = new { display = false }
-                },
-                scales = new
-                {
-                    y = new
-                    {
-                        beginAtZero = true,
-                        title = new { display = true, text = "Transactions Per Second" }
-                    }
-                }
-            }
-        };
-
-        throughputChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "throughputComparisonChart", chartConfig);
-    }
-
-    private async Task CreateLatencyChart()
-    {
-        var selectedData = performanceData?.Where(p => selectedMechanisms.Contains(p.MechanismId)).ToList();
-        if (selectedData == null) return;
-
-        var chartConfig = new
-        {
-            type = "radar",
-            data = new
-            {
-                labels = new[] { "Average", "P95", "P99", "Min", "Max" },
-                datasets = selectedData.Select((perf, i) => new
-                {
-                    label = availableMechanisms.First(m => m.Id == perf.MechanismId).ShortName,
-                    data = new[]
-                    {
-                        Math.Max(0, 100 - perf.LatencyMs / 50), // Normalized average (inverted for radar)
-                        Math.Max(0, 100 - (perf.LatencyMs * 1.8) / 50), // P95
-                        Math.Max(0, 100 - (perf.LatencyMs * 2.5) / 50), // P99
-                        Math.Max(0, 100 - (perf.LatencyMs * 0.5) / 50), // Min
-                        Math.Max(0, 100 - (perf.LatencyMs * 3.0) / 50)  // Max
-                    },
-                    backgroundColor = GetMechanismColor(i, 0.2),
-                    borderColor = GetMechanismColor(i),
-                    borderWidth = 2,
-                    pointBackgroundColor = GetMechanismColor(i)
-                }).ToArray()
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = true, position = "top" }
-                },
-                scales = new
-                {
-                    r = new
-                    {
-                        beginAtZero = true,
-                        max = 100,
-                        ticks = new { display = false }
-                    }
-                }
-            }
-        };
-
-        latencyChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "latencyComparisonChart", chartConfig);
-    }
-
-    private async Task CreateResourceEfficiencyChart()
-    {
-        var selectedData = performanceData?.Where(p => selectedMechanisms.Contains(p.MechanismId)).ToList();
-        if (selectedData == null) return;
-
-        var chartConfig = new
-        {
-            type = "bubble",
-            data = new
-            {
-                datasets = selectedData.Select((perf, i) => new
-                {
-                    label = availableMechanisms.First(m => m.Id == perf.MechanismId).ShortName,
-                    data = new[]
-                    {
-                        new
-                        {
-                            x = perf.EnergyEfficiency,
-                            y = 100 - perf.CpuUsage,
-                            r = Math.Sqrt(perf.AvgThroughput / 10) // Bubble size based on throughput
-                        }
-                    },
-                    backgroundColor = GetMechanismColor(i, 0.6),
-                    borderColor = GetMechanismColor(i),
-                    borderWidth = 2
-                }).ToArray()
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = true, position = "top" },
-                    title = new { display = false }
-                },
-                scales = new
-                {
-                    x = new
-                    {
-                        title = new { display = true, text = "Energy Efficiency %" },
-                        min = 0,
-                        max = 100
-                    },
-                    y = new
-                    {
-                        title = new { display = true, text = "CPU Efficiency %" },
-                        min = 0,
-                        max = 100
-                    }
-                }
-            }
-        };
-
-        resourceEfficiencyChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "resourceEfficiencyChart", chartConfig);
-    }
-
-    private async Task CreateSecurityDecentralizationChart()
-    {
-        var selectedData = performanceData?.Where(p => selectedMechanisms.Contains(p.MechanismId)).ToList();
-        if (selectedData == null) return;
-
-        var chartConfig = new
-        {
-            type = "scatter",
-            data = new
-            {
-                datasets = selectedData.Select((perf, i) => new
-                {
-                    label = availableMechanisms.First(m => m.Id == perf.MechanismId).ShortName,
-                    data = new[]
-                    {
-                        new { x = perf.DecentralizationScore, y = perf.SecurityScore }
-                    },
-                    backgroundColor = GetMechanismColor(i),
-                    borderColor = GetMechanismColor(i),
-                    pointRadius = 8,
-                    pointHoverRadius = 10
-                }).ToArray()
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = true, position = "top" },
-                    title = new { display = false }
-                },
-                scales = new
-                {
-                    x = new
-                    {
-                        title = new { display = true, text = "Decentralization Score" },
-                        min = 0,
-                        max = 100
-                    },
-                    y = new
-                    {
-                        title = new { display = true, text = "Security Score" },
-                        min = 0,
-                        max = 100
-                    }
-                }
-            }
-        };
-
-        securityDecentralizationChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "securityDecentralizationChart", chartConfig);
-    }
-
-    private async Task CreateHistoricalTrendsChart()
-    {
-        var selectedData = performanceData?.Where(p => selectedMechanisms.Contains(p.MechanismId)).ToList();
-        if (selectedData == null) return;
-
-        // Generate time series data based on timeframe
-        var dataPoints = timeframe switch
-        {
-            "24h" => 24,
-            "7d" => 7,
-            "30d" => 30,
-            _ => 24
-        };
-
-        var labels = Enumerable.Range(0, dataPoints)
-            .Select(i => timeframe switch
-            {
-                "24h" => DateTime.Now.AddHours(-dataPoints + i).ToString("HH:mm"),
-                "7d" => DateTime.Now.AddDays(-dataPoints + i).ToString("MM/dd"),
-                "30d" => DateTime.Now.AddDays(-dataPoints + i).ToString("MM/dd"),
-                _ => i.ToString()
-            }).ToArray();
-
-        var chartConfig = new
-        {
-            type = "line",
-            data = new
-            {
-                labels = labels,
-                datasets = selectedData.Select((perf, i) => new
-                {
-                    label = availableMechanisms.First(m => m.Id == perf.MechanismId).ShortName,
-                    data = Enumerable.Range(0, dataPoints)
-                        .Select(_ => perf.AvgThroughput * (0.8 + Random.Shared.NextDouble() * 0.4))
-                        .ToArray(),
-                    backgroundColor = GetMechanismColor(i, 0.2),
-                    borderColor = GetMechanismColor(i),
-                    borderWidth = 3,
-                    fill = false,
-                    tension = 0.4
-                }).ToArray()
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = true, position = "top" },
-                    title = new { display = false }
-                },
-                scales = new
-                {
-                    y = new
-                    {
-                        beginAtZero = true,
-                        title = new { display = true, text = "Throughput (TPS)" }
-                    },
-                    x = new
-                    {
-                        title = new { display = true, text = "Time" }
-                    }
-                },
-                interaction = new { mode = "index", intersect = false }
-            }
-        };
-
-        historicalTrendsChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "historicalTrendsChart", chartConfig);
-    }
-
-    // Event handlers
-    private async Task UpdateThroughputMetric(ChangeEventArgs e)
-    {
-        throughputMetric = e.Value?.ToString() ?? "average";
-        await CreateThroughputChart();
-    }
-
-    private async Task UpdateTimeframe(ChangeEventArgs e)
-    {
-        timeframe = e.Value?.ToString() ?? "24h";
-        await CreateHistoricalTrendsChart();
-    }
-
-    private void ToggleSecurityDetails()
-    {
-        showSecurityDetails = !showSecurityDetails;
-    }
-
-    private async Task ExportPerformanceData()
-    {
-        if (OnDataExported.HasDelegate)
-        {
-            await OnDataExported.InvokeAsync("performance-baseline-comparison");
-        }
-    }
-
-    // Utility methods
-    private double GetThroughputValue(PerformanceData perf)
-    {
-        return throughputMetric switch
-        {
-            "peak" => perf.PeakThroughput,
-            "sustained" => perf.SustainedThroughput,
-            _ => perf.AvgThroughput
-        };
-    }
-
-    private double CalculateOverallEfficiency()
-    {
-        if (!selectedMechanisms.Any() || performanceData == null) return 0;
-        
-        var selectedData = performanceData.Where(p => selectedMechanisms.Contains(p.MechanismId));
-        return selectedData.Average(p => (p.EnergyEfficiency + (100 - p.CpuUsage)) / 2);
-    }
-
-    private double CalculateOverallScore(PerformanceData perf)
-    {
-        var normalizedThroughput = GetNormalizedScore(perf.AvgThroughput, 1000);
-        var normalizedLatency = GetNormalizedScore(100 - perf.LatencyMs / 10, 100);
-        
-        return (normalizedThroughput * 0.25 + normalizedLatency * 0.25 + 
-                perf.EnergyEfficiency * 0.2 + perf.SecurityScore * 0.15 + 
-                perf.DecentralizationScore * 0.15) / 100 * 10;
-    }
-
-    private double GetNormalizedScore(double value, double max)
-    {
-        return Math.Min(100, Math.Max(0, (value / max) * 100));
-    }
-
-    private string GetBestPerformer()
-    {
-        if (!selectedMechanisms.Any() || performanceData == null) return "None";
-        
-        var bestPerf = performanceData
-            .Where(p => selectedMechanisms.Contains(p.MechanismId))
-            .OrderByDescending(p => CalculateOverallScore(p))
-            .FirstOrDefault();
-            
-        return bestPerf != null ? 
-            availableMechanisms.First(m => m.Id == bestPerf.MechanismId).Name : 
-            "None";
-    }
-
-    private string GetMechanismColor(int index, double alpha = 1.0)
-    {
-        var colors = new[]
-        {
-            $"rgba(255, 99, 132, {alpha})",   // Red
-            $"rgba(54, 162, 235, {alpha})",   // Blue
-            $"rgba(255, 205, 86, {alpha})",   // Yellow
-            $"rgba(75, 192, 192, {alpha})",   // Teal
-            $"rgba(153, 102, 255, {alpha})",  // Purple
-            $"rgba(255, 159, 64, {alpha})"    // Orange
-        };
-        return colors[index % colors.Length];
-    }
-
-    private string GetEfficiencyClass(double efficiency)
-    {
-        return efficiency switch
-        {
-            >= 80 => "excellent",
-            >= 60 => "good",
-            >= 40 => "fair",
-            _ => "poor"
-        };
-    }
-
-    private string GetEnergyRating(double efficiency)
-    {
-        return efficiency switch
-        {
-            >= 80 => "Excellent",
-            >= 60 => "Good",
-            >= 40 => "Fair",
-            _ => "Poor"
-        };
-    }
-
-    private string GetScoreRating(double score)
-    {
-        return score switch
-        {
-            >= 80 => "A",
-            >= 60 => "B",
-            >= 40 => "C",
-            >= 20 => "D",
-            _ => "F"
-        };
-    }
-
-    private string GetOverallScoreClass(double score)
-    {
-        return score switch
-        {
-            >= 8 => "excellent",
-            >= 6 => "good",
-            >= 4 => "fair",
-            _ => "poor"
-        };
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        var instances = new[] { throughputChartInstance, latencyChartInstance, resourceEfficiencyChartInstance, 
-                               securityDecentralizationChartInstance, historicalTrendsChartInstance };
-        
-        foreach (var instance in instances)
-        {
-            if (instance != null)
-            {
-                try
-                {
-                    await instance.InvokeVoidAsync("destroy");
-                    await instance.DisposeAsync();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error disposing chart: {ex.Message}");
-                }
-            }
-        }
-
-        if (chartModule != null)
-        {
-            await chartModule.DisposeAsync();
-        }
-    }
-
-    // Data models
-    public class ConsensusMechanism
-    {
-        public string Id { get; set; } = "";
-        public string Name { get; set; } = "";
-        public string ShortName { get; set; } = "";
-        public string Type { get; set; } = "";
-        public string Icon { get; set; } = "";
-    }
-
-    public class PerformanceData
-    {
-        public string MechanismId { get; set; } = "";
-        public double AvgThroughput { get; set; }
-        public double PeakThroughput { get; set; }
-        public double SustainedThroughput { get; set; }
-        public double LatencyMs { get; set; }
-        public double EnergyEfficiency { get; set; }
-        public double CpuUsage { get; set; }
-        public double SecurityScore { get; set; }
-        public double DecentralizationScore { get; set; }
-        public double FinalityScore { get; set; }
-        public double Uptime { get; set; }
-        public double PerformanceTrend { get; set; }
-    }
+    private async Task RefreshAsync() => await LoadAsync();
 }

@@ -12,10 +12,7 @@
 <PageTitle>Analytics Dashboard - Consensus Simulator</PageTitle>
 
 <link href="~/css/analytics-dashboard.css" rel="stylesheet" />
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/microsoft-signalr/7.0.11/signalr.min.js"></script>
 <script src="~/js/download-utils.js"></script>
-<script src="~/js/analytics-signalr.js" type="module"></script>
 
 <div class="analytics-dashboard">
     <!-- Page Header -->
@@ -584,15 +581,12 @@
 
     protected override async Task OnInitializedAsync()
     {
-        try
-        {
-            chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/chart-interop-v2.js");
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Failed to load chart module");
-        }
-        
+        // Chart.js interop removed during MudChart migration. The five chart
+        // canvases on this page were swapped for MudStack placeholders that
+        // point users to /analytics and /analytics-v3 for real-data charts.
+        // Remaining Create*Chart helpers below are unreachable dead code that
+        // will be removed when this consolidated dashboard is rewritten in a
+        // future pass.
         await LoadAnalyticsData();
     }
 

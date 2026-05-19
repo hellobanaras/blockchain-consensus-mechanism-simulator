@@ -150,7 +150,8 @@
                             Performance Visualization
                         </h6>
                         <div class="performance-chart">
-                            <canvas id="flPerformanceChart-@Payload.ModelId.Replace(".", "-")" width="400" height="200"></canvas>
+                            <MudProgressLinear Color="Color.Primary" Value="@(Payload.Accuracy.Value * 100)" Class="mt-2" />
+                            <small class="text-muted">Model accuracy proxy — full FL performance chart deferred.</small>
                         </div>
                     </div>
                 }

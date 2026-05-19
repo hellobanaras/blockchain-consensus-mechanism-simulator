@@ -2,7 +2,7 @@
 
 > **Append-only log of meaningful units of work.** Future sessions read top-to-bottom and pick up at the first incomplete item. Update on every commit and after every multi-step task.
 
-**Last updated:** 2026-05-19 (UI modernization Days 1-4)
+**Last updated:** 2026-05-19 (Chart.js → MudChart migration Day 5 — teardown complete)
 
 ---
 
@@ -199,3 +199,84 @@ Ordered by priority. Pull the top item, do it, append a section here when done.
     125 nodes" with a MudAlert acknowledging this. Wire it to
     `AnalyticsService.GenerateAnalyticsSummaryAsync` so the numbers
     reflect actual DB state. (Effort: 1 day.)
+
+---
+
+## Chart.js → MudChart migration (Phase-4 items 7, 13 charts, 14)
+
+Five-day sweep completed 2026-05-19. The full Chart.js dependency is removed
+from the web project; every chart in the app now renders via MudChart fed by
+`Consensus.Core.Services.AnalyticsService` (or by the existing SignalR round
+updates on the live dashboard). Closes Phase-4 backlog item 14 (synthetic →
+real chart data) and the chart half of item 13 (UI inner rewrites).
+
+### Day 1 — analytics seam + adapter
+- New DTOs in `src/Consensus.Core/Models/AnalyticsChartModels.cs`:
+  `LeaderDistribution`, `RoundDurationPoint`, `BlockTimelinePoint`,
+  `HistogramBin`, `ProtocolComparisonPoint`.
+- `IAnalyticsService` gained 4 chart-shaped methods:
+  `GetLeaderDistributionAsync`, `GetRoundDurationSeriesAsync`,
+  `GetBlockTimelineAsync`, `GetProtocolComparisonAsync`.
+- New static `src/Consensus.Web/Services/MudChartAdapter.cs` translates
+  Core DTOs into MudChart shapes (ChartSeries arrays, label arrays,
+  pre-binned histograms).
+
+### Day 2 — SimulationDashboard live charts
+- Two canvases replaced with `MudChart Line` (round duration, last 100)
+  and `MudChart Donut` (leader distribution). 2 s timer feeds both via
+  `MudChartAdapter`. SignalR-event path retained for the activity log.
+
+### Day 3 — Analytics + AnalyticsV3 + AnalyticsDashboard
+- `Analytics.razor`: three canvases → MudChart Bar / Line / Bar fed by
+  `GetProtocolComparisonAsync` + `GetTimeSeriesDataAsync`. Hardcoded
+  47/1247/125 tiles replaced by `GenerateAnalyticsSummaryAsync`.
+- `AnalyticsV3.razor`: three canvases → MudChart Bar / Pie / Line from
+  the loaded `AnalyticsSummary` (NodeStats, AlgorithmPerformance,
+  TimeSeriesData).
+- `AnalyticsDashboard.razor`: five canvases swapped for
+  "wiring deferred" MudStack placeholders pointing users to /analytics
+  and /analytics-v3 (this 1497-line page is the Phase-4 item-7
+  consolidation target).
+
+### Day 4 — protocol-specific + finality health
+- New `GetLatestSimulationByProtocolAsync(ConsensusAlgorithm)` resolves a
+  representative real run when the parent page doesn't pass a sim id.
+- `PoWAnalyticsChart`, `PoSAnalyticsChart`, `DposAnalyticsChart`,
+  `PbftAnalyticsChart`, `PoETAnalyticsChart`, `FinalityHealthChart` all
+  rewritten as focused ~150-line MudChart tiles. Each surfaces
+  round-duration line + proposer/leader donut + four real stat tiles.
+- Removed ~4400 lines of synthetic-data + JS-interop code in this single
+  day. Honest "not captured in current schema" alerts replace stake /
+  delegation / TEE / view-change tiles that depended on data the schema
+  doesn't yet record.
+
+### Day 5 — PerformanceBaselines + Chart.js teardown
+- `PerformanceBaselinesChart.razor` rewritten — four MudChart Bar tiles
+  (mean block time, p95/p99, Gini, success rate) + MudTable row dump,
+  all from `GetProtocolComparisonAsync`.
+- `SimulationResults.razor`: round-performance + block-distribution
+  canvases → MudChart Line + Donut. `InitializeCharts` is now a pure C#
+  data builder; no JSRuntime call.
+- `FederatedLearningCard.razor`: the lone FL canvas swapped for a
+  MudProgressLinear of the accuracy proxy; full FL chart deferred.
+- `AnalyticsDashboard.razor`: dead `chart-interop-v2.js` import dropped
+  from `OnInitializedAsync`. Remaining Create*Chart helpers are
+  unreachable dead code (no callers); they'll go when this page is
+  consolidated per Phase-4 item 7.
+- Deleted six razor wrapper components: BaseChart, LineChart, BarChart,
+  PieChart, HistogramChart, ChartUtils.
+- Deleted five JS interop / library files: chart.umd.min.js, charts.js,
+  chart-interop.js, chart-interop-v2.js, simulation-results.js,
+  analytics-signalr.js. Removed the two `<script>` tags from
+  `App.razor`.
+- Dropped the `ChartOptions` type-alias from `_Imports.razor` (no
+  remaining consumers). `SortDirection` alias stays — Core's enum is
+  what every razor uses.
+- `CLAUDE.md` §2 tech-stack updated: "MudBlazor 7.16 Material components
+  (including MudChart — no Chart.js)".
+
+### Verification
+
+- `dotnet build src/Consensus.Web` → 0 errors after each day.
+- `grep -rE 'lib/chart\.js|createMiningPerformanceChart|chart-interop' src/Consensus.Web` → no hits.
+- Smoke test plan in `.claude/plans/clever-snacking-scott.md` §Verification stays valid.
