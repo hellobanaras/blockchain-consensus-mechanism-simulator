@@ -460,12 +460,16 @@
                 .WithUrl(Navigation.ToAbsoluteUri("/simulationHub"))
                 .Build();
 
-            // Register event handlers
-            hubConnection.On<string>("ReceiveMetricsUpdate", OnMetricsUpdate);
-            hubConnection.On<string>("ReceiveRoundUpdate", OnRoundUpdate);
-            hubConnection.On<string>("ReceiveBlockCreated", OnBlockCreated);
-            hubConnection.On<string>("ReceiveLogEntry", OnLogEntry);
-            hubConnection.On<string>("ReceiveStatusUpdate", OnStatusUpdate);
+            // Register event handlers. The hub server emits THREE canonical
+            // names from SimulationHostedService: "SimulationUpdate" (the
+            // ~1 Hz rich payload — drives currentMetrics + activity feed),
+            // "SimulationStatusChanged" (state transitions), and
+            // "RoundCompleted" (per-round summary). The previous handlers
+            // were named after the orphaned SimulationRealtimeService and
+            // never fired — that's the root cause of the frozen-tick report.
+            hubConnection.On<object>("SimulationUpdate", OnSimulationUpdate);
+            hubConnection.On<object>("SimulationStatusChanged", OnSimulationStatusChanged);
+            hubConnection.On<object>("RoundCompleted", OnRoundCompletedEvent);
 
             await hubConnection.StartAsync();
             
@@ -561,69 +565,101 @@
         }
     }
 
-    // SignalR event handlers
-    private void OnMetricsUpdate(string metricsJson)
+    // SignalR event handlers.
+    //
+    // The hub emits payloads as objects (System.Text.Json serialized by
+    // SignalR), not strings. We deserialize through JsonElement so we don't
+    // couple this page to the server-side DTO shape — only the field names
+    // SimulationHostedService writes (Status, Metrics.ConsensusRounds,
+    // Metrics.TotalBlocks, ActiveNodes, ProgressPercentage). Missing fields
+    // are skipped silently rather than throwing on the live demo.
+
+    private void OnSimulationUpdate(object payload)
     {
         try
         {
-            var metrics = JsonSerializer.Deserialize<SimulationMetrics>(metricsJson);
-            if (metrics != null)
+            var json = JsonSerializer.Serialize(payload);
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (root.TryGetProperty("Metrics", out var m))
             {
-                currentMetrics = metrics;
-                InvokeAsync(StateHasChanged);
+                if (m.TryGetProperty("TotalBlocks", out var tb) && tb.TryGetInt32(out var blocks))
+                    currentMetrics.BlockHeight = blocks;
+                if (m.TryGetProperty("ConsensusRounds", out var cr) && cr.TryGetInt32(out var rounds))
+                    currentMetrics.CurrentRound = rounds;
+                if (m.TryGetProperty("TotalNodes", out var tn) && tn.TryGetInt32(out var totalN))
+                    currentMetrics.TotalNodes = totalN;
+                if (m.TryGetProperty("ActiveNodes", out var an) && an.TryGetInt32(out var activeN))
+                    currentMetrics.ActiveNodes = activeN;
+                if (m.TryGetProperty("AverageBlockTime", out var abt) && abt.TryGetDouble(out var avgMs))
+                    currentMetrics.AverageLatency = (int)Math.Round(avgMs);
+                if (m.TryGetProperty("ThroughputTps", out var tps) && tps.TryGetDouble(out var tpsVal))
+                    currentMetrics.BlocksPerSecond = (decimal)Math.Round(tpsVal, 2);
             }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error processing metrics update");
-        }
-    }
+            if (root.TryGetProperty("ProgressPercentage", out var p) && p.TryGetDouble(out var pct))
+                overallProgress = (int)Math.Clamp(pct, 0, 100);
+            if (root.TryGetProperty("Status", out var s) && Enum.TryParse<SimulationStatus>(s.GetString(), out var st) && simulation != null)
+                simulation.Status = st;
 
-    private void OnRoundUpdate(string roundData)
-    {
-        currentActivity.Add(new ActivityEvent
-        {
-            Timestamp = DateTime.UtcNow,
-            Type = "consensus",
-            Message = $"Round update: {roundData}"
-        });
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void OnBlockCreated(string blockData)
-    {
-        currentActivity.Add(new ActivityEvent
-        {
-            Timestamp = DateTime.UtcNow,
-            Type = "block",
-            Message = $"New block created: {blockData}"
-        });
-        InvokeAsync(StateHasChanged);
-    }
-
-    private void OnLogEntry(string logJson)
-    {
-        try
-        {
-            var logEntry = JsonSerializer.Deserialize<LogEntry>(logJson);
-            if (logEntry != null)
-            {
-                eventLogs.Add(logEntry);
-                InvokeAsync(StateHasChanged);
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.LogError(ex, "Error processing log entry");
-        }
-    }
-
-    private void OnStatusUpdate(string status)
-    {
-        if (simulation != null && Enum.TryParse<SimulationStatus>(status, out var newStatus))
-        {
-            simulation.Status = newStatus;
             InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not parse SimulationUpdate payload");
+        }
+    }
+
+    private void OnSimulationStatusChanged(object payload)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(payload);
+            var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("Status", out var s)
+                && Enum.TryParse<SimulationStatus>(s.GetString(), out var newStatus)
+                && simulation != null)
+            {
+                simulation.Status = newStatus;
+                currentActivity.Add(new ActivityEvent
+                {
+                    Timestamp = DateTime.UtcNow,
+                    Type = "consensus",
+                    Message = $"Status → {newStatus}"
+                });
+                InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not parse SimulationStatusChanged payload");
+        }
+    }
+
+    private void OnRoundCompletedEvent(object payload)
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(payload);
+            var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            int? roundNumber = root.TryGetProperty("RoundNumber", out var rn) && rn.TryGetInt32(out var rnVal)
+                ? rnVal : null;
+            currentActivity.Add(new ActivityEvent
+            {
+                Timestamp = DateTime.UtcNow,
+                Type = "consensus",
+                Message = roundNumber.HasValue
+                    ? $"Round {roundNumber.Value} completed"
+                    : "Round completed"
+            });
+            // Trim activity log so a long sim doesn't grow it without bound.
+            while (currentActivity.Count > 200) currentActivity.RemoveAt(0);
+            InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogDebug(ex, "Could not parse RoundCompleted payload");
         }
     }
 

@@ -124,7 +124,7 @@ public class SimulationHostedService : BackgroundService
             };
 
             // Send update to all clients subscribed to this simulation
-            await _hubContext.Clients.Group($"simulation-{simulation.Id}")
+            await _hubContext.Clients.Group($"Simulation_{simulation.Id}")
                 .SendAsync("SimulationUpdate", update);
 
             // Also send to general dashboard
