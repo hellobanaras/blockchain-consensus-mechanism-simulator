@@ -1,551 +1,152 @@
 @namespace Consensus.Web.Components.Charts
-@using Microsoft.AspNetCore.Components
-@using Microsoft.JSInterop
-@inject IJSRuntime JSRuntime
+@using Consensus.Core.Enums
+@using Consensus.Core.Models
+@using Consensus.Core.Services
+@using Consensus.Web.Services
+@using MudBlazor
+@inject IAnalyticsService AnalyticsSvc
 
-<div class="poet-analytics-container">
-    <div class="row g-4">
-        <!-- PoET Wait Time Distribution -->
-        <div class="col-12 col-lg-6">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h5 class="chart-title">
-                        <i class="fas fa-clock me-2"></i>
-                        PoET Wait Time Distribution
-                    </h5>
-                    <div class="chart-actions">
-                        <div class="btn-group btn-group-sm" role="group">
-                            <input type="radio" class="btn-check" name="poetTimeRange" id="poet1h" value="1h" @onchange="UpdateTimeRange" checked="@(selectedTimeRange == "1h")">
-                            <label class="btn btn-outline-primary" for="poet1h">1H</label>
-                            
-                            <input type="radio" class="btn-check" name="poetTimeRange" id="poet24h" value="24h" @onchange="UpdateTimeRange" checked="@(selectedTimeRange == "24h")">
-                            <label class="btn btn-outline-primary" for="poet24h">24H</label>
-                            
-                            <input type="radio" class="btn-check" name="poetTimeRange" id="poet7d" value="7d" @onchange="UpdateTimeRange" checked="@(selectedTimeRange == "7d")">
-                            <label class="btn btn-outline-primary" for="poet7d">7D</label>
-                        </div>
-                        <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="ExportWaitTimeData">
-                            <i class="fas fa-download"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="chart-body">
-                    <canvas id="poetWaitTimeChart" width="400" height="300"></canvas>
-                </div>
-                <div class="chart-stats">
-                    <div class="row text-center">
-                        <div class="col-4">
-                            <div class="stat-value">@avgWaitTime.ToString("F2")s</div>
-                            <div class="stat-label">Avg Wait Time</div>
-                        </div>
-                        <div class="col-4">
-                            <div class="stat-value">@minWaitTime.ToString("F2")s</div>
-                            <div class="stat-label">Min Wait Time</div>
-                        </div>
-                        <div class="col-4">
-                            <div class="stat-value">@maxWaitTime.ToString("F2")s</div>
-                            <div class="stat-label">Max Wait Time</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+@*
+    Proof-of-Elapsed-Time analytics tile. The PoET wait-time distribution is
+    approximated from round durations (which directly track the winning waiter
+    in the protocol implementation). Leader selection fairness is real.
+*@
 
-        <!-- PoET Node Timer Analysis -->
-        <div class="col-12 col-lg-6">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h5 class="chart-title">
-                        <i class="fas fa-server me-2"></i>
-                        Node Timer Analysis
-                    </h5>
-                    <div class="chart-actions">
-                        <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshTimerData">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="chart-body">
-                    <canvas id="poetNodeTimerChart" width="400" height="300"></canvas>
-                </div>
-            </div>
-        </div>
+<MudPaper Elevation="0" Class="pa-4 mb-4" Outlined="true">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Schedule" Class="mr-2" />
+            Proof of Elapsed Time — Wait-Time Analytics
+        </MudText>
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="RefreshAsync" Disabled="_loading">Refresh</MudButton>
+    </MudStack>
 
-        <!-- PoET Fairness Analysis -->
-        <div class="col-12">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h5 class="chart-title">
-                        <i class="fas fa-balance-scale me-2"></i>
-                        PoET Fairness Analysis
-                    </h5>
-                    <div class="chart-subtitle">
-                        Distribution of block production across nodes over time
-                    </div>
-                </div>
-                <div class="chart-body">
-                    <canvas id="poetFairnessChart" width="400" height="250"></canvas>
-                </div>
-                <div class="fairness-metrics mt-3">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <div class="metric-card">
-                                <div class="metric-value">@fairnessIndex.ToString("F3")</div>
-                                <div class="metric-label">Fairness Index</div>
-                                <div class="metric-description">1.0 = Perfect fairness</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="metric-card">
-                                <div class="metric-value">@giniCoefficient.ToString("F3")</div>
-                                <div class="metric-label">Gini Coefficient</div>
-                                <div class="metric-description">0.0 = Perfect equality</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="metric-card">
-                                <div class="metric-value">@standardDeviation.ToString("F2")</div>
-                                <div class="metric-label">Std Deviation</div>
-                                <div class="metric-description">Block production spread</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="metric-card">
-                                <div class="metric-value">@coefficientOfVariation.ToString("F3")</div>
-                                <div class="metric-label">CV Ratio</div>
-                                <div class="metric-description">Relative variability</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_simId is null)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            No completed PoET simulation in the database. Run a PoET sim from
+            <strong>/simulations</strong> to populate this view.
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="7">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Wait-time distribution (binned)</MudText>
+                @if (_histSeries.Count > 0 && _histSeries[0].Data.Length > 0)
+                {
+                    <MudChart ChartType="ChartType.Bar" ChartSeries="@_histSeries"
+                              XAxisLabels="@_histLabels" Width="100%" Height="260px" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Default">No wait-time data yet.</MudText>
+                }
+            </MudItem>
+            <MudItem xs="12" md="5">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Validator selection fairness</MudText>
+                @if (_leaderData.Length > 0)
+                {
+                    <MudChart ChartType="ChartType.Donut" InputData="@_leaderData"
+                              InputLabels="@_leaderLabels" Width="100%" Height="260px" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Default">No blocks proposed yet.</MudText>
+                }
+            </MudItem>
+        </MudGrid>
+
+        <MudDivider Class="my-3" />
+
+        <MudGrid>
+            <MudItem xs="6" md="3">
+                <MudPaper Elevation="0" Class="pa-3" Outlined="true">
+                    <MudText Typo="Typo.h5">@_totalRounds</MudText>
+                    <MudText Typo="Typo.caption">Rounds completed</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudPaper Elevation="0" Class="pa-3" Outlined="true">
+                    <MudText Typo="Typo.h5">@_avgWaitMs.ToString("F0") ms</MudText>
+                    <MudText Typo="Typo.caption">Avg wait time</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudPaper Elevation="0" Class="pa-3" Outlined="true">
+                    <MudText Typo="Typo.h5">@_distinctValidators</MudText>
+                    <MudText Typo="Typo.caption">Distinct winners</MudText>
+                </MudPaper>
+            </MudItem>
+            <MudItem xs="6" md="3">
+                <MudPaper Elevation="0" Class="pa-3" Outlined="true">
+                    <MudText Typo="Typo.h5">@_topShare.ToString("P1")</MudText>
+                    <MudText Typo="Typo.caption">Top winner share</MudText>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <MudAlert Severity="Severity.Normal" Variant="Variant.Text" Dense="true" Class="mt-3">
+            PoET's TEE attestation events are not surfaced in the current schema. Wait-time
+            distribution is approximated from observed round durations.
+        </MudAlert>
+    }
+</MudPaper>
 
 @code {
+    [Parameter] public bool EnableRealTimeUpdates { get; set; }
     [Parameter] public EventCallback<string> OnDataExported { get; set; }
-    [Parameter] public bool EnableRealTimeUpdates { get; set; } = false;
-    
-    private IJSObjectReference? chartModule;
-    private IJSObjectReference? waitTimeChartInstance;
-    private IJSObjectReference? nodeTimerChartInstance;
-    private IJSObjectReference? fairnessChartInstance;
-    
-    private string selectedTimeRange = "24h";
-    private PoETAnalyticsData? poetData;
-    
-    // Wait time statistics
-    private double avgWaitTime = 0.0;
-    private double minWaitTime = 0.0;
-    private double maxWaitTime = 0.0;
-    
-    // Fairness metrics
-    private double fairnessIndex = 0.0;
-    private double giniCoefficient = 0.0;
-    private double standardDeviation = 0.0;
-    private double coefficientOfVariation = 0.0;
 
-    protected override async Task OnInitializedAsync()
+    private bool _loading = true;
+    private Guid? _simId;
+    private List<ChartSeries> _histSeries = new();
+    private string[] _histLabels = Array.Empty<string>();
+    private double[] _leaderData = Array.Empty<double>();
+    private string[] _leaderLabels = Array.Empty<string>();
+    private int _totalRounds;
+    private double _avgWaitMs;
+    private int _distinctValidators;
+    private double _topShare;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
     {
+        _loading = true;
         try
         {
-            chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/chart-interop-v2.js");
-            await LoadPoETAnalyticsData();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error initializing PoET analytics: {ex.Message}");
-        }
-    }
+            _simId = await AnalyticsSvc.GetLatestSimulationByProtocolAsync(ConsensusAlgorithm.ProofOfElapsedTime);
+            if (_simId is null) return;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && chartModule != null && poetData != null)
-        {
-            await CreateCharts();
-        }
-    }
+            var rounds = await AnalyticsSvc.GetRoundDurationSeriesAsync(_simId.Value);
+            var leaders = await AnalyticsSvc.GetLeaderDistributionAsync(_simId.Value);
 
-    private async Task LoadPoETAnalyticsData()
-    {
-        // Generate mock PoET analytics data
-        poetData = new PoETAnalyticsData
-        {
-            TimeRange = selectedTimeRange,
-            TotalBlocks = Random.Shared.Next(500, 1500),
-            AverageWaitTime = Random.Shared.NextDouble() * 30 + 10, // 10-40 seconds
-            MedianWaitTime = Random.Shared.NextDouble() * 25 + 12, // 12-37 seconds
-            WaitTimeDistribution = GenerateWaitTimeDistribution(),
-            NodeTimerData = GenerateNodeTimerData(),
-            FairnessMetrics = GenerateFairnessMetrics()
-        };
-        
-        // Update statistics
-        UpdateStatistics();
-    }
+            var (labels, freq, _) = MudChartAdapter.BinForHistogram(
+                rounds.Select(r => r.DurationMs), binCount: 10, unitSuffix: " ms");
+            _histLabels = labels;
+            _histSeries = freq.Length == 0
+                ? new List<ChartSeries>()
+                : new List<ChartSeries> { new() { Name = "Rounds", Data = freq } };
+            (_leaderData, _leaderLabels) = MudChartAdapter.ToPieData(leaders);
 
-    private void UpdateStatistics()
-    {
-        if (poetData?.WaitTimeDistribution?.Any() == true)
-        {
-            var waitTimes = poetData.WaitTimeDistribution.Select(d => d.WaitTime).ToList();
-            avgWaitTime = waitTimes.Average();
-            minWaitTime = waitTimes.Min();
-            maxWaitTime = waitTimes.Max();
-            standardDeviation = CalculateStandardDeviation(waitTimes);
-            coefficientOfVariation = standardDeviation / avgWaitTime;
+            _totalRounds = rounds.Count;
+            _avgWaitMs = rounds.Count > 0 ? rounds.Average(r => r.DurationMs) : 0;
+            var totalBlocks = leaders.Counts.Values.Sum();
+            _distinctValidators = leaders.Counts.Count;
+            _topShare = totalBlocks > 0 && leaders.Counts.Count > 0
+                ? (double)leaders.Counts.Values.Max() / totalBlocks
+                : 0;
         }
-        
-        if (poetData?.FairnessMetrics != null)
+        finally
         {
-            fairnessIndex = poetData.FairnessMetrics.FairnessIndex;
-            giniCoefficient = poetData.FairnessMetrics.GiniCoefficient;
+            _loading = false;
         }
     }
 
-    private async Task CreateCharts()
-    {
-        if (chartModule == null || poetData == null) return;
-
-        try
-        {
-            // Create wait time distribution chart
-            await CreateWaitTimeChart();
-            
-            // Create node timer analysis chart
-            await CreateNodeTimerChart();
-            
-            // Create fairness analysis chart
-            await CreateFairnessChart();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error creating PoET charts: {ex.Message}");
-        }
-    }
-
-    private async Task CreateWaitTimeChart()
-    {
-        if (poetData?.WaitTimeDistribution == null) return;
-
-        var chartConfig = new
-        {
-            type = "bar",
-            data = new
-            {
-                labels = poetData.WaitTimeDistribution.Select(d => $"{d.WaitTime:F1}s").ToArray(),
-                datasets = new[]
-                {
-                    new
-                    {
-                        label = "Frequency",
-                        data = poetData.WaitTimeDistribution.Select(d => d.Frequency).ToArray(),
-                        backgroundColor = "rgba(54, 162, 235, 0.8)",
-                        borderColor = "rgba(54, 162, 235, 1)",
-                        borderWidth = 1
-                    }
-                }
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = false },
-                    title = new { display = false }
-                },
-                scales = new
-                {
-                    y = new
-                    {
-                        beginAtZero = true,
-                        title = new { display = true, text = "Frequency" }
-                    },
-                    x = new
-                    {
-                        title = new { display = true, text = "Wait Time (seconds)" }
-                    }
-                }
-            }
-        };
-
-        waitTimeChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "poetWaitTimeChart", chartConfig);
-    }
-
-    private async Task CreateNodeTimerChart()
-    {
-        if (poetData?.NodeTimerData == null) return;
-
-        var chartConfig = new
-        {
-            type = "scatter",
-            data = new
-            {
-                datasets = poetData.NodeTimerData.Select((node, index) => new
-                {
-                    label = node.NodeId,
-                    data = node.TimerEvents.Select(t => new { x = t.Timestamp.ToString("HH:mm:ss"), y = t.TimerValue }).ToArray(),
-                    backgroundColor = GetNodeColor(index),
-                    borderColor = GetNodeColor(index),
-                    showLine = true,
-                    fill = false
-                }).ToArray()
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = true, position = "top" },
-                    title = new { display = false }
-                },
-                scales = new
-                {
-                    y = new
-                    {
-                        beginAtZero = true,
-                        title = new { display = true, text = "Timer Value (seconds)" }
-                    },
-                    x = new
-                    {
-                        title = new { display = true, text = "Time" }
-                    }
-                }
-            }
-        };
-
-        nodeTimerChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "poetNodeTimerChart", chartConfig);
-    }
-
-    private async Task CreateFairnessChart()
-    {
-        if (poetData?.FairnessMetrics?.NodeBlockCounts == null) return;
-
-        var chartConfig = new
-        {
-            type = "doughnut",
-            data = new
-            {
-                labels = poetData.FairnessMetrics.NodeBlockCounts.Keys.ToArray(),
-                datasets = new[]
-                {
-                    new
-                    {
-                        data = poetData.FairnessMetrics.NodeBlockCounts.Values.ToArray(),
-                        backgroundColor = poetData.FairnessMetrics.NodeBlockCounts.Keys.Select((_, i) => GetNodeColor(i)).ToArray(),
-                        borderWidth = 2
-                    }
-                }
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = true, position = "right" },
-                    title = new { display = false }
-                }
-            }
-        };
-
-        fairnessChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "poetFairnessChart", chartConfig);
-    }
-
-    private async Task UpdateTimeRange(ChangeEventArgs e)
-    {
-        selectedTimeRange = e.Value?.ToString() ?? "24h";
-        await LoadPoETAnalyticsData();
-        await CreateCharts();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task RefreshTimerData()
-    {
-        await LoadPoETAnalyticsData();
-        await CreateCharts();
-        await InvokeAsync(StateHasChanged);
-    }
-
-    private async Task ExportWaitTimeData()
-    {
-        if (OnDataExported.HasDelegate)
-        {
-            await OnDataExported.InvokeAsync("poet-wait-time");
-        }
-    }
-
-    private List<WaitTimeDistribution> GenerateWaitTimeDistribution()
-    {
-        var distribution = new List<WaitTimeDistribution>();
-        var bins = 20;
-        var minTime = 5.0;
-        var maxTime = 45.0;
-        var binSize = (maxTime - minTime) / bins;
-
-        for (int i = 0; i < bins; i++)
-        {
-            var waitTime = minTime + (i * binSize);
-            var frequency = (int)(100 * Math.Exp(-Math.Pow((waitTime - 25) / 10, 2))); // Normal-ish distribution
-            
-            distribution.Add(new WaitTimeDistribution
-            {
-                WaitTime = waitTime,
-                Frequency = frequency + Random.Shared.Next(0, 20)
-            });
-        }
-
-        return distribution;
-    }
-
-    private List<NodeTimerData> GenerateNodeTimerData()
-    {
-        var nodeData = new List<NodeTimerData>();
-        var nodeCount = 8;
-
-        for (int i = 0; i < nodeCount; i++)
-        {
-            var node = new NodeTimerData
-            {
-                NodeId = $"node-{i + 1:D3}",
-                TimerEvents = new List<TimerEvent>()
-            };
-
-            var baseTime = DateTime.Now.AddHours(-1);
-            for (int j = 0; j < 20; j++)
-            {
-                node.TimerEvents.Add(new TimerEvent
-                {
-                    Timestamp = baseTime.AddMinutes(j * 3),
-                    TimerValue = Random.Shared.NextDouble() * 30 + 10
-                });
-            }
-
-            nodeData.Add(node);
-        }
-
-        return nodeData;
-    }
-
-    private FairnessMetrics GenerateFairnessMetrics()
-    {
-        var nodeCount = 8;
-        var nodeCounts = new Dictionary<string, int>();
-        
-        for (int i = 0; i < nodeCount; i++)
-        {
-            nodeCounts[$"node-{i + 1:D3}"] = Random.Shared.Next(10, 50);
-        }
-
-        var values = nodeCounts.Values.ToList();
-        var mean = values.Average();
-        var variance = values.Average(v => Math.Pow(v - mean, 2));
-        var fairnessIndex = Math.Pow(values.Sum(), 2) / (nodeCount * values.Sum(v => v * v));
-
-        return new FairnessMetrics
-        {
-            FairnessIndex = fairnessIndex,
-            GiniCoefficient = CalculateGiniCoefficient(values),
-            NodeBlockCounts = nodeCounts
-        };
-    }
-
-    private double CalculateStandardDeviation(List<double> values)
-    {
-        var mean = values.Average();
-        var variance = values.Average(v => Math.Pow(v - mean, 2));
-        return Math.Sqrt(variance);
-    }
-
-    private double CalculateGiniCoefficient(List<int> values)
-    {
-        var sorted = values.OrderBy(x => x).ToList();
-        var n = sorted.Count;
-        var index = 0;
-        var sum = sorted.Sum(x => (++index) * x);
-        return (2.0 * sum) / (n * sorted.Sum()) - (n + 1.0) / n;
-    }
-
-    private string GetNodeColor(int index)
-    {
-        var colors = new[]
-        {
-            "#FF6384", "#36A2EB", "#FFCE56", "#4BC0C0",
-            "#9966FF", "#FF9F40", "#FF6384", "#C9CBCF"
-        };
-        return colors[index % colors.Length];
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        try
-        {
-            if (waitTimeChartInstance != null)
-            {
-                await waitTimeChartInstance.InvokeVoidAsync("destroy");
-                await waitTimeChartInstance.DisposeAsync();
-            }
-            
-            if (nodeTimerChartInstance != null)
-            {
-                await nodeTimerChartInstance.InvokeVoidAsync("destroy");
-                await nodeTimerChartInstance.DisposeAsync();
-            }
-            
-            if (fairnessChartInstance != null)
-            {
-                await fairnessChartInstance.InvokeVoidAsync("destroy");
-                await fairnessChartInstance.DisposeAsync();
-            }
-
-            if (chartModule != null)
-            {
-                await chartModule.DisposeAsync();
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error disposing PoET charts: {ex.Message}");
-        }
-    }
-
-    // Data models
-    public class PoETAnalyticsData
-    {
-        public string TimeRange { get; set; } = "";
-        public int TotalBlocks { get; set; }
-        public double AverageWaitTime { get; set; }
-        public double MedianWaitTime { get; set; }
-        public List<WaitTimeDistribution> WaitTimeDistribution { get; set; } = new();
-        public List<NodeTimerData> NodeTimerData { get; set; } = new();
-        public FairnessMetrics FairnessMetrics { get; set; } = new();
-    }
-
-    public class WaitTimeDistribution
-    {
-        public double WaitTime { get; set; }
-        public int Frequency { get; set; }
-    }
-
-    public class NodeTimerData
-    {
-        public string NodeId { get; set; } = "";
-        public List<TimerEvent> TimerEvents { get; set; } = new();
-    }
-
-    public class TimerEvent
-    {
-        public DateTime Timestamp { get; set; }
-        public double TimerValue { get; set; }
-    }
-
-    public class FairnessMetrics
-    {
-        public double FairnessIndex { get; set; }
-        public double GiniCoefficient { get; set; }
-        public Dictionary<string, int> NodeBlockCounts { get; set; } = new();
-    }
+    private async Task RefreshAsync() => await LoadAsync();
 }

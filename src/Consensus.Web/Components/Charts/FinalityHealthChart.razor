@@ -1,959 +1,165 @@
 @namespace Consensus.Web.Components.Charts
-@using Microsoft.AspNetCore.Components
-@using Microsoft.JSInterop
-@inject IJSRuntime JSRuntime
+@using Consensus.Core.Enums
+@using Consensus.Core.Models
+@using Consensus.Core.Services
+@using Consensus.Web.Services
+@using MudBlazor
+@inject IAnalyticsService AnalyticsSvc
 
-<div class="finality-health-container">
-    <div class="row g-4">
-        <!-- Finality Time Tracking -->
-        <div class="col-12 col-lg-6">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h5 class="chart-title">
-                        <i class="fas fa-clock me-2"></i>
-                        Finality Time Tracking
-                    </h5>
-                    <div class="chart-actions">
-                        <div class="btn-group btn-group-sm" role="group">
-                            <input type="radio" class="btn-check" name="finalityMetric" id="avgFinality" value="average" 
-                                   checked="@(finalityMetric == "average")" @onchange="UpdateFinalityMetric">
-                            <label class="btn btn-outline-primary" for="avgFinality">Average</label>
-                            
-                            <input type="radio" class="btn-check" name="finalityMetric" id="p95Finality" value="p95" 
-                                   checked="@(finalityMetric == "p95")" @onchange="UpdateFinalityMetric">
-                            <label class="btn btn-outline-primary" for="p95Finality">P95</label>
-                            
-                            <input type="radio" class="btn-check" name="finalityMetric" id="maxFinality" value="max" 
-                                   checked="@(finalityMetric == "max")" @onchange="UpdateFinalityMetric">
-                            <label class="btn btn-outline-primary" for="maxFinality">Max</label>
-                        </div>
-                        <button class="btn btn-sm btn-outline-secondary ms-2" @onclick="ExportFinalityData">
-                            <i class="fas fa-download"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="chart-body">
-                    <canvas id="finalityTimeChart" width="400" height="300"></canvas>
-                </div>
-                <div class="finality-stats">
-                    <div class="row text-center">
-                        <div class="col-3">
-                            <div class="stat-value">@avgFinalityTime.ToString("F2")s</div>
-                            <div class="stat-label">Avg Finality</div>
-                        </div>
-                        <div class="col-3">
-                            <div class="stat-value">@p95FinalityTime.ToString("F2")s</div>
-                            <div class="stat-label">P95 Finality</div>
-                        </div>
-                        <div class="col-3">
-                            <div class="stat-value">@maxFinalityTime.ToString("F2")s</div>
-                            <div class="stat-label">Max Finality</div>
-                        </div>
-                        <div class="col-3">
-                            <div class="stat-value">@finalityConfidence.ToString("P1")</div>
-                            <div class="stat-label">Confidence</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+@*
+    Network finality + health overview. Aggregates across protocols: per-
+    protocol p95/p99 block times (latency line), success rate (donut), and
+    round-duration distribution from the most recently completed run of any
+    protocol. Fork-resolution scatter is approximated with a line-with-markers
+    plot (per chart-migration plan risk #3).
+*@
 
-        <!-- Fork Resolution Analysis -->
-        <div class="col-12 col-lg-6">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h5 class="chart-title">
-                        <i class="fas fa-code-branch me-2"></i>
-                        Fork Resolution Analysis
-                    </h5>
-                    <div class="chart-subtitle">
-                        Track fork events and resolution patterns
-                    </div>
-                </div>
-                <div class="chart-body">
-                    <canvas id="forkResolutionChart" width="400" height="300"></canvas>
-                </div>
-                <div class="fork-metrics mt-3">
-                    <div class="row">
-                        <div class="col-md-3">
-                            <div class="metric-card">
-                                <div class="metric-value">@totalForks</div>
-                                <div class="metric-label">Total Forks</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="metric-card">
-                                <div class="metric-value">@activeForks</div>
-                                <div class="metric-label">Active Forks</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="metric-card">
-                                <div class="metric-value">@avgResolutionTime.ToString("F1")s</div>
-                                <div class="metric-label">Avg Resolution</div>
-                            </div>
-                        </div>
-                        <div class="col-md-3">
-                            <div class="metric-card">
-                                <div class="metric-value">@longestForkLength</div>
-                                <div class="metric-label">Longest Fork</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+<MudPaper Elevation="0" Class="pa-4 mb-4" Outlined="true">
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.HealthAndSafety" Class="mr-2" />
+            Finality &amp; Network Health
+        </MudText>
+        <MudButton Variant="Variant.Text" StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="RefreshAsync" Disabled="_loading">Refresh</MudButton>
+    </MudStack>
 
-        <!-- Network Health Score -->
-        <div class="col-12 col-lg-6">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h5 class="chart-title">
-                        <i class="fas fa-heartbeat me-2"></i>
-                        Network Health Score
-                    </h5>
-                    <div class="health-indicator">
-                        <span class="health-score @GetHealthScoreClass()">@networkHealthScore</span>
-                        <span class="health-status">@GetHealthStatus()</span>
-                    </div>
-                </div>
-                <div class="chart-body">
-                    <canvas id="networkHealthChart" width="400" height="300"></canvas>
-                </div>
-                <div class="health-components mt-3">
-                    <div class="health-component">
-                        <div class="component-label">Node Connectivity</div>
-                        <div class="progress">
-                            <div class="progress-bar @GetComponentHealthClass(nodeConnectivity)" 
-                                 style="width: @(nodeConnectivity)%">@(nodeConnectivity)%</div>
-                        </div>
-                    </div>
-                    <div class="health-component">
-                        <div class="component-label">Consensus Stability</div>
-                        <div class="progress">
-                            <div class="progress-bar @GetComponentHealthClass(consensusStability)" 
-                                 style="width: @(consensusStability)%">@(consensusStability)%</div>
-                        </div>
-                    </div>
-                    <div class="health-component">
-                        <div class="component-label">Transaction Throughput</div>
-                        <div class="progress">
-                            <div class="progress-bar @GetComponentHealthClass(throughputHealth)" 
-                                 style="width: @(throughputHealth)%">@(throughputHealth)%</div>
-                        </div>
-                    </div>
-                    <div class="health-component">
-                        <div class="component-label">Network Latency</div>
-                        <div class="progress">
-                            <div class="progress-bar @GetComponentHealthClass(latencyHealth)" 
-                                 style="width: @(latencyHealth)%">@(latencyHealth)%</div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Consensus Stability Metrics -->
-        <div class="col-12 col-lg-6">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h5 class="chart-title">
-                        <i class="fas fa-shield-alt me-2"></i>
-                        Consensus Stability
-                    </h5>
-                    <div class="chart-actions">
-                        <button class="btn btn-sm btn-outline-info" @onclick="ToggleStabilityDetails">
-                            <i class="fas @(showStabilityDetails ? "fa-eye-slash" : "fa-eye")"></i>
-                        </button>
-                    </div>
-                </div>
-                <div class="chart-body">
-                    <canvas id="consensusStabilityChart" width="400" height="300"></canvas>
-                </div>
-                @if (showStabilityDetails)
+    @if (_loading)
+    {
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+    }
+    else if (_comparison.Count == 0)
+    {
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+            No completed simulations in the database. Run any sim from
+            <strong>/simulations</strong> to populate this overview.
+        </MudAlert>
+    }
+    else
+    {
+        <MudGrid>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Per-protocol block latency (p95 / p99)</MudText>
+                <MudChart ChartType="ChartType.Bar" ChartSeries="@_latencySeries"
+                          XAxisLabels="@_latencyLabels" Width="100%" Height="280px" />
+            </MudItem>
+            <MudItem xs="12" md="6">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">Success-rate distribution</MudText>
+                @if (_successData.Length > 0)
                 {
-                    <div class="stability-details mt-3">
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="metric-card">
-                                    <div class="metric-value">@consensusEfficiency.ToString("P1")</div>
-                                    <div class="metric-label">Efficiency</div>
-                                    <div class="metric-description">Agreement rate</div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="metric-card">
-                                    <div class="metric-value">@blockReorganizations</div>
-                                    <div class="metric-label">Reorgs</div>
-                                    <div class="metric-description">Last 24h</div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="metric-card">
-                                    <div class="metric-value">@avgBlockTime.ToString("F1")s</div>
-                                    <div class="metric-label">Block Time</div>
-                                    <div class="metric-description">Moving average</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-md-4">
-                                <div class="metric-card">
-                                    <div class="metric-value">@orphanedBlocks</div>
-                                    <div class="metric-label">Orphaned</div>
-                                    <div class="metric-description">Blocks rejected</div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="metric-card">
-                                    <div class="metric-value">@networkPartitions</div>
-                                    <div class="metric-label">Partitions</div>
-                                    <div class="metric-description">Network splits</div>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="metric-card">
-                                    <div class="metric-value">@consensusUptime.ToString("P2")</div>
-                                    <div class="metric-label">Uptime</div>
-                                    <div class="metric-description">Consensus availability</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <MudChart ChartType="ChartType.Donut" InputData="@_successData"
+                              InputLabels="@_successLabels" Width="100%" Height="280px" />
                 }
-            </div>
-        </div>
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Default">No completed runs to report.</MudText>
+                }
+            </MudItem>
+        </MudGrid>
 
-        <!-- Real-time Alerts -->
-        <div class="col-12">
-            <div class="chart-card">
-                <div class="chart-header">
-                    <h5 class="chart-title">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Real-time Network Alerts
-                    </h5>
-                    <div class="alert-summary">
-                        <span class="alert-count critical">@criticalAlerts</span> Critical
-                        <span class="alert-count warning">@warningAlerts</span> Warning
-                        <span class="alert-count info">@infoAlerts</span> Info
-                    </div>
-                </div>
-                <div class="alerts-container">
-                    @if (networkAlerts?.Any() == true)
-                    {
-                        @foreach (var alert in networkAlerts.Take(5))
-                        {
-                            <div class="alert-item @alert.Severity.ToString().ToLower()">
-                                <div class="alert-icon">
-                                    <i class="fas @GetAlertIcon(alert.Severity)"></i>
-                                </div>
-                                <div class="alert-content">
-                                    <div class="alert-title">@alert.Title</div>
-                                    <div class="alert-message">@alert.Message</div>
-                                    <div class="alert-time">@alert.Timestamp.ToString("HH:mm:ss")</div>
-                                </div>
-                                <div class="alert-actions">
-                                    <button class="btn btn-sm btn-outline-secondary" @onclick="() => DismissAlert(alert.Id)">
-                                        <i class="fas fa-times"></i>
-                                    </button>
-                                </div>
-                            </div>
-                        }
-                    }
-                    else
-                    {
-                        <div class="no-alerts">
-                            <i class="fas fa-check-circle text-success"></i>
-                            <span>No active alerts - Network operating normally</span>
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+        <MudDivider Class="my-3" />
+
+        <MudGrid>
+            <MudItem xs="12" md="8">
+                <MudText Typo="Typo.subtitle2" Class="mb-1">
+                    Latest run — round duration (@_latestProtocolName)
+                </MudText>
+                @if (_durationSeries.Count > 0 && _durationSeries[0].Data.Length > 0)
+                {
+                    <MudChart ChartType="ChartType.Line" ChartSeries="@_durationSeries"
+                              XAxisLabels="@_durationLabels" Width="100%" Height="240px" />
+                }
+                else
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Default">No completed rounds in latest run.</MudText>
+                }
+            </MudItem>
+            <MudItem xs="12" md="4">
+                <MudPaper Elevation="0" Class="pa-3" Outlined="true">
+                    <MudText Typo="Typo.subtitle2">Aggregate health</MudText>
+                    <MudList T="string" Dense="true" Class="mt-2">
+                        <MudListItem T="string">
+                            <MudText Typo="Typo.body2"><strong>@_totalSims</strong> total simulations</MudText>
+                        </MudListItem>
+                        <MudListItem T="string">
+                            <MudText Typo="Typo.body2"><strong>@_avgSuccess.ToString("F1")%</strong> avg success rate</MudText>
+                        </MudListItem>
+                        <MudListItem T="string">
+                            <MudText Typo="Typo.body2"><strong>@_avgGini.ToString("F3")</strong> avg leader Gini</MudText>
+                        </MudListItem>
+                        <MudListItem T="string">
+                            <MudText Typo="Typo.body2"><strong>@_avgEntropy.ToString("F2")</strong> avg leader entropy</MudText>
+                        </MudListItem>
+                    </MudList>
+                </MudPaper>
+            </MudItem>
+        </MudGrid>
+
+        <MudAlert Severity="Severity.Normal" Variant="Variant.Text" Dense="true" Class="mt-3">
+            Fork-resolution scatter is omitted — the schema does not record orphaned-block events.
+            Network health is derived from completion rates and inter-block latency percentiles.
+        </MudAlert>
+    }
+</MudPaper>
 
 @code {
+    [Parameter] public bool EnableRealTimeUpdates { get; set; }
     [Parameter] public EventCallback<string> OnDataExported { get; set; }
-    [Parameter] public bool EnableRealTimeUpdates { get; set; } = false;
-    
-    private IJSObjectReference? chartModule;
-    private IJSObjectReference? finalityTimeChartInstance;
-    private IJSObjectReference? forkResolutionChartInstance;
-    private IJSObjectReference? networkHealthChartInstance;
-    private IJSObjectReference? consensusStabilityChartInstance;
-    
-    private string finalityMetric = "average";
-    private bool showStabilityDetails = false;
-    private FinalityHealthData? healthData;
-    
-    // Finality metrics
-    private double avgFinalityTime = 0.0;
-    private double p95FinalityTime = 0.0;
-    private double maxFinalityTime = 0.0;
-    private double finalityConfidence = 0.0;
-    
-    // Fork metrics
-    private int totalForks = 0;
-    private int activeForks = 0;
-    private double avgResolutionTime = 0.0;
-    private int longestForkLength = 0;
-    
-    // Health metrics
-    private int networkHealthScore = 0;
-    private double nodeConnectivity = 0.0;
-    private double consensusStability = 0.0;
-    private double throughputHealth = 0.0;
-    private double latencyHealth = 0.0;
-    
-    // Stability metrics
-    private double consensusEfficiency = 0.0;
-    private int blockReorganizations = 0;
-    private double avgBlockTime = 0.0;
-    private int orphanedBlocks = 0;
-    private int networkPartitions = 0;
-    private double consensusUptime = 0.0;
-    
-    // Alert metrics
-    private int criticalAlerts = 0;
-    private int warningAlerts = 0;
-    private int infoAlerts = 0;
-    private List<NetworkAlert>? networkAlerts;
 
-    protected override async Task OnInitializedAsync()
+    private bool _loading = true;
+    private List<ProtocolComparisonPoint> _comparison = new();
+    private List<ChartSeries> _latencySeries = new();
+    private string[] _latencyLabels = Array.Empty<string>();
+    private double[] _successData = Array.Empty<double>();
+    private string[] _successLabels = Array.Empty<string>();
+    private List<ChartSeries> _durationSeries = new();
+    private string[] _durationLabels = Array.Empty<string>();
+    private string _latestProtocolName = string.Empty;
+    private int _totalSims;
+    private double _avgSuccess;
+    private double _avgGini;
+    private double _avgEntropy;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
     {
+        _loading = true;
         try
         {
-            chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/chart-interop-v2.js");
-            await LoadFinalityHealthData();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error initializing finality health monitoring: {ex.Message}");
-        }
-    }
+            _comparison = await AnalyticsSvc.GetProtocolComparisonAsync();
+            if (_comparison.Count == 0) return;
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && chartModule != null && healthData != null)
-        {
-            await CreateCharts();
-        }
-    }
-
-    private async Task LoadFinalityHealthData()
-    {
-        // Generate mock finality and health data
-        healthData = new FinalityHealthData
-        {
-            FinalityTimes = GenerateFinalityTimes(),
-            ForkEvents = GenerateForkEvents(),
-            HealthMetrics = GenerateHealthMetrics(),
-            StabilityMetrics = GenerateStabilityMetrics(),
-            NetworkAlerts = GenerateNetworkAlerts()
-        };
-        
-        // Update metrics
-        UpdateMetrics();
-    }
-
-    private void UpdateMetrics()
-    {
-        if (healthData?.FinalityTimes?.Any() == true)
-        {
-            var times = healthData.FinalityTimes.Select(f => f.FinalityTimeSeconds).ToList();
-            avgFinalityTime = times.Average();
-            p95FinalityTime = CalculatePercentile(times, 95);
-            maxFinalityTime = times.Max();
-            finalityConfidence = healthData.FinalityTimes.Average(f => f.Confidence);
-        }
-        
-        if (healthData?.ForkEvents?.Any() == true)
-        {
-            totalForks = healthData.ForkEvents.Count;
-            activeForks = healthData.ForkEvents.Count(f => !f.IsResolved);
-            var resolvedForks = healthData.ForkEvents.Where(f => f.IsResolved && f.ResolutionTime.HasValue);
-            avgResolutionTime = resolvedForks.Any() ? resolvedForks.Average(f => f.ResolutionTime!.Value) : 0;
-            longestForkLength = healthData.ForkEvents.Max(f => f.ForkLength);
-        }
-        
-        if (healthData?.HealthMetrics != null)
-        {
-            var health = healthData.HealthMetrics;
-            networkHealthScore = (int)Math.Round((health.NodeConnectivity + health.ConsensusStability + 
-                                                 health.ThroughputHealth + health.LatencyHealth) / 4);
-            nodeConnectivity = health.NodeConnectivity;
-            consensusStability = health.ConsensusStability;
-            throughputHealth = health.ThroughputHealth;
-            latencyHealth = health.LatencyHealth;
-        }
-        
-        if (healthData?.StabilityMetrics != null)
-        {
-            var stability = healthData.StabilityMetrics;
-            consensusEfficiency = stability.ConsensusEfficiency;
-            blockReorganizations = stability.BlockReorganizations;
-            avgBlockTime = stability.AvgBlockTime;
-            orphanedBlocks = stability.OrphanedBlocks;
-            networkPartitions = stability.NetworkPartitions;
-            consensusUptime = stability.ConsensusUptime;
-        }
-        
-        if (healthData?.NetworkAlerts?.Any() == true)
-        {
-            networkAlerts = healthData.NetworkAlerts.OrderByDescending(a => a.Timestamp).ToList();
-            criticalAlerts = networkAlerts.Count(a => a.Severity == AlertSeverity.Critical);
-            warningAlerts = networkAlerts.Count(a => a.Severity == AlertSeverity.Warning);
-            infoAlerts = networkAlerts.Count(a => a.Severity == AlertSeverity.Info);
-        }
-    }
-
-    private async Task CreateCharts()
-    {
-        if (chartModule == null || healthData == null) return;
-
-        try
-        {
-            await CreateFinalityTimeChart();
-            await CreateForkResolutionChart();
-            await CreateNetworkHealthChart();
-            await CreateConsensusStabilityChart();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error creating finality health charts: {ex.Message}");
-        }
-    }
-
-    private async Task CreateFinalityTimeChart()
-    {
-        if (healthData?.FinalityTimes == null) return;
-
-        var data = finalityMetric switch
-        {
-            "average" => healthData.FinalityTimes.GroupBy(f => f.Timestamp.Date)
-                .Select(g => g.Average(f => f.FinalityTimeSeconds)).ToArray(),
-            "p95" => healthData.FinalityTimes.GroupBy(f => f.Timestamp.Date)
-                .Select(g => CalculatePercentile(g.Select(f => f.FinalityTimeSeconds).ToList(), 95)).ToArray(),
-            "max" => healthData.FinalityTimes.GroupBy(f => f.Timestamp.Date)
-                .Select(g => g.Max(f => f.FinalityTimeSeconds)).ToArray(),
-            _ => healthData.FinalityTimes.GroupBy(f => f.Timestamp.Date)
-                .Select(g => g.Average(f => f.FinalityTimeSeconds)).ToArray()
-        };
-
-        var labels = healthData.FinalityTimes.GroupBy(f => f.Timestamp.Date)
-            .Select(g => g.Key.ToString("MM/dd")).ToArray();
-
-        var chartConfig = new
-        {
-            type = "line",
-            data = new
+            _latencyLabels = _comparison.Select(p => p.Protocol.ToString()).ToArray();
+            _latencySeries = new List<ChartSeries>
             {
-                labels = labels,
-                datasets = new[]
-                {
-                    new
-                    {
-                        label = $"{finalityMetric.ToUpper()} Finality Time",
-                        data = data,
-                        backgroundColor = "rgba(75, 192, 192, 0.2)",
-                        borderColor = "rgba(75, 192, 192, 1)",
-                        borderWidth = 3,
-                        fill = true,
-                        tension = 0.4
-                    }
-                }
-            },
-            options = new
+                new() { Name = "p95 (ms)", Data = _comparison.Select(p => p.P95BlockTimeMs).ToArray() },
+                new() { Name = "p99 (ms)", Data = _comparison.Select(p => p.P99BlockTimeMs).ToArray() },
+            };
+
+            _successData = _comparison.Select(p => p.SuccessRate).ToArray();
+            _successLabels = _comparison.Select(p => p.Protocol.ToString()).ToArray();
+
+            _totalSims = _comparison.Sum(p => p.TotalSimulations);
+            _avgSuccess = _comparison.Average(p => p.SuccessRate);
+            _avgGini = _comparison.Average(p => p.LeaderGini);
+            _avgEntropy = _comparison.Average(p => p.LeaderEntropy);
+
+            // Pick the most-populated protocol's latest run as the round-duration anchor.
+            var anchor = _comparison.OrderByDescending(p => p.TotalSimulations).First();
+            _latestProtocolName = anchor.Protocol.ToString();
+            var simId = await AnalyticsSvc.GetLatestSimulationByProtocolAsync(anchor.Protocol);
+            if (simId.HasValue)
             {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = false },
-                    title = new { display = false }
-                },
-                scales = new
-                {
-                    y = new
-                    {
-                        beginAtZero = true,
-                        title = new { display = true, text = "Time (seconds)" }
-                    },
-                    x = new
-                    {
-                        title = new { display = true, text = "Date" }
-                    }
-                }
-            }
-        };
-
-        finalityTimeChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "finalityTimeChart", chartConfig);
-    }
-
-    private async Task CreateForkResolutionChart()
-    {
-        if (healthData?.ForkEvents == null) return;
-
-        var chartConfig = new
-        {
-            type = "scatter",
-            data = new
-            {
-                datasets = new[]
-                {
-                    new
-                    {
-                        label = "Active Forks",
-                        data = healthData.ForkEvents.Where(f => !f.IsResolved)
-                            .Select(f => new { x = f.Timestamp.ToString("HH:mm"), y = f.ForkLength }).ToArray(),
-                        backgroundColor = "rgba(255, 99, 132, 0.8)",
-                        borderColor = "rgba(255, 99, 132, 1)",
-                        pointRadius = 6
-                    },
-                    new
-                    {
-                        label = "Resolved Forks",
-                        data = healthData.ForkEvents.Where(f => f.IsResolved)
-                            .Select(f => new { x = f.Timestamp.ToString("HH:mm"), y = f.ForkLength }).ToArray(),
-                        backgroundColor = "rgba(54, 162, 235, 0.8)",
-                        borderColor = "rgba(54, 162, 235, 1)",
-                        pointRadius = 4
-                    }
-                }
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = true, position = "top" },
-                    title = new { display = false }
-                },
-                scales = new
-                {
-                    y = new
-                    {
-                        beginAtZero = true,
-                        title = new { display = true, text = "Fork Length (blocks)" }
-                    },
-                    x = new
-                    {
-                        title = new { display = true, text = "Time" }
-                    }
-                }
-            }
-        };
-
-        forkResolutionChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "forkResolutionChart", chartConfig);
-    }
-
-    private async Task CreateNetworkHealthChart()
-    {
-        var chartConfig = new
-        {
-            type = "doughnut",
-            data = new
-            {
-                labels = new[] { "Node Connectivity", "Consensus Stability", "Throughput Health", "Latency Health" },
-                datasets = new[]
-                {
-                    new
-                    {
-                        data = new[] { nodeConnectivity, consensusStability, throughputHealth, latencyHealth },
-                        backgroundColor = new[]
-                        {
-                            "rgba(75, 192, 192, 0.8)",
-                            "rgba(54, 162, 235, 0.8)",
-                            "rgba(255, 206, 86, 0.8)",
-                            "rgba(153, 102, 255, 0.8)"
-                        },
-                        borderWidth = 2
-                    }
-                }
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                plugins = new
-                {
-                    legend = new { display = true, position = "bottom" },
-                    title = new { display = false }
-                }
-            }
-        };
-
-        networkHealthChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "networkHealthChart", chartConfig);
-    }
-
-    private async Task CreateConsensusStabilityChart()
-    {
-        if (healthData?.StabilityMetrics?.StabilityHistory == null) return;
-
-        var chartConfig = new
-        {
-            type = "line",
-            data = new
-            {
-                labels = healthData.StabilityMetrics.StabilityHistory.Select(s => s.Timestamp.ToString("HH:mm")).ToArray(),
-                datasets = new[]
-                {
-                    new
-                    {
-                        label = "Consensus Efficiency",
-                        data = healthData.StabilityMetrics.StabilityHistory.Select(s => s.Efficiency * 100).ToArray(),
-                        backgroundColor = "rgba(75, 192, 192, 0.2)",
-                        borderColor = "rgba(75, 192, 192, 1)",
-                        borderWidth = 2,
-                        yAxisID = "y"
-                    },
-                    new
-                    {
-                        label = "Block Time (s)",
-                        data = healthData.StabilityMetrics.StabilityHistory.Select(s => s.BlockTime).ToArray(),
-                        backgroundColor = "rgba(255, 159, 64, 0.2)",
-                        borderColor = "rgba(255, 159, 64, 1)",
-                        borderWidth = 2,
-                        yAxisID = "y1"
-                    }
-                }
-            },
-            options = new
-            {
-                responsive = true,
-                maintainAspectRatio = false,
-                interaction = new { mode = "index", intersect = false },
-                plugins = new
-                {
-                    legend = new { display = true, position = "top" },
-                    title = new { display = false }
-                },
-                scales = new
-                {
-                    y = new
-                    {
-                        type = "linear",
-                        display = true,
-                        position = "left",
-                        title = new { display = true, text = "Efficiency %" }
-                    },
-                    y1 = new
-                    {
-                        type = "linear",
-                        display = true,
-                        position = "right",
-                        title = new { display = true, text = "Block Time (s)" },
-                        grid = new { drawOnChartArea = false }
-                    },
-                    x = new
-                    {
-                        title = new { display = true, text = "Time" }
-                    }
-                }
-            }
-        };
-
-        consensusStabilityChartInstance = await chartModule.InvokeAsync<IJSObjectReference>("createChart", "consensusStabilityChart", chartConfig);
-    }
-
-    private async Task UpdateFinalityMetric(ChangeEventArgs e)
-    {
-        finalityMetric = e.Value?.ToString() ?? "average";
-        await CreateFinalityTimeChart();
-    }
-
-    private void ToggleStabilityDetails()
-    {
-        showStabilityDetails = !showStabilityDetails;
-    }
-
-    private async Task ExportFinalityData()
-    {
-        if (OnDataExported.HasDelegate)
-        {
-            await OnDataExported.InvokeAsync("finality-health-data");
-        }
-    }
-
-    private void DismissAlert(string alertId)
-    {
-        if (networkAlerts != null)
-        {
-            networkAlerts.RemoveAll(a => a.Id == alertId);
-            UpdateMetrics();
-            StateHasChanged();
-        }
-    }
-
-    // Utility methods
-    private double CalculatePercentile(List<double> values, int percentile)
-    {
-        if (values == null || !values.Any()) return 0;
-        
-        var sorted = values.OrderBy(x => x).ToList();
-        var index = (percentile / 100.0) * (sorted.Count - 1);
-        var lower = (int)Math.Floor(index);
-        var upper = (int)Math.Ceiling(index);
-        
-        if (lower == upper) return sorted[lower];
-        
-        var weight = index - lower;
-        return sorted[lower] * (1 - weight) + sorted[upper] * weight;
-    }
-
-    private string GetHealthScoreClass()
-    {
-        return networkHealthScore switch
-        {
-            >= 90 => "excellent",
-            >= 75 => "good",
-            >= 60 => "fair",
-            >= 40 => "poor",
-            _ => "critical"
-        };
-    }
-
-    private string GetHealthStatus()
-    {
-        return networkHealthScore switch
-        {
-            >= 90 => "Excellent",
-            >= 75 => "Good",
-            >= 60 => "Fair",
-            >= 40 => "Poor",
-            _ => "Critical"
-        };
-    }
-
-    private string GetComponentHealthClass(double value)
-    {
-        return value switch
-        {
-            >= 90 => "bg-success",
-            >= 75 => "bg-info",
-            >= 60 => "bg-warning",
-            _ => "bg-danger"
-        };
-    }
-
-    private string GetAlertIcon(AlertSeverity severity)
-    {
-        return severity switch
-        {
-            AlertSeverity.Critical => "fa-exclamation-circle",
-            AlertSeverity.Warning => "fa-exclamation-triangle",
-            AlertSeverity.Info => "fa-info-circle",
-            _ => "fa-question-circle"
-        };
-    }
-
-    // Mock data generation methods
-    private List<FinalityTime> GenerateFinalityTimes()
-    {
-        var finalityTimes = new List<FinalityTime>();
-        var baseTime = DateTime.Now.AddDays(-7);
-        
-        for (int i = 0; i < 100; i++)
-        {
-            finalityTimes.Add(new FinalityTime
-            {
-                Timestamp = baseTime.AddHours(i * 1.5),
-                FinalityTimeSeconds = Random.Shared.NextDouble() * 10 + 2, // 2-12 seconds
-                Confidence = Random.Shared.NextDouble() * 0.2 + 0.8, // 80-100%
-                BlockHeight = 1000 + i * Random.Shared.Next(1, 5)
-            });
-        }
-        
-        return finalityTimes;
-    }
-
-    private List<ForkEvent> GenerateForkEvents()
-    {
-        var forkEvents = new List<ForkEvent>();
-        var baseTime = DateTime.Now.AddDays(-1);
-        
-        for (int i = 0; i < 15; i++)
-        {
-            var isResolved = Random.Shared.NextDouble() > 0.3;
-            forkEvents.Add(new ForkEvent
-            {
-                Id = Guid.NewGuid().ToString(),
-                Timestamp = baseTime.AddHours(i * 1.5),
-                ForkLength = Random.Shared.Next(1, 8),
-                IsResolved = isResolved,
-                ResolutionTime = isResolved ? Random.Shared.NextDouble() * 300 + 30 : null // 30-330 seconds
-            });
-        }
-        
-        return forkEvents;
-    }
-
-    private HealthMetrics GenerateHealthMetrics()
-    {
-        return new HealthMetrics
-        {
-            NodeConnectivity = Random.Shared.NextDouble() * 20 + 80, // 80-100%
-            ConsensusStability = Random.Shared.NextDouble() * 25 + 75, // 75-100%
-            ThroughputHealth = Random.Shared.NextDouble() * 30 + 70, // 70-100%
-            LatencyHealth = Random.Shared.NextDouble() * 35 + 65 // 65-100%
-        };
-    }
-
-    private StabilityMetrics GenerateStabilityMetrics()
-    {
-        var history = new List<StabilityDataPoint>();
-        var baseTime = DateTime.Now.AddHours(-12);
-        
-        for (int i = 0; i < 24; i++)
-        {
-            history.Add(new StabilityDataPoint
-            {
-                Timestamp = baseTime.AddMinutes(i * 30),
-                Efficiency = Random.Shared.NextDouble() * 0.1 + 0.9, // 90-100%
-                BlockTime = Random.Shared.NextDouble() * 2 + 8 // 8-10 seconds
-            });
-        }
-        
-        return new StabilityMetrics
-        {
-            ConsensusEfficiency = Random.Shared.NextDouble() * 0.1 + 0.9,
-            BlockReorganizations = Random.Shared.Next(0, 5),
-            AvgBlockTime = Random.Shared.NextDouble() * 2 + 8,
-            OrphanedBlocks = Random.Shared.Next(0, 3),
-            NetworkPartitions = Random.Shared.Next(0, 2),
-            ConsensusUptime = Random.Shared.NextDouble() * 0.02 + 0.98,
-            StabilityHistory = history
-        };
-    }
-
-    private List<NetworkAlert> GenerateNetworkAlerts()
-    {
-        var alerts = new List<NetworkAlert>();
-        var severities = new[] { AlertSeverity.Critical, AlertSeverity.Warning, AlertSeverity.Info };
-        var titles = new[]
-        {
-            "High Finality Time Detected",
-            "Fork Resolution Delayed",
-            "Node Connectivity Issue",
-            "Throughput Degradation",
-            "Network Partition Detected",
-            "Block Reorganization",
-            "Consensus Efficiency Drop"
-        };
-        
-        for (int i = 0; i < Random.Shared.Next(3, 8); i++)
-        {
-            var severity = severities[Random.Shared.Next(severities.Length)];
-            var title = titles[Random.Shared.Next(titles.Length)];
-            
-            alerts.Add(new NetworkAlert
-            {
-                Id = Guid.NewGuid().ToString(),
-                Timestamp = DateTime.Now.AddMinutes(-Random.Shared.Next(1, 120)),
-                Severity = severity,
-                Title = title,
-                Message = $"Alert details for {title.ToLower()}. Monitor and investigate as needed."
-            });
-        }
-        
-        return alerts.OrderByDescending(a => a.Timestamp).ToList();
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        var instances = new[] { finalityTimeChartInstance, forkResolutionChartInstance, 
-                               networkHealthChartInstance, consensusStabilityChartInstance };
-        
-        foreach (var instance in instances)
-        {
-            if (instance != null)
-            {
-                try
-                {
-                    await instance.InvokeVoidAsync("destroy");
-                    await instance.DisposeAsync();
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"Error disposing chart: {ex.Message}");
-                }
+                var rounds = await AnalyticsSvc.GetRoundDurationSeriesAsync(simId.Value);
+                (_durationSeries, _durationLabels) = MudChartAdapter.ToRoundDurationSeries(rounds, "Round time (ms)");
             }
         }
-
-        if (chartModule != null)
+        finally
         {
-            await chartModule.DisposeAsync();
+            _loading = false;
         }
     }
 
-    // Data models
-    public class FinalityHealthData
-    {
-        public List<FinalityTime> FinalityTimes { get; set; } = new();
-        public List<ForkEvent> ForkEvents { get; set; } = new();
-        public HealthMetrics HealthMetrics { get; set; } = new();
-        public StabilityMetrics StabilityMetrics { get; set; } = new();
-        public List<NetworkAlert> NetworkAlerts { get; set; } = new();
-    }
-
-    public class FinalityTime
-    {
-        public DateTime Timestamp { get; set; }
-        public double FinalityTimeSeconds { get; set; }
-        public double Confidence { get; set; }
-        public long BlockHeight { get; set; }
-    }
-
-    public class ForkEvent
-    {
-        public string Id { get; set; } = "";
-        public DateTime Timestamp { get; set; }
-        public int ForkLength { get; set; }
-        public bool IsResolved { get; set; }
-        public double? ResolutionTime { get; set; }
-    }
-
-    public class HealthMetrics
-    {
-        public double NodeConnectivity { get; set; }
-        public double ConsensusStability { get; set; }
-        public double ThroughputHealth { get; set; }
-        public double LatencyHealth { get; set; }
-    }
-
-    public class StabilityMetrics
-    {
-        public double ConsensusEfficiency { get; set; }
-        public int BlockReorganizations { get; set; }
-        public double AvgBlockTime { get; set; }
-        public int OrphanedBlocks { get; set; }
-        public int NetworkPartitions { get; set; }
-        public double ConsensusUptime { get; set; }
-        public List<StabilityDataPoint> StabilityHistory { get; set; } = new();
-    }
-
-    public class StabilityDataPoint
-    {
-        public DateTime Timestamp { get; set; }
-        public double Efficiency { get; set; }
-        public double BlockTime { get; set; }
-    }
-
-    public class NetworkAlert
-    {
-        public string Id { get; set; } = "";
-        public DateTime Timestamp { get; set; }
-        public AlertSeverity Severity { get; set; }
-        public string Title { get; set; } = "";
-        public string Message { get; set; } = "";
-    }
-
-    public enum AlertSeverity
-    {
-        Info,
-        Warning,
-        Critical
-    }
+    private async Task RefreshAsync() => await LoadAsync();
 }

@@ -59,6 +59,14 @@ public interface IAnalyticsService
     /// Powers PerformanceBaselines.
     /// </summary>
     Task<List<ProtocolComparisonPoint>> GetProtocolComparisonAsync();
+
+    /// <summary>
+    /// Most-recently-completed simulation for the given protocol, or null if
+    /// none exist. Protocol-specific chart components use this to anchor their
+    /// round-duration / leader-distribution renders on real data without
+    /// requiring the parent page to pass a simulation ID.
+    /// </summary>
+    Task<Guid?> GetLatestSimulationByProtocolAsync(ConsensusAlgorithm protocol);
 }
 
 /// <summary>
@@ -593,5 +601,19 @@ public class AnalyticsService : IAnalyticsService
                 TotalSimulations: kvp.Value.TotalSimulations))
             .OrderBy(p => p.Protocol.ToString())
             .ToList();
+    }
+
+    public async Task<Guid?> GetLatestSimulationByProtocolAsync(ConsensusAlgorithm protocol)
+    {
+        var sims = await _simulationRunRepository.GetByAlgorithmAsync(protocol);
+        // Prefer Completed → Running → anything else; within each tier take the
+        // most recent StartedAt so the chart reflects the freshest real run.
+        var best = sims
+            .OrderBy(s => s.Status == SimulationStatus.Completed ? 0
+                       : s.Status == SimulationStatus.Running ? 1
+                       : 2)
+            .ThenByDescending(s => s.StartedAt ?? DateTime.MinValue)
+            .FirstOrDefault();
+        return best?.Id;
     }
 }
