@@ -484,9 +484,12 @@
         }
     }
 
-    private async Task ViewResults(Guid simulationId)
+    private void ViewResults(Guid simulationId)
     {
-        await JSRuntime.InvokeVoidAsync("alert", $"Viewing results for simulation {simulationId}... (Feature coming soon!)");
+        // Results live on the SimulationDashboard page (rounds, blocks, metrics,
+        // export button). Navigating there gives the user the real view instead
+        // of the previous "Feature coming soon" alert.
+        Navigation.NavigateTo($"/simulation/{simulationId}");
     }
 
     private async Task CloneSimulation(Guid simulationId)

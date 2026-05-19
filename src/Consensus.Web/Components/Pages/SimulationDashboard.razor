@@ -51,27 +51,21 @@
                     </div>
                 </div>
                 <div class="d-flex gap-2">
+                    @* Pause / Resume removed for the demo build: the underlying
+                       ISimulationService has no Pause/Resume yet (see
+                       .claude/PROGRESS.md item 5 in the Phase-4 backlog). Stop
+                       and Export are now wired to real service / API endpoints
+                       so clicking them is no longer a 1-2s fake delay. *@
                     @if (simulation?.Status == SimulationStatus.Running)
                     {
-                        <button class="btn btn-warning" @onclick="PauseSimulation" disabled="@isControllingSimulation">
-                            <i class="bi bi-pause-circle me-1"></i>
-                            @(isControllingSimulation ? "Pausing..." : "Pause")
-                        </button>
                         <button class="btn btn-danger" @onclick="StopSimulation" disabled="@isControllingSimulation">
                             <i class="bi bi-stop-circle me-1"></i>
                             @(isControllingSimulation ? "Stopping..." : "Stop")
                         </button>
                     }
-                    else if (simulation?.Status == SimulationStatus.Paused)
-                    {
-                        <button class="btn btn-success" @onclick="ResumeSimulation" disabled="@isControllingSimulation">
-                            <i class="bi bi-play-circle me-1"></i>
-                            @(isControllingSimulation ? "Resuming..." : "Resume")
-                        </button>
-                    }
                     <button class="btn btn-info" @onclick="ExportData" disabled="@isExporting">
                         <i class="bi bi-download me-1"></i>
-                        @(isExporting ? "Exporting..." : "Export")
+                        @(isExporting ? "Exporting..." : "Export JSON")
                     </button>
                 </div>
             </div>
@@ -556,45 +550,25 @@
         }
     }
 
-    // Control methods
-    private async Task PauseSimulation()
-    {
-        isControllingSimulation = true;
-        try
-        {
-            // TODO: Implement actual pause API call
-            await Task.Delay(1000);
-            await JSRuntime.InvokeVoidAsync("showToast", "Simulation paused", "warning");
-        }
-        finally
-        {
-            isControllingSimulation = false;
-        }
-    }
-
-    private async Task ResumeSimulation()
-    {
-        isControllingSimulation = true;
-        try
-        {
-            // TODO: Implement actual resume API call
-            await Task.Delay(1000);
-            await JSRuntime.InvokeVoidAsync("showToast", "Simulation resumed", "success");
-        }
-        finally
-        {
-            isControllingSimulation = false;
-        }
-    }
+    // Pause / Resume intentionally absent — ISimulationService has no equivalents
+    // yet (Phase-4 backlog). Stop and Export below are wired to real endpoints.
 
     private async Task StopSimulation()
     {
         isControllingSimulation = true;
         try
         {
-            // TODO: Implement actual stop API call
-            await Task.Delay(1000);
-            await JSRuntime.InvokeVoidAsync("showToast", "Simulation stopped", "info");
+            var ok = await SimService.StopSimulationAsync(SimulationId);
+            await JSRuntime.InvokeVoidAsync("showToast",
+                ok ? "Simulation stopped" : "Simulation could not be stopped (already finished?)",
+                ok ? "info" : "warning");
+            // Refresh from the Api so the dashboard reflects the new Stopped status.
+            await LoadSimulationAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to stop simulation {Id}", SimulationId);
+            await JSRuntime.InvokeVoidAsync("showToast", $"Stop failed: {ex.Message}", "error");
         }
         finally
         {
@@ -607,9 +581,25 @@
         isExporting = true;
         try
         {
-            // TODO: Implement actual export functionality
-            await Task.Delay(2000);
-            await JSRuntime.InvokeVoidAsync("showToast", "Data exported successfully", "success");
+            // Fetch the canonical sim payload from the Api (hydrated with nodes,
+            // blocks, consensusRounds) and hand it to the existing downloadJson
+            // helper in dashboard.js. The Api's SimulationResults POST export
+            // exists but is not on a GET path; this avoids a browser CORS round
+            // trip while still using the Api as source of truth.
+            var sim = await ApiClient.GetSimulationAsync(SimulationId);
+            if (sim == null)
+            {
+                await JSRuntime.InvokeVoidAsync("showToast", "Export failed: simulation not found", "error");
+                return;
+            }
+            var filename = $"simulation-{SimulationId:N}.json";
+            await JSRuntime.InvokeVoidAsync("downloadJson", sim, filename);
+            await JSRuntime.InvokeVoidAsync("showToast", $"Downloaded {filename}", "success");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Failed to export simulation {Id}", SimulationId);
+            await JSRuntime.InvokeVoidAsync("showToast", $"Export failed: {ex.Message}", "error");
         }
         finally
         {
