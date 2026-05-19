@@ -4,154 +4,109 @@
 @inject IBlockExplorerService BlockExplorerService
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Navigation
+@inject ISnackbar Snackbar
 
-<h1>Block Details</h1>
+<PageTitle>Block detail · Consensus Lab</PageTitle>
 
-<div class="container-fluid">
+<MudStack Spacing="4">
     @if (isLoading)
     {
-        <div class="d-flex justify-content-center align-items-center" style="min-height: 400px;">
-            <div class="text-center">
-                <div class="spinner-border text-primary" role="status" style="width: 3rem; height: 3rem;">
-                    <span class="visually-hidden">Loading...</span>
-                </div>
-                <p class="mt-3 text-muted">Loading block details...</p>
-            </div>
-        </div>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-12">
+            <MudProgressCircular Color="Color.Primary" Indeterminate="true" Size="Size.Large" />
+            <MudText Typo="Typo.body2" Color="Color.Default">Loading block details…</MudText>
+        </MudStack>
     }
     else if (!string.IsNullOrEmpty(errorMessage))
     {
-        <div class="row justify-content-center">
-            <div class="col-md-8">
-                <div class="alert alert-danger" role="alert">
-                    <h4 class="alert-heading"><i class="bi bi-exclamation-triangle"></i> Error Loading Block</h4>
-                    <p>@errorMessage</p>
-                    <hr>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-outline-danger" @onclick="LoadBlockDetails">
-                            <i class="bi bi-arrow-clockwise"></i> Retry
-                        </button>
-                        <button class="btn btn-outline-secondary" @onclick="GoBack">
-                            <i class="bi bi-arrow-left"></i> Go Back
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <MudAlert Severity="Severity.Error" Variant="Variant.Outlined" Class="my-0">
+            <MudText Typo="Typo.h6">Error loading block</MudText>
+            <MudText Typo="Typo.body2">@errorMessage</MudText>
+            <MudStack Row="true" Spacing="2" Class="mt-3">
+                <MudButton Variant="Variant.Filled" Color="Color.Error"
+                           StartIcon="@Icons.Material.Filled.Refresh"
+                           OnClick="LoadBlockDetails">Retry</MudButton>
+                <MudButton Variant="Variant.Outlined"
+                           StartIcon="@Icons.Material.Filled.ArrowBack"
+                           OnClick="GoBack">Go back</MudButton>
+            </MudStack>
+        </MudAlert>
     }
     else if (blockDetail != null)
     {
-        <!-- Header Section -->
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center">
-                    <div>
-                        <h1>
-                            <i class="bi bi-box"></i> Block #@blockDetail.BlockNumber
-                            @if (blockDetail.IsValid)
-                            {
-                                <span class="badge bg-success ms-2">Valid</span>
-                            }
-                            else
-                            {
-                                <span class="badge bg-danger ms-2">Invalid</span>
-                            }
-                        </h1>
-                        <p class="lead text-muted">
-                            Created @blockDetail.CreatedAt.ToString("MMM dd, yyyy 'at' HH:mm:ss UTC")
-                        </p>
-                    </div>
-                    <div>
-                        <button class="btn btn-outline-secondary me-2" @onclick="GoBack">
-                            <i class="bi bi-arrow-left"></i> Back to Blocks
-                        </button>
-                        <button class="btn btn-outline-primary" @onclick="CopyBlockHash">
-                            <i class="bi bi-clipboard"></i> Copy Hash
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+            <MudStack Row="true" Spacing="3" AlignItems="AlignItems.Center">
+                <MudIconButton Icon="@Icons.Material.Filled.ArrowBack" OnClick="GoBack" aria-label="Back" />
+                <MudStack Spacing="1">
+                    <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                        <MudText Typo="Typo.h4" Class="font-weight-bold">Block #@blockDetail.BlockNumber</MudText>
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                                 Color="@(blockDetail.IsValid ? Color.Success : Color.Error)">
+                            @(blockDetail.IsValid ? "Valid" : "Invalid")
+                        </MudChip>
+                    </MudStack>
+                    <MudText Typo="Typo.body2" Color="Color.Default">
+                        Created @blockDetail.CreatedAt.ToLocalTime().ToString("MMM dd, yyyy 'at' HH:mm:ss")
+                    </MudText>
+                </MudStack>
+            </MudStack>
+            <MudButton Variant="Variant.Outlined" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.ContentCopy"
+                       OnClick="CopyBlockHash">Copy hash</MudButton>
+        </MudStack>
 
-        <!-- Main Content -->
-        <div class="row">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-header">
-                        <h5><i class="bi bi-fingerprint"></i> Block Information</h5>
-                    </div>
-                    <div class="card-body">
-                        <table class="table table-striped">
-                            <tr>
-                                <td class="fw-bold" style="width: 20%;">Block Number:</td>
-                                <td>@blockDetail.BlockNumber</td>
-                            </tr>
-                            <tr>
-                                <td class="fw-bold">Hash:</td>
-                                <td>
-                                    <code class="user-select-all">@blockDetail.Hash</code>
-                                    <button class="btn btn-outline-secondary btn-sm ms-2" @onclick="CopyBlockHash">
-                                        <i class="bi bi-clipboard"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                            @if (!string.IsNullOrEmpty(blockDetail.PreviousHash))
-                            {
-                                <tr>
-                                    <td class="fw-bold">Previous Hash:</td>
-                                    <td><code class="user-select-all">@blockDetail.PreviousHash</code></td>
-                                </tr>
-                            }
-                            @if (!string.IsNullOrEmpty(blockDetail.MerkleRoot))
-                            {
-                                <tr>
-                                    <td class="fw-bold">Merkle Root:</td>
-                                    <td><code class="user-select-all">@blockDetail.MerkleRoot</code></td>
-                                </tr>
-                            }
-                            <tr>
-                                <td class="fw-bold">Created At:</td>
-                                <td>@blockDetail.CreatedAt.ToString("yyyy-MM-dd HH:mm:ss UTC")</td>
-                            </tr>
-                            <tr>
-                                <td class="fw-bold">Size:</td>
-                                <td>@blockDetail.Size bytes</td>
-                            </tr>
-                            <tr>
-                                <td class="fw-bold">Status:</td>
-                                <td>
-                                    @if (blockDetail.IsValid)
-                                    {
-                                        <span class="badge bg-success">Valid</span>
-                                    }
-                                    else
-                                    {
-                                        <span class="badge bg-danger">Invalid</span>
-                                    }
-                                </td>
-                            </tr>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.h6" Class="mb-3">
+                <MudIcon Icon="@Icons.Material.Filled.Fingerprint" Class="me-2" />
+                Block information
+            </MudText>
+            <MudSimpleTable Striped="true" Dense="true" Hover="false">
+                <tbody>
+                    <tr>
+                        <td style="width: 25%; font-weight: 600;">Block Number</td>
+                        <td>@blockDetail.BlockNumber</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight: 600;">Hash</td>
+                        <td><code style="word-break: break-all;">@blockDetail.Hash</code></td>
+                    </tr>
+                    @if (!string.IsNullOrEmpty(blockDetail.PreviousHash))
+                    {
+                        <tr>
+                            <td style="font-weight: 600;">Previous Hash</td>
+                            <td><code style="word-break: break-all;">@blockDetail.PreviousHash</code></td>
+                        </tr>
+                    }
+                    @if (!string.IsNullOrEmpty(blockDetail.MerkleRoot))
+                    {
+                        <tr>
+                            <td style="font-weight: 600;">Merkle Root</td>
+                            <td><code style="word-break: break-all;">@blockDetail.MerkleRoot</code></td>
+                        </tr>
+                    }
+                    <tr>
+                        <td style="font-weight: 600;">Created At</td>
+                        <td>@blockDetail.CreatedAt.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss")</td>
+                    </tr>
+                    <tr>
+                        <td style="font-weight: 600;">Size</td>
+                        <td>@blockDetail.Size bytes</td>
+                    </tr>
+                </tbody>
+            </MudSimpleTable>
+        </MudPaper>
     }
     else
     {
-        <div class="row justify-content-center">
-            <div class="col-md-6 text-center">
-                <div class="py-5">
-                    <i class="bi bi-exclamation-circle fs-1 text-muted"></i>
-                    <h3>Block Not Found</h3>
-                    <p class="text-muted">The requested block could not be found.</p>
-                    <button class="btn btn-primary" @onclick="GoBack">
-                        <i class="bi bi-arrow-left"></i> Go Back
-                    </button>
-                </div>
-            </div>
-        </div>
+        <MudStack AlignItems="AlignItems.Center" Class="pa-12">
+            <MudIcon Icon="@Icons.Material.Filled.SearchOff" Color="Color.Default" Size="Size.Large" />
+            <MudText Typo="Typo.h6">Block not found</MudText>
+            <MudText Typo="Typo.body2" Color="Color.Default">The requested block could not be found.</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2"
+                       StartIcon="@Icons.Material.Filled.ArrowBack"
+                       OnClick="GoBack">Back to blocks</MudButton>
+        </MudStack>
     }
-</div>
+</MudStack>
 
 @code {
     [Parameter] public Guid Id { get; set; }
@@ -179,9 +134,7 @@
         {
             isLoading = true;
             errorMessage = null;
-            
             blockDetail = await BlockExplorerService.GetBlockDetailAsync(Id);
-            
             if (blockDetail == null)
             {
                 errorMessage = "Block not found.";
@@ -205,18 +158,14 @@
             try
             {
                 await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", blockDetail.Hash);
-                await JSRuntime.InvokeVoidAsync("alert", "Block hash copied to clipboard!");
+                Snackbar.Add("Block hash copied to clipboard", Severity.Success);
             }
             catch
             {
-                // Fallback for older browsers
-                await JSRuntime.InvokeVoidAsync("prompt", "Copy this hash:", blockDetail.Hash);
+                Snackbar.Add("Could not access clipboard; copy manually.", Severity.Warning);
             }
         }
     }
 
-    private void GoBack()
-    {
-        Navigation.NavigateTo("/blocks");
-    }
+    private void GoBack() => Navigation.NavigateTo("/blocks");
 }

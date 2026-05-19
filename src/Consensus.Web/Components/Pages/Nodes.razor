@@ -3,212 +3,188 @@
 @using Consensus.Core.Enums
 @using Microsoft.AspNetCore.Authorization
 @inject IJSRuntime JSRuntime
+@inject ISnackbar Snackbar
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
-<PageTitle>Node Management - Consensus Simulator</PageTitle>
+<PageTitle>Nodes · Consensus Lab</PageTitle>
 
-<div class="container-fluid">
-    <div class="row mb-4">
-        <div class="col-12">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <h1><i class="bi bi-diagram-3"></i> Node Management</h1>
-                    <p class="lead">Manage and monitor consensus network nodes</p>
-                </div>
-                <div>
-                    <button class="btn btn-primary" @onclick="ShowAddNodeModal">
-                        <i class="bi bi-plus-circle"></i> Add New Node
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+<MudStack Spacing="6">
+    <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Start">
+        <MudStack Spacing="1">
+            <MudText Typo="Typo.h4" Class="font-weight-bold">Node Management</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Default">Monitor the nodes participating in your consensus simulations.</MudText>
+        </MudStack>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" Size="Size.Large"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="ShowAddNodeModal">
+            Add new node
+        </MudButton>
+    </MudStack>
 
-    <!-- Node Statistics -->
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card text-white bg-success">
-                <div class="card-body text-center">
-                    <h3>@onlineNodes</h3>
-                    <p>Online Nodes</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-warning">
-                <div class="card-body text-center">
-                    <h3>@offlineNodes</h3>
-                    <p>Offline Nodes</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-info">
-                <div class="card-body text-center">
-                    <h3>@synchronizingNodes</h3>
-                    <p>Synchronizing</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card text-white bg-danger">
-                <div class="card-body text-center">
-                    <h3>@faultyNodes</h3>
-                    <p>Faulty Nodes</p>
-                </div>
-            </div>
-        </div>
-    </div>
+    @* Stat tiles *@
+    <MudGrid>
+        <MudItem xs="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-success);">
+                <MudText Typo="Typo.h4" Class="font-weight-bold">@onlineNodes</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Default">Online</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-warning);">
+                <MudText Typo="Typo.h4" Class="font-weight-bold">@offlineNodes</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Default">Offline</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-info);">
+                <MudText Typo="Typo.h4" Class="font-weight-bold">@synchronizingNodes</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Default">Synchronizing</MudText>
+            </MudPaper>
+        </MudItem>
+        <MudItem xs="6" md="3">
+            <MudPaper Elevation="2" Class="pa-4" Style="border-left: 4px solid var(--mud-palette-error);">
+                <MudText Typo="Typo.h4" Class="font-weight-bold">@faultyNodes</MudText>
+                <MudText Typo="Typo.caption" Color="Color.Default">Faulty</MudText>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
 
-    <!-- Nodes Table -->
-    <div class="row">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <h5><i class="bi bi-table"></i> Network Nodes</h5>
-                        <div class="d-flex gap-2">
-                            <select class="form-select form-select-sm" @onchange="FilterByStatus">
-                                <option value="">All Status</option>
-                                <option value="Online">Online</option>
-                                <option value="Offline">Offline</option>
-                                <option value="Failed">Failed</option>
-                                <option value="Synchronizing">Synchronizing</option>
-                            </select>
-                            <select class="form-select form-select-sm" @onchange="FilterByAlgorithm">
-                                <option value="">All Algorithms</option>
-                                <option value="ProofOfWork">Proof of Work</option>
-                                <option value="ProofOfStake">Proof of Stake</option>
-                                <option value="PracticalByzantineFaultTolerance">PBFT</option>
-                                <option value="Raft">Raft</option>
-                            </select>
-                        </div>
-                    </div>
-                </div>
-                <div class="card-body">
-                    @if (filteredNodes.Any())
-                    {
-                        <div class="table-responsive">
-                            <table class="table table-striped table-hover">
-                                <thead class="table-dark">
-                                    <tr>
-                                        <th>Name</th>
-                                        <th>Status</th>
-                                        <th>Algorithm</th>
-                                        <th>Connection</th>
-                                        <th>Last Seen</th>
-                                        <th>Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    @foreach (var node in filteredNodes)
-                                    {
-                                        <tr>
-                                            <td>
-                                                <strong>@node.Name</strong>
-                                                @if (node.IsActive)
-                                                {
-                                                    <span class="badge bg-success ms-2">Active</span>
-                                                }
-                                                else
-                                                {
-                                                    <span class="badge bg-secondary ms-2">Inactive</span>
-                                                }
-                                            </td>
-                                            <td>
-                                                <span class="badge @GetStatusBadgeClass(node.Status)">
-                                                    @node.Status
-                                                </span>
-                                            </td>
-                                            <td>@node.ConsensusAlgorithm</td>
-                                            <td>
-                                                <small class="text-muted">@(node.ConnectionInfo ?? "Not specified")</small>
-                                            </td>
-                                            <td>
-                                                <small>@node.LastSeen.ToString("MMM dd, HH:mm:ss")</small>
-                                            </td>
-                                            <td>
-                                                <div class="btn-group btn-group-sm" role="group">
-                                                    <button class="btn btn-outline-primary" @onclick="() => ViewNodeDetails(node.Id)">
-                                                        <i class="bi bi-eye"></i>
-                                                    </button>
-                                                    <button class="btn btn-outline-warning" @onclick="() => EditNode(node.Id)">
-                                                        <i class="bi bi-pencil"></i>
-                                                    </button>
-                                                    @if (node.Status == NodeStatus.Online)
-                                                    {
-                                                        <button class="btn btn-outline-danger" @onclick="() => StopNode(node.Id)">
-                                                            <i class="bi bi-stop"></i>
-                                                        </button>
-                                                    }
-                                                    else
-                                                    {
-                                                        <button class="btn btn-outline-success" @onclick="() => StartNode(node.Id)">
-                                                            <i class="bi bi-play"></i>
-                                                        </button>
-                                                    }
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    }
-                                </tbody>
-                            </table>
-                        </div>
-                    }
-                    else
-                    {
-                        <div class="text-center text-muted py-4">
-                            <i class="bi bi-diagram-3 fs-1"></i>
-                            <h4>No Nodes Found</h4>
-                            <p>Add your first node to get started with consensus simulation.</p>
-                            <button class="btn btn-primary" @onclick="ShowAddNodeModal">
-                                <i class="bi bi-plus-circle"></i> Add First Node
-                            </button>
-                        </div>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+    @* Filters + table *@
+    <MudPaper Elevation="0" Outlined="true" Class="pa-4">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Class="mb-3">
+            <MudText Typo="Typo.h6">Network nodes</MudText>
+            <MudStack Row="true" Spacing="2">
+                <MudSelect T="string" Label="Status" Dense="true" Variant="Variant.Outlined"
+                           Value="@filterStatus" ValueChanged="@OnStatusFilterChanged" Style="min-width: 160px;">
+                    <MudSelectItem Value="@("")">All status</MudSelectItem>
+                    <MudSelectItem Value="@("Online")">Online</MudSelectItem>
+                    <MudSelectItem Value="@("Offline")">Offline</MudSelectItem>
+                    <MudSelectItem Value="@("Failed")">Failed</MudSelectItem>
+                    <MudSelectItem Value="@("Synchronizing")">Synchronizing</MudSelectItem>
+                </MudSelect>
+                <MudSelect T="string" Label="Algorithm" Dense="true" Variant="Variant.Outlined"
+                           Value="@filterAlgorithm" ValueChanged="@OnAlgorithmFilterChanged" Style="min-width: 200px;">
+                    <MudSelectItem Value="@("")">All algorithms</MudSelectItem>
+                    <MudSelectItem Value="@("ProofOfWork")">Proof of Work</MudSelectItem>
+                    <MudSelectItem Value="@("ProofOfStake")">Proof of Stake</MudSelectItem>
+                    <MudSelectItem Value="@("DelegatedProofOfStake")">DPoS</MudSelectItem>
+                    <MudSelectItem Value="@("PracticalByzantineFaultTolerance")">PBFT</MudSelectItem>
+                    <MudSelectItem Value="@("ProofOfElapsedTime")">PoET</MudSelectItem>
+                </MudSelect>
+            </MudStack>
+        </MudStack>
 
-<!-- Add Node Modal (would be replaced with proper modal component) -->
-<div class="modal fade @(showAddModal ? "show d-block" : "")" tabindex="-1" style="@(showAddModal ? "background-color: rgba(0,0,0,0.5);" : "")">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Add New Node</h5>
-                <button type="button" class="btn-close" @onclick="HideAddNodeModal"></button>
-            </div>
-            <div class="modal-body">
-                <form>
-                    <div class="mb-3">
-                        <label class="form-label">Node Name</label>
-                        <input type="text" class="form-control" @bind="newNodeName" placeholder="Enter node name">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Consensus Algorithm</label>
-                        <select class="form-select" @bind="newNodeAlgorithm">
-                            <option value="">Select Algorithm</option>
-                            <option value="@ConsensusAlgorithm.ProofOfWork">Proof of Work</option>
-                            <option value="@ConsensusAlgorithm.ProofOfStake">Proof of Stake</option>
-                            <option value="@ConsensusAlgorithm.PracticalByzantineFaultTolerance">PBFT</option>
-                            <option value="@ConsensusAlgorithm.Raft">Raft</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">Connection Info</label>
-                        <input type="text" class="form-control" @bind="newNodeConnection" placeholder="e.g., localhost:8080">
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" @onclick="HideAddNodeModal">Cancel</button>
-                <button type="button" class="btn btn-primary" @onclick="CreateNode">Create Node</button>
-            </div>
-        </div>
-    </div>
-</div>
+        @if (filteredNodes.Any())
+        {
+            <MudTable Items="filteredNodes" Hover="true" Breakpoint="Breakpoint.Sm">
+                <HeaderContent>
+                    <MudTh>Name</MudTh>
+                    <MudTh>Status</MudTh>
+                    <MudTh>Algorithm</MudTh>
+                    <MudTh>Connection</MudTh>
+                    <MudTh>Last seen</MudTh>
+                    <MudTh Style="text-align:right;">Actions</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Name">
+                        <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudText Typo="Typo.body2" Class="font-weight-bold">@context.Name</MudText>
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined"
+                                     Color="@(context.IsActive ? Color.Success : Color.Default)">
+                                @(context.IsActive ? "Active" : "Inactive")
+                            </MudChip>
+                        </MudStack>
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled" Color="@StatusColor(context.Status)">
+                            @context.Status
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Algorithm">@context.ConsensusAlgorithm</MudTd>
+                    <MudTd DataLabel="Connection">
+                        <MudText Typo="Typo.caption" Color="Color.Default">@(context.ConnectionInfo ?? "—")</MudText>
+                    </MudTd>
+                    <MudTd DataLabel="Last seen">
+                        <MudText Typo="Typo.caption">@context.LastSeen.ToLocalTime().ToString("MMM dd, HH:mm:ss")</MudText>
+                    </MudTd>
+                    <MudTd Style="text-align:right;">
+                        <MudStack Row="true" Spacing="1" Justify="Justify.FlexEnd">
+                            <MudTooltip Text="View">
+                                <MudIconButton Icon="@Icons.Material.Filled.Visibility" Size="Size.Small"
+                                               Color="Color.Primary"
+                                               OnClick="@(() => ViewNodeDetails(context.Id))" />
+                            </MudTooltip>
+                            <MudTooltip Text="Edit">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit" Size="Size.Small"
+                                               Color="Color.Warning"
+                                               OnClick="@(() => EditNode(context.Id))" />
+                            </MudTooltip>
+                            @if (context.Status == NodeStatus.Online)
+                            {
+                                <MudTooltip Text="Stop">
+                                    <MudIconButton Icon="@Icons.Material.Filled.Stop" Size="Size.Small"
+                                                   Color="Color.Error"
+                                                   OnClick="@(() => StopNode(context.Id))" />
+                                </MudTooltip>
+                            }
+                            else
+                            {
+                                <MudTooltip Text="Start">
+                                    <MudIconButton Icon="@Icons.Material.Filled.PlayArrow" Size="Size.Small"
+                                                   Color="Color.Success"
+                                                   OnClick="@(() => StartNode(context.Id))" />
+                                </MudTooltip>
+                            }
+                        </MudStack>
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+        else
+        {
+            <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                <MudIcon Icon="@Icons.Material.Filled.Hub" Size="Size.Large" Color="Color.Default" />
+                <MudText Typo="Typo.h6">No nodes yet</MudText>
+                <MudText Typo="Typo.body2" Color="Color.Default">
+                    Nodes are created automatically when you start a new simulation. Visit /simulations to launch one.
+                </MudText>
+                <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="mt-2"
+                           StartIcon="@Icons.Material.Filled.PlayArrow"
+                           Href="/simulations">
+                    Go to simulations
+                </MudButton>
+            </MudStack>
+        }
+    </MudPaper>
+</MudStack>
+
+@* Add-node dialog. The handlers are still placeholder alerts (nodes are
+   created by the SimulationService when a new sim starts) — surfaced as
+   a MudDialog so the chrome is consistent. *@
+<MudDialog @bind-Visible="showAddModal" Options="@(new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true, CloseButton = true })">
+    <TitleContent>
+        <MudText Typo="Typo.h6">Add a node</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudStack Spacing="3">
+            <MudTextField @bind-Value="newNodeName" Label="Node name" Variant="Variant.Outlined" />
+            <MudSelect T="ConsensusAlgorithm" Label="Consensus algorithm" Variant="Variant.Outlined"
+                       @bind-Value="newNodeAlgorithm">
+                <MudSelectItem Value="@ConsensusAlgorithm.ProofOfWork">Proof of Work</MudSelectItem>
+                <MudSelectItem Value="@ConsensusAlgorithm.ProofOfStake">Proof of Stake</MudSelectItem>
+                <MudSelectItem Value="@ConsensusAlgorithm.DelegatedProofOfStake">DPoS</MudSelectItem>
+                <MudSelectItem Value="@ConsensusAlgorithm.PracticalByzantineFaultTolerance">PBFT</MudSelectItem>
+                <MudSelectItem Value="@ConsensusAlgorithm.ProofOfElapsedTime">PoET</MudSelectItem>
+            </MudSelect>
+            <MudTextField @bind-Value="newNodeConnection" Label="Connection info" Variant="Variant.Outlined"
+                          Placeholder="e.g. localhost:8080" />
+        </MudStack>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="HideAddNodeModal">Cancel</MudButton>
+        <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="CreateNode">Create node</MudButton>
+    </DialogActions>
+</MudDialog>
 
 @code {
     private List<Node> nodes = new();
@@ -226,6 +202,10 @@
     private ConsensusAlgorithm newNodeAlgorithm;
     private string newNodeConnection = "";
 
+    // Filters
+    private string filterStatus = "";
+    private string filterAlgorithm = "";
+
     protected override async Task OnInitializedAsync()
     {
         await LoadNodes();
@@ -233,39 +213,40 @@
 
     private async Task LoadNodes()
     {
-        // TODO: Replace with actual service call
+        // Mock data for the standalone /nodes view. The real per-simulation
+        // node list is on /simulation/{id} which is wired to ISimulationService.
+        // This page exists primarily as a navigation surface for the demo.
         await Task.Delay(100);
 
-        // Mock data for demonstration
         nodes = new List<Node>
         {
-            new Node 
-            { 
-                Id = Guid.NewGuid(), 
-                Name = "Genesis Node", 
-                Status = NodeStatus.Online, 
+            new Node
+            {
+                Id = Guid.NewGuid(),
+                Name = "Genesis Node",
+                Status = NodeStatus.Online,
                 ConsensusAlgorithm = ConsensusAlgorithm.ProofOfWork,
                 ConnectionInfo = "localhost:8001",
                 IsActive = true,
                 LastSeen = DateTime.UtcNow.AddMinutes(-2),
                 SimulationRunId = Guid.NewGuid()
             },
-            new Node 
-            { 
-                Id = Guid.NewGuid(), 
-                Name = "Validator-01", 
-                Status = NodeStatus.Synchronizing, 
+            new Node
+            {
+                Id = Guid.NewGuid(),
+                Name = "Validator-01",
+                Status = NodeStatus.Synchronizing,
                 ConsensusAlgorithm = ConsensusAlgorithm.ProofOfStake,
                 ConnectionInfo = "localhost:8002",
                 IsActive = true,
                 LastSeen = DateTime.UtcNow.AddMinutes(-1),
                 SimulationRunId = Guid.NewGuid()
             },
-            new Node 
-            { 
-                Id = Guid.NewGuid(), 
-                Name = "PBFT Node", 
-                Status = NodeStatus.Failed, 
+            new Node
+            {
+                Id = Guid.NewGuid(),
+                Name = "PBFT Node",
+                Status = NodeStatus.Failed,
                 ConsensusAlgorithm = ConsensusAlgorithm.PracticalByzantineFaultTolerance,
                 ConnectionInfo = "localhost:8003",
                 IsActive = false,
@@ -274,20 +255,20 @@
             }
         };
 
-        filteredNodes = nodes;
+        ApplyFilters(filterStatus, filterAlgorithm);
         StateHasChanged();
     }
 
-    private void FilterByStatus(ChangeEventArgs e)
+    private void OnStatusFilterChanged(string value)
     {
-        var status = e.Value?.ToString();
-        ApplyFilters(status, null);
+        filterStatus = value ?? "";
+        ApplyFilters(filterStatus, filterAlgorithm);
     }
 
-    private void FilterByAlgorithm(ChangeEventArgs e)
+    private void OnAlgorithmFilterChanged(string value)
     {
-        var algorithm = e.Value?.ToString();
-        ApplyFilters(null, algorithm);
+        filterAlgorithm = value ?? "";
+        ApplyFilters(filterStatus, filterAlgorithm);
     }
 
     private void ApplyFilters(string? status, string? algorithm)
@@ -312,52 +293,40 @@
         showAddModal = false;
     }
 
-    private async Task CreateNode()
+    private void CreateNode()
     {
         if (string.IsNullOrWhiteSpace(newNodeName))
         {
-            await JSRuntime.InvokeVoidAsync("alert", "Please enter a node name.");
+            Snackbar.Add("Please enter a node name.", Severity.Warning);
             return;
         }
 
-        // TODO: Replace with actual service call
-        await JSRuntime.InvokeVoidAsync("alert", $"Creating node '{newNodeName}' with {newNodeAlgorithm}... (Feature coming soon!)");
+        Snackbar.Add($"Standalone node creation is a Phase-4 feature. Nodes are created automatically with each simulation.", Severity.Info);
         HideAddNodeModal();
     }
 
-    private async Task ViewNodeDetails(Guid nodeId)
-    {
-        await JSRuntime.InvokeVoidAsync("alert", $"Viewing details for node {nodeId}... (Feature coming soon!)");
-    }
+    private void ViewNodeDetails(Guid nodeId) =>
+        Snackbar.Add("Node details view will land in Phase 4.", Severity.Info);
 
-    private async Task EditNode(Guid nodeId)
-    {
-        await JSRuntime.InvokeVoidAsync("alert", $"Editing node {nodeId}... (Feature coming soon!)");
-    }
+    private void EditNode(Guid nodeId) =>
+        Snackbar.Add("Node editing will land in Phase 4.", Severity.Info);
 
-    private async Task StartNode(Guid nodeId)
-    {
-        await JSRuntime.InvokeVoidAsync("alert", $"Starting node {nodeId}... (Feature coming soon!)");
-    }
+    private void StartNode(Guid nodeId) =>
+        Snackbar.Add("Standalone node control is a Phase-4 feature. Start a simulation to start its nodes.", Severity.Info);
 
-    private async Task StopNode(Guid nodeId)
-    {
-        await JSRuntime.InvokeVoidAsync("alert", $"Stopping node {nodeId}... (Feature coming soon!)");
-    }
+    private void StopNode(Guid nodeId) =>
+        Snackbar.Add("Standalone node control is a Phase-4 feature. Stop the simulation to stop its nodes.", Severity.Info);
 
-    private string GetStatusBadgeClass(NodeStatus status)
+    private static Color StatusColor(NodeStatus status) => status switch
     {
-        return status switch
-        {
-            NodeStatus.Online => "bg-success",
-            NodeStatus.Offline => "bg-secondary",
-            NodeStatus.Starting => "bg-primary",
-            NodeStatus.Stopping => "bg-warning",
-            NodeStatus.Failed => "bg-danger",
-            NodeStatus.Disconnected => "bg-warning",
-            NodeStatus.Synchronizing => "bg-info",
-            NodeStatus.Maintenance => "bg-dark",
-            _ => "bg-secondary"
-        };
-    }
+        NodeStatus.Online => Color.Success,
+        NodeStatus.Offline => Color.Default,
+        NodeStatus.Starting => Color.Primary,
+        NodeStatus.Stopping => Color.Warning,
+        NodeStatus.Failed => Color.Error,
+        NodeStatus.Disconnected => Color.Warning,
+        NodeStatus.Synchronizing => Color.Info,
+        NodeStatus.Maintenance => Color.Dark,
+        _ => Color.Default,
+    };
 }

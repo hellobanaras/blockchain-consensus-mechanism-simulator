@@ -1,36 +1,21 @@
 @page "/Account/AccessDenied"
 
-<PageTitle>Access Denied - Consensus Simulator</PageTitle>
+<PageTitle>Access denied · Consensus Lab</PageTitle>
 
-<div class="container mt-5">
-    <div class="row justify-content-center">
-        <div class="col-md-6">
-            <div class="card border-warning">
-                <div class="card-header bg-warning text-dark">
-                    <h4 class="mb-0">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Access Denied
-                    </h4>
-                </div>
-                <div class="card-body text-center">
-                    <i class="fas fa-ban fa-4x text-warning mb-4"></i>
-                    <h5>You don't have permission to access this resource</h5>
-                    <p class="text-muted">
-                        You need appropriate permissions to view this page. 
-                        Please contact your administrator if you believe this is an error.
-                    </p>
-                    <div class="mt-4">
-                        <a href="/" class="btn btn-primary me-2">
-                            <i class="fas fa-home me-2"></i>
-                            Return Home
-                        </a>
-                        <a href="/Account/Logout" class="btn btn-outline-secondary">
-                            <i class="fas fa-sign-out-alt me-2"></i>
-                            Sign Out
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
+<MudStack AlignItems="AlignItems.Center" Justify="Justify.Center" Class="pa-8" Style="min-height: 70vh;">
+    <MudPaper Elevation="6" Class="pa-8 rounded-lg" Style="max-width: 520px; width: 100%;">
+        <MudStack AlignItems="AlignItems.Center" Spacing="3">
+            <MudIcon Icon="@Icons.Material.Filled.Block" Color="Color.Warning" Style="font-size: 5rem;" />
+            <MudText Typo="Typo.h5" Class="font-weight-bold">Access denied</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Default" Align="Align.Center">
+                You don't have permission to access this resource. Contact your administrator if you believe this is an error.
+            </MudText>
+            <MudStack Row="true" Spacing="2" Class="mt-2">
+                <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Home" Href="/">Return home</MudButton>
+                <MudButton Variant="Variant.Outlined" Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.Logout" Href="/Account/Logout">Sign out</MudButton>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+</MudStack>
