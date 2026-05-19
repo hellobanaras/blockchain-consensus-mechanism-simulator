@@ -169,6 +169,11 @@
 
     public async Task RegisterUser()
     {
+        // Same fix as Login.razor — the SSR redirect is implemented by
+        // throwing NavigationException; calling NavigateTo inside the
+        // catch-all swallows it as a generic error.
+        string? redirectUrl = null;
+
         try
         {
             var user = new ApplicationUser
@@ -195,7 +200,7 @@
 
                 // Sign in the user
                 await SignInManager.SignInAsync(user, isPersistent: false);
-                Navigation.NavigateTo(ReturnUrl ?? "/");
+                redirectUrl = string.IsNullOrEmpty(ReturnUrl) ? "/" : ReturnUrl;
             }
             else
             {
@@ -207,6 +212,11 @@
         {
             Logger.LogError(ex, "Error during registration for {Email}", Input.Email);
             ErrorMessage = "An error occurred while creating your account. Please try again.";
+        }
+
+        if (redirectUrl != null)
+        {
+            Navigation.NavigateTo(redirectUrl);
         }
     }
 

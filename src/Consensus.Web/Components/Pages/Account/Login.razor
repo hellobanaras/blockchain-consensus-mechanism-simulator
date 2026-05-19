@@ -147,21 +147,25 @@
 
     public async Task LoginUser()
     {
+        // Compute the post-login redirect target inside the try (which can fail
+        // for DB/Identity reasons), but perform the navigation OUTSIDE — the
+        // SSR redirect is implemented by throwing NavigationException, which a
+        // catch-all here would otherwise swallow as a generic error.
+        string? redirectUrl = null;
+
         try
         {
-            var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
-            
+            var result = await SignInManager.PasswordSignInAsync(
+                Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+
             if (result.Succeeded)
             {
                 Logger.LogInformation("User {Email} logged in successfully.", Input.Email);
-                
-                // Use JavaScript to handle navigation to avoid NavigationException
-                await Task.Delay(100); // Small delay to ensure state is updated
-                Navigation.NavigateTo(ReturnUrl ?? "/");
+                redirectUrl = string.IsNullOrEmpty(ReturnUrl) ? "/" : ReturnUrl;
             }
             else if (result.RequiresTwoFactor)
             {
-                Navigation.NavigateTo($"/Account/LoginWith2fa?returnUrl={ReturnUrl}");
+                redirectUrl = $"/Account/LoginWith2fa?returnUrl={ReturnUrl}";
             }
             else if (result.IsLockedOut)
             {
@@ -178,6 +182,11 @@
         {
             Logger.LogError(ex, "Error during login for {Email}", Input.Email);
             ErrorMessage = "An error occurred while processing your request. Please try again.";
+        }
+
+        if (redirectUrl != null)
+        {
+            Navigation.NavigateTo(redirectUrl);
         }
     }
 
