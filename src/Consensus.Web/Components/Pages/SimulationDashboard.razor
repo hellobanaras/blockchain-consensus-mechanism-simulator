@@ -13,6 +13,7 @@
 @inject ISimulationService SimService
 @inject Consensus.Web.Services.IConsensusApiClient ApiClient
 @inject INodeRepository NodeRepo
+@inject Consensus.Core.Services.IAnalyticsService Analytics
 @inject ISnackbar Snackbar
 @implements IAsyncDisposable
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
@@ -265,24 +266,52 @@
             </MudItem>
         </MudGrid>
 
-        @* Charts row — canvas IDs preserved byte-for-byte for Phase-4 JS interop. *@
+        @* Charts row — MudChart fed by the 2-second polling timer
+           (RefreshMetricsAsync → Analytics service). Re-renders on every tick
+           and on every dark-mode toggle. *@
         <MudGrid>
             <MudItem xs="12" md="6">
                 <MudPaper Elevation="0" Outlined="true" Class="pa-4">
                     <MudText Typo="Typo.h6" Class="mb-3">
                         <MudIcon Icon="@Icons.Material.Filled.ShowChart" Class="me-2" />
-                        Performance metrics
+                        Round duration over time (ms)
                     </MudText>
-                    <canvas id="performanceChart" width="400" height="200"></canvas>
+                    @if (_roundChartSeries.Count > 0 && _roundChartSeries[0].Data.Length > 0)
+                    {
+                        <MudChart ChartType="ChartType.Line"
+                                  ChartSeries="@_roundChartSeries"
+                                  XAxisLabels="@_roundChartLabels"
+                                  Width="100%" Height="280px" />
+                    }
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                            <MudIcon Icon="@Icons.Material.Filled.ShowChart" Color="Color.Default" Size="Size.Large" />
+                            <MudText Typo="Typo.body2" Color="Color.Default">Waiting for round data…</MudText>
+                        </MudStack>
+                    }
                 </MudPaper>
             </MudItem>
             <MudItem xs="12" md="6">
                 <MudPaper Elevation="0" Outlined="true" Class="pa-4">
                     <MudText Typo="Typo.h6" Class="mb-3">
                         <MudIcon Icon="@Icons.Material.Filled.PieChart" Class="me-2" />
-                        Node participation
+                        Leader distribution
                     </MudText>
-                    <canvas id="participationChart" width="400" height="200"></canvas>
+                    @if (_leaderChartData.Length > 0)
+                    {
+                        <MudChart ChartType="ChartType.Donut"
+                                  InputData="@_leaderChartData"
+                                  InputLabels="@_leaderChartLabels"
+                                  Width="280px" Height="280px" />
+                    }
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                            <MudIcon Icon="@Icons.Material.Filled.PieChart" Color="Color.Default" Size="Size.Large" />
+                            <MudText Typo="Typo.body2" Color="Color.Default">Waiting for proposer data…</MudText>
+                        </MudStack>
+                    }
                 </MudPaper>
             </MudItem>
         </MudGrid>
@@ -338,6 +367,12 @@
     private SimulationRun? simulation;
     private HubConnection? hubConnection;
     private bool isControllingSimulation = false;
+
+    // MudChart inputs — refreshed by RefreshMetricsAsync every 2 s.
+    private List<MudBlazor.ChartSeries> _roundChartSeries = new();
+    private string[] _roundChartLabels = Array.Empty<string>();
+    private double[] _leaderChartData = Array.Empty<double>();
+    private string[] _leaderChartLabels = Array.Empty<string>();
     private bool isExporting = false;
     private string logFilter = "all";
     private int overallProgress = 0;
@@ -474,6 +509,32 @@
                     overallProgress = (int)Math.Clamp(sim.Progress * 100, 0, 100);
                 }
             }
+
+            // Pull chart data from the analytics seam (Day-1 work). Sliding
+            // window: keep the last 100 rounds on the line chart so a thousand-
+            // round sim doesn't grind MudChart re-renders.
+            try
+            {
+                var roundSeries = await Analytics.GetRoundDurationSeriesAsync(SimulationId);
+                if (roundSeries.Count > 100)
+                {
+                    roundSeries = roundSeries.Skip(roundSeries.Count - 100).ToList();
+                }
+                var (rSeries, rLabels) = Consensus.Web.Services.MudChartAdapter
+                    .ToRoundDurationSeries(roundSeries, "Round duration (ms)");
+                _roundChartSeries = rSeries;
+                _roundChartLabels = rLabels;
+
+                var leaders = await Analytics.GetLeaderDistributionAsync(SimulationId);
+                var (lData, lLabels) = Consensus.Web.Services.MudChartAdapter.ToPieData(leaders);
+                _leaderChartData = lData;
+                _leaderChartLabels = lLabels;
+            }
+            catch (Exception chartEx)
+            {
+                Logger.LogDebug(chartEx, "Chart-data refresh skipped for simulation {Id}", SimulationId);
+            }
+
             await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
