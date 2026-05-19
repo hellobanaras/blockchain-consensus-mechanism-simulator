@@ -280,3 +280,50 @@ real chart data) and the chart half of item 13 (UI inner rewrites).
 - `dotnet build src/Consensus.Web` → 0 errors after each day.
 - `grep -rE 'lib/chart\.js|createMiningPerformanceChart|chart-interop' src/Consensus.Web` → no hits.
 - Smoke test plan in `.claude/plans/clever-snacking-scott.md` §Verification stays valid.
+
+---
+
+## Verification — 2026-05-19 (pre-Saturday smoke, automated half)
+
+Steps that don't need a browser were executed on the local Docker stack.
+
+✅ Step 1 — `git status` clean enough (only `.DS_Store` + planning artefacts
+   tracked); `git log --oneline -10` matches the day-by-day chart sweep +
+   fix bundles.
+✅ Step 2 — `docker pull` succeeded for SDK 9.0, ASP.NET 9.0,
+   postgres:16-alpine.
+✅ Step 3 — `docker compose down -v && up -d --build` brought up all
+   four containers; postgres healthy.
+✅ Step 4 — web logs show `Auto-migrating database`,
+   `Database migration completed`, IdentitySeeder success, and
+   `Now listening on: http://[::]:8080`. No stack traces.
+✅ HTTP smoke — `curl /Account/Login` → 200; `curl /` → 200.
+   (Initial run after Bundle 4 returned 409 with
+   "Cannot pass the parameter 'Body' to component MainLayout" — fixed in
+   commit f4323c5 by hoisting `@rendermode InteractiveServer` from the
+   layout to `<Routes />`.)
+
+API endpoints that were broken in the test report and are now clean:
+   • POST /api/SimulationResults/{id}/export → 400 with empty body (was
+     500 before B-002's DI registration in Bundle 4).
+   • GET  /api/blocks/statistics                 → 200 with valid JSON
+     (was 404 before Bundle 4's new route).
+   • GET  /api/v1/Simulations/{id}/metrics       → 404 for invalid id
+     (the SimulationDashboard fallback now talks to this).
+
+✅ Step 13 — Marp deck present (.pptx 5.0 MB, .pdf 415 KB, 19 pages).
+
+Browser steps (5–12) are still pending — the user runs through them
+on the live stack with admin@consensus-lab.dev / Admin@123!:
+
+  5. /Account/Login → sign in
+  6. /simulations → + NEW SIMULATION → Demo-PoW (PoW, 10 nodes, 2 byzantine,
+     60 rounds, FullMesh, seed=42) → submit, navigates to /simulation/{id}
+  7. Live updates within 5s, node count = 10, round counter increments
+  8. 2nd tab → Demo-PBFT (PBFT, same params, seed=42)
+  9. After ~60s Demo-PoW → Completed → psql counts > 0 on blocks /
+     consensus_rounds / event_logs
+ 10. Export PoW row → JSON contains randomSeed:42, non-empty rounds[],
+     metrics.giniCoefficient ∈ (0,1), entropy > 0, p95 > 0
+ 11. Re-run Demo-PoW seed=42 → diff leader sequence ⇒ identical
+ 12. Open the DPoS analytics page, refresh twice → Gini stable
