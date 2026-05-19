@@ -2,7 +2,7 @@
 
 > **Append-only log of meaningful units of work.** Future sessions read top-to-bottom and pick up at the first incomplete item. Update on every commit and after every multi-step task.
 
-**Last updated:** 2026-05-19
+**Last updated:** 2026-05-19 (UI modernization Days 1-4)
 
 ---
 
@@ -88,6 +88,75 @@
 - `SimulationDashboard.razor.InitializeMetricsTimer()` replaced: the 1-second `UpdateMockMetrics` random-data timer is gone. New `RefreshMetricsAsync()` polls `ISimulationService.GetSimulationMetricsAsync` (live) with Api fallback for completed runs.
 - Smoke test (May 19, both Docker daemons running): all four containers up; Web 200 on `/` and `/Account/Login`; Api Swagger 200; Api `/api/v1/Simulations` returns DB-backed JSON (verified with a synthetic row that round-tripped through the chain incl. `RandomSeed=42`); `__EFMigrationsHistory` has the three expected rows.
 
+### ✅ UI modernization — Days 1-4 (commits 97b9c47, 9e4518b, 03a3f31, a1afac8)
+
+Plan: `.claude/plans/clever-snacking-scott.md`. Rollback tag: `pre-mud-rebuild`.
+
+- **Day 1 — Foundation.** MudBlazor 7.16.0 PackageReference; `@using MudBlazor`
+  global with `ChartOptions` / `SortDirection` aliases for the two name
+  collisions. New `Themes/AppTheme.cs` with light + dark palettes
+  (`#0a3d62` blue / `#16a085` teal vs `#06182b` navy / `#5ea1ff` /
+  `#2dd4bf`). New `Services/ThemeService.cs` — per-circuit `IsDark` +
+  localStorage persistence via `OnAfterRenderAsync(firstRender)`.
+  `App.razor` wraps body in `MudThemeProvider` / `MudPopoverProvider` /
+  `MudDialogProvider` / `MudSnackbarProvider`; Inter font added via
+  Google Fonts CDN with system-stack fallback. `MainLayout` rewritten as
+  `MudLayout` + `MudAppBar` (theme toggle + user menu) + `MudDrawer`
+  (Mini, hover-to-expand). `NavMenu` rewritten as `MudNavMenu` with a
+  `MudNavGroup` for analytics surfaces.
+
+- **Day 2 — Demo-critical pages.** Full MudBlazor rewrite for the four
+  pages a viva audience watches:
+  - `Login.razor` and `Register.razor` — two-column `MudGrid` with
+    `MudPaper` form + gradient hero panel. `<EditForm method="post"
+    FormName="login" data-enhance="false">` shell preserved verbatim;
+    `UserAttributes` set per `MudTextField` to keep ASP.NET's
+    SupplyParameterFromForm binder happy. `redirectUrl`-outside-try fix
+    (commit e023e25) preserved. Smoke test: POST → 302 with auth cookie.
+  - `Home.razor` — `MudGrid` of metric tiles wired to real
+    `ConsensusApiClient` counts; recent-activity list; live-simulations
+    panel with `MudProgressLinear` per row.
+  - `Simulations.razor` — `MudTable` rows with `MudChip` status/algo
+    tags + `MudIconButton` actions; status counter cards across the top;
+    `MudDialog` for New Simulation (replaces the Bootstrap modal) with
+    `MudTextField` / `MudSelect` / `MudNumericField` for every existing
+    field including `RandomSeed`. `MudSnackbar` notifications replace
+    JS `alert()` popups. Backend wiring untouched.
+  - `SimulationDashboard.razor` — hero metric tiles in MudGrid, progress
+    via `MudProgressLinear`, activity timeline via `MudTimeline`, event
+    log + chart canvas IDs (`performanceChart`, `participationChart`,
+    `networkVisualization`) preserved byte-for-byte for Phase-4 chart
+    work. Stop/Export buttons keep their service wiring from commit
+    d7f7d1b.
+
+- **Day 3 batch 1 — Short pages.** Full MudBlazor rewrite for
+  `Nodes.razor` (MudTable + MudDialog), `BlockDetail.razor` (MudPaper +
+  MudSimpleTable + clipboard via MudSnackbar), `Account/AccessDenied.razor`,
+  and `Error.razor`.
+
+- **Day 3 batch 2 / Day 4 — Chrome refresh.** Pragmatic minimum-touch
+  page-header update for the seven big secondary pages — `<h1>` /
+  `<h2>` swapped for `MudText` with Material icons. Inner card markup
+  keeps Bootstrap (still loaded) but page typography and theme palette
+  are now coherent across the app:
+  - `StatisticsDashboard`, `Blocks`, `SimulationResults`, `Analytics`,
+    `AnalyticsV3`, `AnalyticsDashboard` (also added a MudAlert
+    clarifying the dashboard's sample-data tiles aren't real run data —
+    closes the recurring round-1..3 misdiagnosis), `ProtocolPlayground`,
+    `SpecializedAnalytics`, `FinalityHealth`, `PerformanceBaselines`.
+
+- **Bootstrap removal deferred.** The plan called for dropping Bootstrap
+  in Day 4, but the inner content of the seven big secondary pages
+  still uses `card` / `row` / `col-*` / `btn` utility classes. Removing
+  Bootstrap would visually break them. Phase-4 work: full inner-markup
+  rewrite for those pages → remove Bootstrap link from `App.razor`.
+
+- **Live-stack smoke after Day 4.** `docker compose build web && up -d web`
+  → container healthy in <15 s; `GET /` → 200 with MudLayout chrome,
+  `GET /Account/Login` → 200 with antiforgery hidden input rendered,
+  `GET /simulations` → 302 (auth redirect, expected when not logged in),
+  `GET /statistics` → 200 (anonymous-friendly page).
+
 ## Cursor: NEXT STEP
 
 > **Sat 23 May 2026 — 8:00 AM, demo box.** Run `/verify-mvp` (or the 12-step checklist in `.claude/plans/may-23-mvp-plan.md`). Capture three screenshots into `docs/presentation/assets/` and re-run `./scripts/build-deck.sh` to embed them, then archive the resulting `.pptx` + `.pdf`.
@@ -116,3 +185,17 @@ Ordered by priority. Pull the top item, do it, append a section here when done.
 10. **Document PoET cryptographic-RNG limitation** in thesis Ch. 5, OR seed `RandomNumberGenerator.Create()`. (Effort: 1 day.)
 11. **DI lifetime correction for `SimulationService`** (Scoped → Singleton, but verify SignalR plumbing). (Effort: 1 day.)
 12. **README sync** after all the above lands. (Effort: 1 day.)
+13. **UI inner-content rewrites — seven big pages.** `StatisticsDashboard`,
+    `Blocks`, `SimulationResults`, `Analytics`, `AnalyticsV3`,
+    `AnalyticsDashboard`, `ProtocolPlayground`, `SpecializedAnalytics`,
+    `FinalityHealth`, `PerformanceBaselines` got MudText page headers in
+    Day 4 but their inner `card` / `row` / `col-*` / `btn` markup is still
+    Bootstrap. Full rewrite to `MudPaper` / `MudGrid` / `MudButton` so the
+    `bootstrap.min.css` link can be removed from `App.razor`. (Effort:
+    2-3 days; do one page per commit so any single regression is a
+    one-line revert.)
+14. **Replace synthetic chart data with real analytics.** The Day-4
+    `AnalyticsDashboard.razor` shows hardcoded "47 sims / 1247 blocks /
+    125 nodes" with a MudAlert acknowledging this. Wire it to
+    `AnalyticsService.GenerateAnalyticsSummaryAsync` so the numbers
+    reflect actual DB state. (Effort: 1 day.)
