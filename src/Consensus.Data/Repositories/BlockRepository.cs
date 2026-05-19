@@ -250,11 +250,22 @@ public class BlockRepository : Repository<Block>, IBlockRepository
             .FirstOrDefaultAsync(cancellationToken);
     }
 
-    public async Task<BlockStatistics> GetBlockStatisticsAsync(Guid simulationId, CancellationToken cancellationToken = default)
+    public Task<BlockStatistics> GetGlobalBlockStatisticsAsync(CancellationToken cancellationToken = default)
+        => GetBlockStatisticsInternalAsync(simulationId: null, cancellationToken);
+
+    public Task<BlockStatistics> GetBlockStatisticsAsync(Guid simulationId, CancellationToken cancellationToken = default)
+        => GetBlockStatisticsInternalAsync(simulationId, cancellationToken);
+
+    private async Task<BlockStatistics> GetBlockStatisticsInternalAsync(Guid? simulationId, CancellationToken cancellationToken)
     {
-        var blocks = await _context.Blocks
-            .Where(b => b.SimulationRunId == simulationId)
-            .ToListAsync(cancellationToken);
+        var blocksQuery = _context.Blocks.AsQueryable();
+        var txQuery = _context.Transactions.AsQueryable();
+        if (simulationId.HasValue)
+        {
+            blocksQuery = blocksQuery.Where(b => b.SimulationRunId == simulationId.Value);
+            txQuery = txQuery.Where(t => t.SimulationRunId == simulationId.Value);
+        }
+        var blocks = await blocksQuery.ToListAsync(cancellationToken);
 
         if (!blocks.Any())
         {
@@ -272,9 +283,7 @@ public class BlockRepository : Repository<Block>, IBlockRepository
         }
 
         var sortedBlocks = blocks.OrderBy(b => b.CreatedAt).ToList();
-        var totalTransactions = await _context.Transactions
-            .Where(t => t.SimulationRunId == simulationId)
-            .CountAsync(cancellationToken);
+        var totalTransactions = await txQuery.CountAsync(cancellationToken);
 
         // Calculate average block time
         var avgBlockTime = TimeSpan.Zero;

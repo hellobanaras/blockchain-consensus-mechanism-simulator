@@ -290,7 +290,7 @@ public class BlocksController : ControllerBase
         {
             var statistics = await _blockRepository.GetBlockStatisticsAsync(simulationId, cancellationToken);
 
-            _logger.LogInformation("Retrieved block statistics for simulation {SimulationId}: {TotalBlocks} blocks", 
+            _logger.LogInformation("Retrieved block statistics for simulation {SimulationId}: {TotalBlocks} blocks",
                 simulationId, statistics.TotalBlocks);
 
             return Ok(statistics);
@@ -298,6 +298,32 @@ public class BlocksController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error retrieving block statistics for simulation {SimulationId}", simulationId);
+            return StatusCode(500, "An error occurred while retrieving block statistics");
+        }
+    }
+
+    /// <summary>
+    /// Sibling route at /api/blocks/statistics?simulationId= for the Block
+    /// Explorer's summary tiles. The Web service has always called this path;
+    /// previously only the per-simulation `simulation/{id}/statistics` route
+    /// existed, so the call returned 404 and the page rendered all-zero
+    /// summary cards (despite the block list view showing real rows).
+    /// </summary>
+    [HttpGet("statistics")]
+    public async Task<ActionResult<BlockStatistics>> GetBlockStatisticsByQuery(
+        [FromQuery] Guid? simulationId = null,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var statistics = simulationId.HasValue
+                ? await _blockRepository.GetBlockStatisticsAsync(simulationId.Value, cancellationToken)
+                : await _blockRepository.GetGlobalBlockStatisticsAsync(cancellationToken);
+            return Ok(statistics);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving block statistics (simulationId={SimulationId})", simulationId);
             return StatusCode(500, "An error occurred while retrieving block statistics");
         }
     }

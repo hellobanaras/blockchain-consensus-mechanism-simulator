@@ -36,6 +36,11 @@ builder.Services.AddScoped<IAnalyticsService, AnalyticsService>();
 // runtime-bearing SimulationService — keeping them as separate impls is
 // deliberate (see DbBackedSimulationService docstring).
 builder.Services.AddScoped<ISimulationService, DbBackedSimulationService>();
+// Export service powers SimulationResultsController POST {id}/export. Without
+// this registration the controller throws InvalidOperationException at
+// activation and the request surfaces as 500 (B-002 from the test report).
+builder.Services.AddScoped<ISimulationResultsExportService, SimulationResultsExportService>();
+builder.Services.AddScoped<ISimulationMetricsService, SimulationMetricsService>();
 
 // ─── Authentication (permissive in dev so [Authorize] resolves without JWT) ──
 // Production should swap this for the same Identity scheme Web uses or a shared

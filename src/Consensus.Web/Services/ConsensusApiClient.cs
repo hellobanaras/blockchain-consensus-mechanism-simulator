@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using Consensus.Core.Entities;
+using Consensus.Core.Models;
 
 namespace Consensus.Web.Services;
 
@@ -13,6 +14,7 @@ public interface IConsensusApiClient
 {
     Task<IReadOnlyList<SimulationRun>> GetSimulationsAsync(CancellationToken ct = default);
     Task<SimulationRun?> GetSimulationAsync(Guid simulationId, CancellationToken ct = default);
+    Task<SimulationMetrics?> GetSimulationMetricsAsync(Guid simulationId, CancellationToken ct = default);
 }
 
 public sealed class ConsensusApiClient : IConsensusApiClient
@@ -69,6 +71,30 @@ public sealed class ConsensusApiClient : IConsensusApiClient
         catch (Exception ex)
         {
             _logger.LogError(ex, "Api GET /api/Simulations/{Id} failed", simulationId);
+            return null;
+        }
+    }
+
+    public async Task<SimulationMetrics?> GetSimulationMetricsAsync(Guid simulationId, CancellationToken ct = default)
+    {
+        // SimulationDashboard's `live` ISimulationService returns null for any
+        // completed sim (its in-memory runtime has been disposed). This fallback
+        // calls the Api host's DbBackedSimulationService implementation, which
+        // builds SimulationMetrics from persisted blocks + rounds.
+        try
+        {
+            using var resp = await _http.GetAsync($"api/v1/Simulations/{simulationId}/metrics", ct);
+            if (resp.StatusCode == System.Net.HttpStatusCode.NotFound) return null;
+            if (!resp.IsSuccessStatusCode)
+            {
+                _logger.LogWarning("Api GET /api/Simulations/{Id}/metrics failed: {Status}", simulationId, resp.StatusCode);
+                return null;
+            }
+            return await resp.Content.ReadFromJsonAsync<SimulationMetrics>(JsonOptions, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Api GET /api/Simulations/{Id}/metrics failed", simulationId);
             return null;
         }
     }

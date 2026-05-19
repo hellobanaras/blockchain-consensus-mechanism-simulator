@@ -168,6 +168,12 @@ public interface IBlockRepository : IRepository<Block>
     Task<Consensus.Core.Models.BlockStatistics> GetBlockStatisticsAsync(Guid simulationId, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Gets block statistics across every simulation (the Block Explorer
+    /// summary tiles use this when no simulation filter is selected).
+    /// </summary>
+    Task<Consensus.Core.Models.BlockStatistics> GetGlobalBlockStatisticsAsync(CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Gets chain information and validation status for a simulation
     /// </summary>
     Task<Consensus.Core.Models.ChainInfo> GetChainInfoAsync(Guid simulationId, CancellationToken cancellationToken = default);

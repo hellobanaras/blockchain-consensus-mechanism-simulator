@@ -57,6 +57,13 @@ public class AnalyticsSummary
     public int TotalSimulations { get; set; }
 
     /// <summary>
+    /// Total consensus rounds across all included simulations. Distinct from
+    /// TotalBlocks because a failed round counts toward TotalRounds but
+    /// produces no block.
+    /// </summary>
+    public long TotalRounds { get; set; }
+
+    /// <summary>
     /// Total number of blocks created across all simulations
     /// </summary>
     public long TotalBlocks { get; set; }

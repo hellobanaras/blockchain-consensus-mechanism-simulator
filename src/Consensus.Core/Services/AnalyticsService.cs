@@ -115,16 +115,20 @@ public class AnalyticsService : IAnalyticsService
         // Get metrics
         var totalBlocks = await CountBlocksBySimulationsAsync(simulations);
         var totalNodes = 0;
-        
+        var totalRounds = 0L;
+
         foreach (var sim in simulations)
         {
             var nodes = await _nodeRepository.GetBySimulationRunAsync(sim.Id);
             totalNodes += nodes.Count();
+            var rounds = await _consensusRoundRepository.GetBySimulationRunAsync(sim.Id);
+            totalRounds += rounds.Count();
         }
 
         var summary = new AnalyticsSummary
         {
             TotalSimulations = simulations.Count(),
+            TotalRounds = totalRounds,
             TotalBlocks = totalBlocks,
             TotalNodes = totalNodes,
             AverageBlocksPerSimulation = simulations.Any() ? (double)totalBlocks / simulations.Count() : 0,

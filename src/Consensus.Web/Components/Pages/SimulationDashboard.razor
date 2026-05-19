@@ -509,12 +509,24 @@
             }
             else
             {
-                var sim = await ApiClient.GetSimulationAsync(SimulationId);
-                if (sim != null)
+                // For completed sims the Web's in-memory ISimulationService
+                // returns null. Fall through to the Api host's DB-backed
+                // implementation so BlockHeight reflects persisted rows
+                // instead of zero.
+                var apiMetrics = await ApiClient.GetSimulationMetricsAsync(SimulationId);
+                if (apiMetrics != null)
                 {
-                    currentMetrics.BlockHeight = sim.Blocks?.Count ?? 0;
-                    currentMetrics.CurrentRound = sim.ConsensusRounds?.Count ?? 0;
-                    overallProgress = (int)Math.Clamp(sim.Progress * 100, 0, 100);
+                    ApplyMetricsSnapshot(apiMetrics);
+                }
+                else
+                {
+                    var sim = await ApiClient.GetSimulationAsync(SimulationId);
+                    if (sim != null)
+                    {
+                        currentMetrics.BlockHeight = sim.Blocks?.Count ?? 0;
+                        currentMetrics.CurrentRound = sim.ConsensusRounds?.Count ?? 0;
+                        overallProgress = (int)Math.Clamp(sim.Progress * 100, 0, 100);
+                    }
                 }
             }
 

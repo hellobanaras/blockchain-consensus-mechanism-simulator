@@ -4,6 +4,7 @@
 @using Consensus.Web.Services
 @rendermode InteractiveServer
 @inject IConsensusApiClient ApiClient
+@inject Consensus.Core.Services.IAnalyticsService AnalyticsSvc
 @inject NavigationManager Navigation
 @inject ILogger<Home> Logger
 
@@ -206,11 +207,22 @@
                 .Take(8)
                 .ToList();
             totalNodes = sims.Sum(s => s.NodeCount);
-            // Aggregate blocks + rounds by re-fetching per-sim detail. Skipped for
-            // now to avoid N+1 — surfaced as 0 with the same caveat the old
-            // dashboard had. /simulations page has accurate per-sim counts.
-            blocksCreated = 0;
-            consensusRounds = 0;
+
+            // Aggregate blocks + rounds via the analytics summary, which does
+            // one batched DB query per algorithm group rather than an N+1 walk
+            // through every simulation detail.
+            try
+            {
+                var summary = await AnalyticsSvc.GenerateAnalyticsSummaryAsync();
+                blocksCreated = (int)summary.TotalBlocks;
+                consensusRounds = (int)summary.TotalRounds;
+            }
+            catch (Exception aex)
+            {
+                Logger.LogDebug(aex, "Analytics summary unavailable; leaving tiles at 0");
+                blocksCreated = 0;
+                consensusRounds = 0;
+            }
         }
         catch (Exception ex)
         {

@@ -1,7 +1,21 @@
 @inherits LayoutComponentBase
+@rendermode InteractiveServer
 @inject Consensus.Web.Services.ThemeService ThemeSvc
 @inject NavigationManager Navigation
 @implements IDisposable
+
+@*
+   The layout itself must run interactively for the MudBlazor providers
+   below to activate their client-side popover / dialog / snackbar
+   infrastructure. Moving the providers into the layout (Bundle 1, R-001)
+   was necessary but insufficient: the layout was still SSR-rendered, so
+   MudPopoverProvider mounted statically and threw
+   "Missing <MudPopoverProvider />" the moment any interactive page tried
+   to open a MudDialog. The `@rendermode InteractiveServer` line above
+   fixes that — the layout (and the providers it hosts) now run in the
+   interactive server circuit. The theme toggle re-evaluates correctly
+   for the same reason.
+*@
 
 @* MudBlazor providers belong at the root of the interactive render tree.
    Hosting them in `App.razor` (the static SSR host) broke MudDialog /
