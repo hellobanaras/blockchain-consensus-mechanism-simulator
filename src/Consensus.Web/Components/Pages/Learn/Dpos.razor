@@ -46,6 +46,64 @@ flowchart TD
     Reelect --> Start
     </MermaidDiagram>
 
+    <h2>Watch a round play out</h2>
+
+    <p>
+        Seven delegates rotate around the protocol coordinator (centre). Once elected,
+        each delegate takes turns producing a block in a strict order — slot 1 goes to
+        Delegate 1, slot 2 to Delegate 2, and so on. Watch the gold highlight move around
+        the ring as each delegate produces their block.
+    </p>
+
+    <ConsensusAnimation Title="Delegated PoS — round-robin block production"
+                        Actors="@_dposActors" Steps="@_dposSteps" />
+
+@code {
+    private static readonly List<ConsensusAnimation.Actor> _dposActors =
+        AnimationLayouts.RingWithCentre(
+            peripheralCount: 7,
+            centreId: "proto",
+            centreLabel: "Protocol",
+            centreColor: "#27ae60",
+            centreIcon: "🗳",
+            peripheralIdPrefix: "d",
+            peripheralLabelPrefix: "Delegate",
+            peripheralIcon: "👤");
+
+    private static ConsensusAnimation.AnimationStep SlotStep(int slot, string delegateId)
+        => new(
+            Title: $"Slot {slot}. {delegateId.ToUpper()} produces a block",
+            Description: $"It's Delegate {slot}'s turn. They build and broadcast the next block to the network; the others verify in milliseconds.",
+            Messages: AnimationLayouts.Broadcast(delegateId,
+                Enumerable.Range(1, 7).Select(i => $"d{i}").Where(id => id != delegateId).ToList(),
+                color: "#388e3c", label: "block").ToList(),
+            HighlightedActors: new HashSet<string> { delegateId });
+
+    private static readonly List<ConsensusAnimation.AnimationStep> _dposSteps = new()
+    {
+        new ConsensusAnimation.AnimationStep(
+            Title: "Election. Token holders vote for delegates",
+            Description: "Every token holder casts a stake-weighted vote. The top seven candidates become the active producers for this term. (Voting itself isn't shown — we start from the elected committee.)",
+            Messages: AnimationLayouts.Broadcast("proto", Enumerable.Range(1, 7).Select(i => $"d{i}"),
+                color: "#9b59b6", label: "elected").ToList(),
+            HighlightedActors: new HashSet<string> {"proto","d1","d2","d3","d4","d5","d6","d7"}),
+
+        SlotStep(1, "d1"),
+        SlotStep(2, "d2"),
+        SlotStep(3, "d3"),
+        SlotStep(4, "d4"),
+        SlotStep(5, "d5"),
+        SlotStep(6, "d6"),
+        SlotStep(7, "d7"),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "End of term — re-election",
+            Description: "Each term ends with another vote so unhappy token holders can swap out misbehaving delegates. A new committee takes over and the cycle repeats.",
+            Messages: new List<ConsensusAnimation.Message>(),
+            HighlightedActors: new HashSet<string> {"proto"}),
+    };
+}
+
     <h2>The election cycle</h2>
 
     <p>

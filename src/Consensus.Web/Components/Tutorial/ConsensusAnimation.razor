@@ -1,0 +1,337 @@
+@namespace Consensus.Web.Components.Tutorial
+@implements IDisposable
+
+@*
+    Generic protocol-lifecycle animation. Pages pass in a list of Actors
+    (the parties involved) and an ordered list of AnimationSteps. The
+    component renders an SVG with the actors arranged around the canvas,
+    plays a narration line per step, and animates a flock of messages
+    between actors via SVG <animateMotion>.
+
+    Auto-plays on first render. Controls let the reader pause, step, or
+    restart.
+
+    Usage:
+        <ConsensusAnimation Actors="@_actors" Steps="@_steps"
+                            Title="How a PoW round works" />
+*@
+
+<MudPaper Elevation="0" Outlined="true" Class="consensus-animation pa-3 my-4">
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-2">
+        <MudText Typo="Typo.subtitle1" Class="font-weight-bold">@Title</MudText>
+        <MudText Typo="Typo.caption" Color="Color.Default">
+            Step @(_currentStep + 1) of @Steps.Count
+        </MudText>
+    </MudStack>
+
+    @* SVG canvas. The viewBox is fixed so the layout scales cleanly down
+       to mobile widths. The `key` on the messages <g> forces Blazor to
+       throw away the old animation nodes and start fresh on each step. *@
+    <div class="animation-canvas-wrapper">
+        <svg viewBox="0 0 800 480" class="animation-canvas" role="img"
+             aria-label="@(CurrentStep?.Description ?? Title)">
+            @* Static lines connecting actors (peer mesh hint) *@
+            @if (ShowMesh)
+            {
+                <g class="mesh">
+                    @for (int i = 0; i < Actors.Count; i++)
+                    {
+                        for (int j = i + 1; j < Actors.Count; j++)
+                        {
+                            <line x1="@Actors[i].X" y1="@Actors[i].Y"
+                                  x2="@Actors[j].X" y2="@Actors[j].Y"
+                                  class="mesh-line" />
+                        }
+                    }
+                </g>
+            }
+
+            @* Actors *@
+            @foreach (var actor in Actors)
+            {
+                var isHighlighted = CurrentStep?.HighlightedActors?.Contains(actor.Id) == true;
+                var classes = "actor" + (isHighlighted ? " highlighted" : "");
+                <g class="@classes">
+                    <circle cx="@actor.X.ToString(CI)" cy="@actor.Y.ToString(CI)"
+                            r="@actor.Radius.ToString(CI)"
+                            class="actor-bg" style="fill: @actor.Color;" />
+                    @if (!string.IsNullOrEmpty(actor.Icon))
+                    {
+                        @((MarkupString)$"<text x=\"{actor.X.ToString(CI)}\" y=\"{(actor.Y - 4).ToString(CI)}\" text-anchor=\"middle\" class=\"actor-icon\">{System.Net.WebUtility.HtmlEncode(actor.Icon)}</text>")
+                    }
+                    @((MarkupString)$"<text x=\"{actor.X.ToString(CI)}\" y=\"{(actor.Y + (string.IsNullOrEmpty(actor.Icon) ? 4 : 16)).ToString(CI)}\" text-anchor=\"middle\" class=\"actor-label\">{System.Net.WebUtility.HtmlEncode(actor.Label)}</text>")
+                    @if (!string.IsNullOrEmpty(actor.SubLabel))
+                    {
+                        @((MarkupString)$"<text x=\"{actor.X.ToString(CI)}\" y=\"{(actor.Y + actor.Radius + 14).ToString(CI)}\" text-anchor=\"middle\" class=\"actor-sublabel\">{System.Net.WebUtility.HtmlEncode(actor.SubLabel)}</text>")
+                    }
+                </g>
+            }
+
+            @* Messages — re-keyed on every step so animateMotion replays *@
+            @if (CurrentStep != null)
+            {
+                <g class="messages" @key="_currentStep">
+                    @foreach (var msg in CurrentStep.Messages)
+                    {
+                        var from = ActorById(msg.FromId);
+                        var to = ActorById(msg.ToId);
+                        if (from is null || to is null) { continue; }
+                        var path = $"M {from.X.ToString(CI)} {from.Y.ToString(CI)} L {to.X.ToString(CI)} {to.Y.ToString(CI)}";
+                        var dur = (msg.DurationMs / 1000.0).ToString("0.00", CI) + "s";
+                        var delay = (msg.DelayMs / 1000.0).ToString("0.00", CI) + "s";
+                        <g>
+                            <path d="@path" class="msg-path" stroke="@msg.Color" />
+                            <circle r="9" class="msg-bubble" fill="@msg.Color">
+                                <animateMotion dur="@dur" begin="@delay" fill="freeze"
+                                               keyTimes="0;1" keySplines="0.4 0 0.2 1"
+                                               calcMode="spline" path="@path" />
+                                <animate attributeName="opacity" from="0" to="1"
+                                         begin="@delay" dur="0.15s" fill="freeze" />
+                            </circle>
+                            @if (!string.IsNullOrEmpty(msg.Label))
+                            {
+                                var midX = (from.X + to.X) / 2;
+                                var midY = (from.Y + to.Y) / 2;
+                                @((MarkupString)$"<text x=\"{midX.ToString(CI)}\" y=\"{midY.ToString(CI)}\" class=\"msg-label\" fill=\"{msg.Color}\">{System.Net.WebUtility.HtmlEncode(msg.Label)}<animate attributeName=\"opacity\" from=\"0\" to=\"1\" begin=\"{delay}\" dur=\"0.2s\" fill=\"freeze\" /></text>")
+                            }
+                        </g>
+                    }
+                </g>
+            }
+        </svg>
+    </div>
+
+    @* Narration + controls *@
+    <div class="narration mt-2 px-2">
+        <MudText Typo="Typo.body2" Class="font-weight-medium" Color="Color.Primary">
+            @CurrentStep?.Title
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Default" Class="step-description">
+            @CurrentStep?.Description
+        </MudText>
+    </div>
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.Center"
+              Spacing="1" Class="mt-3">
+        <MudIconButton Icon="@Icons.Material.Filled.SkipPrevious" Size="Size.Small"
+                       OnClick="Previous" Disabled="@(_currentStep == 0)"
+                       aria-label="Previous step" />
+        <MudIconButton Icon="@(_isPlaying ? Icons.Material.Filled.Pause : Icons.Material.Filled.PlayArrow)"
+                       Color="Color.Primary" Size="Size.Medium"
+                       OnClick="TogglePlay"
+                       aria-label="@(_isPlaying ? "Pause" : "Play")" />
+        <MudIconButton Icon="@Icons.Material.Filled.SkipNext" Size="Size.Small"
+                       OnClick="Next" Disabled="@(_currentStep == Steps.Count - 1)"
+                       aria-label="Next step" />
+        <MudIconButton Icon="@Icons.Material.Filled.RestartAlt" Size="Size.Small"
+                       OnClick="Reset" aria-label="Restart" />
+        <MudProgressLinear Color="Color.Primary" Class="progress-bar mx-2"
+                           Value="@((_currentStep + 1) * 100.0 / Math.Max(1, Steps.Count))" />
+    </MudStack>
+</MudPaper>
+
+@code {
+    [Parameter, EditorRequired] public string Title { get; set; } = "";
+    [Parameter] public List<Actor> Actors { get; set; } = new();
+    [Parameter] public List<AnimationStep> Steps { get; set; } = new();
+    [Parameter] public bool AutoPlay { get; set; } = true;
+    [Parameter] public bool ShowMesh { get; set; } = false;
+    [Parameter] public int StepDurationMs { get; set; } = 2200;
+
+    private int _currentStep = 0;
+    private bool _isPlaying;
+    private System.Threading.Timer? _autoTimer;
+
+    private static readonly System.Globalization.CultureInfo CI =
+        System.Globalization.CultureInfo.InvariantCulture;
+
+    private AnimationStep? CurrentStep =>
+        Steps.Count > 0 && _currentStep < Steps.Count ? Steps[_currentStep] : null;
+
+    private Actor? ActorById(string id) => Actors.FirstOrDefault(a => a.Id == id);
+
+    protected override void OnInitialized()
+    {
+        if (AutoPlay && Steps.Count > 0)
+        {
+            _isPlaying = true;
+            StartAutoTimer();
+        }
+    }
+
+    private void StartAutoTimer()
+    {
+        _autoTimer?.Dispose();
+        _autoTimer = new System.Threading.Timer(_ => InvokeAsync(AdvanceFromTimer),
+            null, StepDurationMs, StepDurationMs);
+    }
+
+    private void StopAutoTimer()
+    {
+        _autoTimer?.Dispose();
+        _autoTimer = null;
+    }
+
+    private async Task AdvanceFromTimer()
+    {
+        if (_currentStep < Steps.Count - 1)
+        {
+            _currentStep++;
+            await InvokeAsync(StateHasChanged);
+        }
+        else
+        {
+            _isPlaying = false;
+            StopAutoTimer();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void TogglePlay()
+    {
+        _isPlaying = !_isPlaying;
+        if (_isPlaying)
+        {
+            if (_currentStep >= Steps.Count - 1) { _currentStep = 0; }
+            StartAutoTimer();
+        }
+        else
+        {
+            StopAutoTimer();
+        }
+    }
+
+    private void Next()
+    {
+        if (_currentStep < Steps.Count - 1) _currentStep++;
+        StopAutoTimer();
+        _isPlaying = false;
+    }
+
+    private void Previous()
+    {
+        if (_currentStep > 0) _currentStep--;
+        StopAutoTimer();
+        _isPlaying = false;
+    }
+
+    private void Reset()
+    {
+        _currentStep = 0;
+        StopAutoTimer();
+        _isPlaying = false;
+    }
+
+    public void Dispose() => StopAutoTimer();
+
+    // ─── Data shapes pages pass in ─────────────────────────────────────────
+
+    public record Actor(
+        string Id,
+        string Label,
+        double X,
+        double Y,
+        string Color,
+        string? Icon = null,
+        string? SubLabel = null,
+        double Radius = 32);
+
+    public record Message(
+        string FromId,
+        string ToId,
+        string Color,
+        string? Label = null,
+        int DelayMs = 0,
+        int DurationMs = 900);
+
+    public record AnimationStep(
+        string Title,
+        string Description,
+        List<Message> Messages,
+        HashSet<string>? HighlightedActors = null);
+}
+
+<style>
+    .consensus-animation .animation-canvas-wrapper {
+        background: var(--mud-palette-background-grey);
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .consensus-animation .animation-canvas {
+        width: 100%;
+        height: auto;
+        display: block;
+    }
+
+    .consensus-animation .mesh-line {
+        stroke: var(--mud-palette-text-disabled);
+        stroke-opacity: 0.15;
+        stroke-width: 1;
+    }
+
+    .consensus-animation .actor-bg {
+        transition: r 0.3s ease, stroke 0.3s ease, filter 0.3s ease;
+        stroke: rgba(0, 0, 0, 0.15);
+        stroke-width: 1.5;
+    }
+
+    .consensus-animation .actor.highlighted .actor-bg {
+        stroke: #ffd54f;
+        stroke-width: 5;
+        filter: drop-shadow(0 0 12px #ffd54f);
+    }
+
+    .consensus-animation .actor-icon {
+        font-size: 18px;
+        fill: white;
+        font-weight: 700;
+        font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    .consensus-animation .actor-label {
+        font-size: 12px;
+        fill: white;
+        font-weight: 600;
+        font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    .consensus-animation .actor-sublabel {
+        font-size: 11px;
+        fill: var(--mud-palette-text-secondary);
+        font-family: 'Inter', system-ui, sans-serif;
+    }
+
+    .consensus-animation .msg-path {
+        stroke-width: 1.5;
+        stroke-dasharray: 4 3;
+        opacity: 0.4;
+        fill: none;
+    }
+
+    .consensus-animation .msg-bubble {
+        opacity: 0;
+        filter: drop-shadow(0 0 6px currentColor);
+    }
+
+    .consensus-animation .msg-label {
+        font-size: 11px;
+        font-weight: 600;
+        text-anchor: middle;
+        opacity: 0;
+        font-family: 'Inter', system-ui, sans-serif;
+        paint-order: stroke;
+        stroke: var(--mud-palette-background);
+        stroke-width: 4;
+    }
+
+    .consensus-animation .step-description {
+        min-height: 3em;
+    }
+
+    .consensus-animation .progress-bar {
+        flex-grow: 1;
+        max-width: 220px;
+    }
+</style>

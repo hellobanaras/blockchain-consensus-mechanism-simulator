@@ -47,6 +47,83 @@ flowchart TD
     Slash --> Start
     </MermaidDiagram>
 
+    <h2>Watch a round play out</h2>
+
+    <p>
+        Six validators stand around the protocol (centre). Each has a different stake (the
+        number under their label). The protocol runs a weighted lottery, picks Validator 4
+        (who has the largest stake here), and they propose a block. The others attest, and
+        the block is committed.
+    </p>
+
+    <ConsensusAnimation Title="Proof of Stake — weighted lottery + attestations"
+                        Actors="@_posActors" Steps="@_posSteps" />
+
+@code {
+    private static readonly List<ConsensusAnimation.Actor> _posActors = BuildPosActors();
+
+    private static List<ConsensusAnimation.Actor> BuildPosActors()
+    {
+        var ring = AnimationLayouts.RingWithCentre(
+            peripheralCount: 6,
+            centreId: "proto",
+            centreLabel: "Protocol",
+            centreColor: "#27ae60",
+            centreIcon: "🎯",
+            peripheralIdPrefix: "v",
+            peripheralLabelPrefix: "Validator",
+            peripheralIcon: "🪙");
+        var stakes = new[] { "stake 100", "stake 50", "stake 80", "stake 250", "stake 70", "stake 120" };
+        for (int i = 1; i < ring.Count; i++)
+        {
+            ring[i] = ring[i] with { SubLabel = stakes[i - 1] };
+        }
+        return ring;
+    }
+
+    private static readonly List<ConsensusAnimation.AnimationStep> _posSteps = new()
+    {
+        new ConsensusAnimation.AnimationStep(
+            Title: "1. Validators have already staked",
+            Description: "Each validator has locked up some coins as a deposit. The bigger the stake, the higher their odds of being picked in the next lottery.",
+            Messages: new List<ConsensusAnimation.Message>(),
+            HighlightedActors: new HashSet<string> {"v1","v2","v3","v4","v5","v6"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "2. Protocol runs the weighted lottery",
+            Description: "The protocol uses a VRF (verifiable random function) to roll a fair winner. Validator 4 has the biggest stake — and this round, the dice land on them.",
+            Messages: new List<ConsensusAnimation.Message>
+            {
+                new("proto", "v4", "#9b59b6", "pick!", DelayMs: 0, DurationMs: 1000),
+            },
+            HighlightedActors: new HashSet<string> {"proto","v4"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "3. Validator 4 proposes a block",
+            Description: "The chosen validator builds a new block from pending transactions and broadcasts it to every peer for verification.",
+            Messages: AnimationLayouts.Broadcast("v4", new[] {"v1","v2","v3","v5","v6"},
+                color: "#388e3c", label: "block").ToList(),
+            HighlightedActors: new HashSet<string> {"v4"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "4. Validators attest (sign approval)",
+            Description: "Each other validator verifies the block and sends back an attestation — their signature saying \"I agree this is valid\".",
+            Messages: new[] {"v1","v2","v3","v5","v6"}
+                .Select((id, i) => new ConsensusAnimation.Message(id, "v4", "#1976d2", "attest", DelayMs: i * 80, DurationMs: 900))
+                .ToList(),
+            HighlightedActors: new HashSet<string> {"v1","v2","v3","v5","v6"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "5. Block is finalized, proposer rewarded",
+            Description: "Once enough attestations are gathered, the block is finalized. Validator 4 earns a small reward; everyone moves on to the next slot.",
+            Messages: new List<ConsensusAnimation.Message>
+            {
+                new("proto", "v4", "#f1c40f", "reward", DelayMs: 0, DurationMs: 900),
+            },
+            HighlightedActors: new HashSet<string> {"v1","v2","v3","v4","v5","v6","proto"}),
+    };
+}
+
     <h2>What "slashing" means</h2>
 
     <p>

@@ -50,6 +50,81 @@ flowchart TD
     Reject --> Start
     </MermaidDiagram>
 
+    <h2>Watch a round play out</h2>
+
+    <p>
+        Six validators each ask their TEE chip for a random wait time. The numbers under
+        each node show how long they have to sleep this round. Whoever drew the shortest
+        wait wakes up first, gets a signed certificate from their TEE, and broadcasts the
+        block to everyone else.
+    </p>
+
+    <ConsensusAnimation Title="Proof of Elapsed Time — shortest waiter wins"
+                        Actors="@_poetActors" Steps="@_poetSteps" />
+
+@code {
+    private static readonly List<ConsensusAnimation.Actor> _poetActors = BuildPoetActors();
+
+    private static List<ConsensusAnimation.Actor> BuildPoetActors()
+    {
+        var ring = AnimationLayouts.RingWithCentre(
+            peripheralCount: 6,
+            centreId: "tee",
+            centreLabel: "Intel SGX",
+            centreColor: "#8e44ad",
+            centreIcon: "🔒",
+            peripheralIdPrefix: "n",
+            peripheralLabelPrefix: "Node",
+            peripheralIcon: "⏱");
+        // Each node's "wait time" appears under its label.
+        var waits = new[] { "wait 18s", "wait 7s", "wait 24s", "wait 11s", "wait 31s", "wait 14s" };
+        for (int i = 1; i < ring.Count; i++)
+        {
+            ring[i] = ring[i] with { SubLabel = waits[i - 1] };
+        }
+        return ring;
+    }
+
+    private static readonly List<ConsensusAnimation.AnimationStep> _poetSteps = new()
+    {
+        new ConsensusAnimation.AnimationStep(
+            Title: "1. Each node asks its TEE for a wait time",
+            Description: "Every node calls into its hardware-protected Trusted Execution Environment (Intel SGX). The TEE rolls a fair random wait time and returns it sealed.",
+            Messages: AnimationLayouts.Broadcast("tee", new[] {"n1","n2","n3","n4","n5","n6"},
+                color: "#9b59b6", label: "wait").ToList(),
+            HighlightedActors: new HashSet<string> {"tee"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "2. Every node sleeps its assigned time",
+            Description: "Each node waits exactly the number of seconds its TEE prescribed. Node 2 drew 7s — the shortest — so they wake up first.",
+            Messages: new List<ConsensusAnimation.Message>(),
+            HighlightedActors: new HashSet<string> {"n1","n2","n3","n4","n5","n6"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "3. Node 2's timer expires — they win!",
+            Description: "Node 2 wakes up, asks the TEE for a signed certificate proving they really did wait that long, and builds a block.",
+            Messages: new List<ConsensusAnimation.Message>
+            {
+                new("n2", "tee", "#9b59b6", "ack", DelayMs: 0, DurationMs: 700),
+                new("tee", "n2", "#9b59b6", "cert", DelayMs: 700, DurationMs: 700),
+            },
+            HighlightedActors: new HashSet<string> {"n2","tee"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "4. Winner broadcasts block + TEE attestation",
+            Description: "Node 2 sends the block plus the TEE-signed certificate to every other node. Anyone can verify the attestation against Intel's hardware key.",
+            Messages: AnimationLayouts.Broadcast("n2", new[] {"n1","n3","n4","n5","n6"},
+                color: "#388e3c", label: "block+cert").ToList(),
+            HighlightedActors: new HashSet<string> {"n2"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "5. Others verify and accept",
+            Description: "Each peer checks the TEE signature in milliseconds. The block is added; everyone asks their TEE for a fresh wait time and the cycle starts again.",
+            Messages: new List<ConsensusAnimation.Message>(),
+            HighlightedActors: new HashSet<string> {"n1","n2","n3","n4","n5","n6","tee"}),
+    };
+}
+
     <h2>The Trusted Execution Environment</h2>
 
     <p>

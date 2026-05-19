@@ -49,6 +49,66 @@ flowchart TD
     Reward --> Start
     </MermaidDiagram>
 
+    <h2>Watch a round play out</h2>
+
+    <p>
+        The animation below shows one PoW round in slow motion. Six miners stand around a
+        sender (centre). When the sender announces new transactions, all six start hashing.
+        One of them (highlighted gold) gets lucky and finds a valid nonce, then broadcasts
+        the winning block to everyone else. Tap <strong>Play</strong> to watch it run, or use
+        the step controls to walk through phase by phase.
+    </p>
+
+    <ConsensusAnimation Title="Proof of Work — one round, six miners"
+                        Actors="@_powActors" Steps="@_powSteps" />
+
+@code {
+    private static readonly List<ConsensusAnimation.Actor> _powActors =
+        AnimationLayouts.RingWithCentre(
+            peripheralCount: 6,
+            centreId: "user",
+            centreLabel: "User",
+            centreColor: "#34495e",
+            centreIcon: "👛",
+            peripheralIdPrefix: "m",
+            peripheralLabelPrefix: "Miner",
+            peripheralIcon: "⛏");
+
+    private static readonly List<ConsensusAnimation.AnimationStep> _powSteps = new()
+    {
+        new ConsensusAnimation.AnimationStep(
+            Title: "1. New transactions arrive",
+            Description: "A user broadcasts pending transactions to every miner in the network.",
+            Messages: AnimationLayouts.Broadcast("user", new[] {"m1","m2","m3","m4","m5","m6"},
+                color: "#1976d2", label: "tx").ToList()),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "2. Every miner starts hashing",
+            Description: "Each miner packages the transactions into a candidate block and starts trying nonces, racing for a hash with enough leading zeros.",
+            Messages: new List<ConsensusAnimation.Message>(),
+            HighlightedActors: new HashSet<string> {"m1","m2","m3","m4","m5","m6"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "3. Miner 3 finds the winning nonce!",
+            Description: "After billions of guesses, one miner stumbles onto a nonce whose hash starts with enough zeros. They win this round.",
+            Messages: new List<ConsensusAnimation.Message>(),
+            HighlightedActors: new HashSet<string> {"m3"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "4. Winner broadcasts the new block",
+            Description: "Miner 3 sends the block — transactions + winning nonce + hash — to every other miner.",
+            Messages: AnimationLayouts.Broadcast("m3", new[] {"m1","m2","m4","m5","m6","user"},
+                color: "#388e3c", label: "block").ToList(),
+            HighlightedActors: new HashSet<string> {"m3"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "5. Everyone verifies and accepts",
+            Description: "Each miner checks the hash in milliseconds. The block is added to the chain; Miner 3 earns the reward; everyone starts hashing the next block.",
+            Messages: new List<ConsensusAnimation.Message>(),
+            HighlightedActors: new HashSet<string> {"m1","m2","m3","m4","m5","m6","user"}),
+    };
+}
+
     <p>
         The hash function is the key. PoW uses a function called <strong>SHA-256</strong>
         which acts like a number scrambler: feed it any input, get a 256-bit output that looks

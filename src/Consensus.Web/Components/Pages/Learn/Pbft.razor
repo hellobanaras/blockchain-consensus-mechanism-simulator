@@ -81,6 +81,70 @@ sequenceDiagram
     P-->>C: Reply
     </MermaidDiagram>
 
+    <h2>Watch a round play out</h2>
+
+    <p>
+        A four-node PBFT cluster: one <strong>primary</strong> (centre-of-canvas in this
+        layout) and three <strong>replicas</strong>. A client sits at the top. Watch the
+        three voting phases play out — notice how the message volume goes up sharply in
+        Prepare and Commit because every node talks to every other node.
+    </p>
+
+    <ConsensusAnimation Title="PBFT — three-phase commit (n = 4, f = 1)"
+                        Actors="@_pbftActors" Steps="@_pbftSteps" />
+
+@code {
+    private static readonly List<ConsensusAnimation.Actor> _pbftActors = new()
+    {
+        // Client at top, primary in centre, replicas around.
+        new ConsensusAnimation.Actor("client", "Client", 400, 60, "#34495e", "👤", Radius: 30),
+        new ConsensusAnimation.Actor("p",       "Primary", 400, 240, "#e67e22", "★", Radius: 38),
+        new ConsensusAnimation.Actor("r1",      "Replica 1", 200, 200, "#1f7ad8", "•"),
+        new ConsensusAnimation.Actor("r2",      "Replica 2", 600, 200, "#1f7ad8", "•"),
+        new ConsensusAnimation.Actor("r3",      "Replica 3", 400, 420, "#1f7ad8", "•"),
+    };
+
+    private static readonly string[] _pbftQuorum = { "p", "r1", "r2", "r3" };
+
+    private static readonly List<ConsensusAnimation.AnimationStep> _pbftSteps = new()
+    {
+        new ConsensusAnimation.AnimationStep(
+            Title: "1. Client → Primary: request",
+            Description: "A client sends a new transaction to whichever node is currently the primary (rotates each block).",
+            Messages: new List<ConsensusAnimation.Message>
+            {
+                new("client", "p", "#34495e", "request", DelayMs: 0, DurationMs: 900),
+            },
+            HighlightedActors: new HashSet<string> {"client", "p"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "2. Pre-Prepare: primary broadcasts the proposal",
+            Description: "The primary packages the request into a candidate block and sends a PRE-PREPARE to every replica.",
+            Messages: AnimationLayouts.Broadcast("p", new[] {"r1","r2","r3"},
+                color: "#9b59b6", label: "PRE-PREPARE").ToList(),
+            HighlightedActors: new HashSet<string> {"p"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "3. Prepare: every node broadcasts to every other node",
+            Description: "Each replica verifies the block and broadcasts a PREPARE to all peers — including the primary. A node becomes \"prepared\" once it sees 2f matching Prepares.",
+            Messages: AnimationLayouts.AllToAll(_pbftQuorum, color: "#1976d2", label: "PREPARE", staggerMs: 25).ToList(),
+            HighlightedActors: new HashSet<string> {"p","r1","r2","r3"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "4. Commit: another round of all-to-all messages",
+            Description: "Once prepared, each node sends a COMMIT to everyone. A node commits the block once it has received 2f+1 matching Commits — that's the irreversible-finality moment.",
+            Messages: AnimationLayouts.AllToAll(_pbftQuorum, color: "#388e3c", label: "COMMIT", staggerMs: 25).ToList(),
+            HighlightedActors: new HashSet<string> {"p","r1","r2","r3"}),
+
+        new ConsensusAnimation.AnimationStep(
+            Title: "5. Reply to client",
+            Description: "Once committed, each node sends its reply back to the client. The block is now final — it will never be reverted, even if up to one node turns out to be Byzantine.",
+            Messages: AnimationLayouts.Broadcast("p", new[] {"client"},
+                color: "#27ae60", label: "reply").ToList(),
+            HighlightedActors: new HashSet<string> {"p","r1","r2","r3","client"}),
+    };
+}
+
     <p>
         Let's walk through it for a network of <strong>n = 4</strong> nodes, of which one might
         be Byzantine (lying or crashed). In PBFT we need <em>3f+1</em> nodes to tolerate
