@@ -22,7 +22,12 @@
        still resolve (their pages are kept for old deep-links) but they're
        not in the IA. *@
     <MudNavGroup Title="Analytics" Icon="@Icons.Material.Filled.QueryStats" Expanded="true">
-        <MudNavLink Href="analytics-v3" Icon="@Icons.Material.Filled.BarChart">Dashboard</MudNavLink>
+        @* Labelled "Overview" rather than "Dashboard" so it doesn't collide
+           with the top-level "Dashboard" entry (which is the app's landing
+           page, Home.razor at `/`). Both pointed at different routes but
+           used the same word, which is what triggered the "why two
+           dashboards?" sidebar audit. *@
+        <MudNavLink Href="analytics-v3" Icon="@Icons.Material.Filled.BarChart">Overview</MudNavLink>
         <MudNavLink Href="specialized-analytics" Icon="@Icons.Material.Filled.Biotech">Specialized</MudNavLink>
         <MudNavLink Href="performance-baselines" Icon="@Icons.Material.Filled.Speed">Performance Baselines</MudNavLink>
         <MudNavLink Href="finality-health" Icon="@Icons.Material.Filled.HealthAndSafety">Finality &amp; Health</MudNavLink>
