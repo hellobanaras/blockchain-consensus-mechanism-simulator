@@ -1,8 +1,10 @@
 @page "/statistics"
 @using Consensus.Core.Models
 @using Consensus.Core.Enums
+@using Consensus.Core.Services
 @using Consensus.Web.Services
 @inject IBlockExplorerService BlockExplorerService
+@inject IAnalyticsService AnalyticsSvc
 @inject IJSRuntime JSRuntime
 @inject NavigationManager Navigation
 
@@ -41,7 +43,68 @@
     }
     else
     {
-        <!-- Summary Cards -->
+        @* System-wide overview row — sourced from IAnalyticsService.
+           GenerateAnalyticsSummaryAsync. Previously this page showed only
+           block stats and ignored simulation / node / round totals, so the
+           four hero cards repeated info already on /analytics and read
+           "0" until the user remembered Block Explorer covers the same
+           data. *@
+        <div class="row mb-4">
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-dark text-white">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-0">Total Simulations</h5>
+                                <h2 class="mb-0">@analytics.TotalSimulations.ToString("N0")</h2>
+                            </div>
+                            <div class="ms-3"><i class="bi bi-play-circle fs-1"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-dark text-white">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-0">Total Rounds</h5>
+                                <h2 class="mb-0">@analytics.TotalRounds.ToString("N0")</h2>
+                            </div>
+                            <div class="ms-3"><i class="bi bi-arrow-repeat fs-1"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-dark text-white">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-0">Total Nodes</h5>
+                                <h2 class="mb-0">@analytics.TotalNodes.ToString("N0")</h2>
+                            </div>
+                            <div class="ms-3"><i class="bi bi-diagram-3 fs-1"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-3 col-md-6 mb-3">
+                <div class="card bg-dark text-white">
+                    <div class="card-body">
+                        <div class="d-flex align-items-center">
+                            <div class="flex-grow-1">
+                                <h5 class="card-title mb-0">Avg Sim Duration</h5>
+                                <h2 class="mb-0">@analytics.AverageSimulationDuration.ToString("F1")s</h2>
+                            </div>
+                            <div class="ms-3"><i class="bi bi-stopwatch fs-1"></i></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* Block-level stats row *@
         <div class="row mb-4">
             <div class="col-lg-3 col-md-6 mb-3">
                 <div class="card bg-primary text-white">
@@ -325,6 +388,8 @@
         ChainHeight = 0
     };
 
+    private AnalyticsSummary analytics = new AnalyticsSummary();
+
     protected override async Task OnInitializedAsync()
     {
         await LoadStatistics();
@@ -336,9 +401,25 @@
         {
             isLoading = true;
             errorMessage = null;
-            
+
+            // Two independent fetches: BlockExplorerService → Api's
+            // /api/blocks/statistics for chain-level numbers; AnalyticsSvc
+            // for the system-wide overview tiles (sims, rounds, nodes,
+            // avg duration). Either failing doesn't blank the other.
             statistics = await BlockExplorerService.GetBlockStatisticsAsync();
-            
+            try
+            {
+                analytics = await AnalyticsSvc.GenerateAnalyticsSummaryAsync(
+                    new AnalyticsRequest { IncludeNodeStats = false, IncludeTimeSeriesData = false });
+            }
+            catch (Exception aex)
+            {
+                // Surface but don't crash the page if the analytics summary
+                // is unavailable (e.g. DB transiently unreachable). The
+                // block-level tiles already came back.
+                Console.WriteLine($"Statistics: analytics summary fetch failed: {aex.Message}");
+            }
+
             StateHasChanged();
         }
         catch (Exception ex)

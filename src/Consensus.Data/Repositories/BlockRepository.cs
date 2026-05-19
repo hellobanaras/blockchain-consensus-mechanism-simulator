@@ -259,11 +259,9 @@ public class BlockRepository : Repository<Block>, IBlockRepository
     private async Task<BlockStatistics> GetBlockStatisticsInternalAsync(Guid? simulationId, CancellationToken cancellationToken)
     {
         var blocksQuery = _context.Blocks.AsQueryable();
-        var txQuery = _context.Transactions.AsQueryable();
         if (simulationId.HasValue)
         {
             blocksQuery = blocksQuery.Where(b => b.SimulationRunId == simulationId.Value);
-            txQuery = txQuery.Where(t => t.SimulationRunId == simulationId.Value);
         }
         var blocks = await blocksQuery.ToListAsync(cancellationToken);
 
@@ -283,7 +281,12 @@ public class BlockRepository : Repository<Block>, IBlockRepository
         }
 
         var sortedBlocks = blocks.OrderBy(b => b.CreatedAt).ToList();
-        var totalTransactions = await txQuery.CountAsync(cancellationToken);
+        // The Transactions table is unused by the current simulator (PoW/PoS
+        // etc. just stash a synthetic TransactionCount on each Block row).
+        // Counting from Transactions returned 0 even when blocks existed,
+        // which was the Statistics-page "all zeros" bug; sum the per-block
+        // counts instead.
+        var totalTransactions = blocks.Sum(b => b.TransactionCount);
 
         // Calculate average block time
         var avgBlockTime = TimeSpan.Zero;
