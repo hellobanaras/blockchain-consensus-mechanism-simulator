@@ -260,7 +260,11 @@
                             </div>
                         </div>
                         <div class="chart-body">
-                            <canvas id="winnerChart" width="400" height="350"></canvas>
+                            <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+                                <MudIcon Icon="@Icons.Material.Filled.BarChart" Color="Color.Default" Size="Size.Large" />
+                                <MudText Typo="Typo.body2" Color="Color.Default">Winner distribution chart — wiring deferred.</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Default">See /analytics-v3 for real winner data, or /analytics for protocol comparison.</MudText>
+                            </MudStack>
                         </div>
                     </div>
                 </div>
@@ -280,7 +284,10 @@
                             </div>
                         </div>
                         <div class="chart-body">
-                            <canvas id="algorithmChart" width="400" height="350"></canvas>
+                            <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+                                <MudIcon Icon="@Icons.Material.Filled.PieChart" Color="Color.Default" Size="Size.Large" />
+                                <MudText Typo="Typo.body2" Color="Color.Default">Algorithm distribution chart — wiring deferred.</MudText>
+                            </MudStack>
                         </div>
                     </div>
                 </div>
@@ -315,7 +322,11 @@
                             </div>
                         </div>
                         <div class="chart-body">
-                            <canvas id="performanceChart" width="800" height="400"></canvas>
+                            <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                                <MudIcon Icon="@Icons.Material.Filled.ShowChart" Color="Color.Default" Size="Size.Large" />
+                                <MudText Typo="Typo.body2" Color="Color.Default">Performance trends chart — wiring deferred.</MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Default">/analytics shows blocks-per-bucket trends with real data.</MudText>
+                            </MudStack>
                         </div>
                     </div>
                 </div>
@@ -340,7 +351,10 @@
                             </div>
                         </div>
                         <div class="chart-body">
-                            <canvas id="processingHistogram" width="400" height="350"></canvas>
+                            <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+                                <MudIcon Icon="@Icons.Material.Filled.BarChart" Color="Color.Default" Size="Size.Large" />
+                                <MudText Typo="Typo.body2" Color="Color.Default">Processing-time histogram — wiring deferred.</MudText>
+                            </MudStack>
                         </div>
                     </div>
                 </div>
@@ -360,7 +374,10 @@
                             </div>
                         </div>
                         <div class="chart-body">
-                            <canvas id="protocolChart" width="400" height="350"></canvas>
+                            <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+                                <MudIcon Icon="@Icons.Material.Filled.Hub" Color="Color.Default" Size="Size.Large" />
+                                <MudText Typo="Typo.body2" Color="Color.Default">Protocol usage chart — wiring deferred.</MudText>
+                            </MudStack>
                         </div>
                     </div>
                 </div>

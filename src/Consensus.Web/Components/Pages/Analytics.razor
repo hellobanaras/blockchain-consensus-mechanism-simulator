@@ -1,8 +1,13 @@
 @page "/analytics"
 @using Consensus.Core.Entities
 @using Consensus.Core.Enums
+@using Consensus.Core.Models
+@using Consensus.Core.Services
+@using Consensus.Web.Services
 @using Microsoft.AspNetCore.Authorization
 @inject IJSRuntime JSRuntime
+@inject IAnalyticsService AnalyticsSvc
+@inject ILogger<Analytics> Logger
 @attribute [Authorize(Roles = "Admin,Operator,Viewer")]
 
 <PageTitle>Analytics - Consensus Simulator</PageTitle>
@@ -93,10 +98,23 @@
                     <h5><i class="bi bi-bar-chart"></i> Algorithm Performance Comparison</h5>
                 </div>
                 <div class="card-body">
-                    <canvas id="algorithmChart" width="400" height="300"></canvas>
+                    @if (_algorithmBarSeries.Count > 0 && _algorithmBarSeries[0].Data.Length > 0)
+                    {
+                        <MudChart ChartType="ChartType.Bar"
+                                  ChartSeries="@_algorithmBarSeries"
+                                  XAxisLabels="@_algorithmBarLabels"
+                                  Width="100%" Height="300px" />
+                    }
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                            <MudIcon Icon="@Icons.Material.Filled.BarChart" Color="Color.Default" Size="Size.Large" />
+                            <MudText Typo="Typo.body2" Color="Color.Default">No algorithm data yet — run a simulation to populate.</MudText>
+                        </MudStack>
+                    }
                     <div class="mt-3">
                         <small class="text-muted">
-                            Comparing average consensus time across different algorithms
+                            P95 inter-block latency by protocol (lower is better)
                         </small>
                     </div>
                 </div>
@@ -110,10 +128,23 @@
                     <h5><i class="bi bi-graph-up"></i> Consensus Time Trend</h5>
                 </div>
                 <div class="card-body">
-                    <canvas id="trendChart" width="400" height="300"></canvas>
+                    @if (_trendSeries.Count > 0 && _trendSeries[0].Data.Length > 0)
+                    {
+                        <MudChart ChartType="ChartType.Line"
+                                  ChartSeries="@_trendSeries"
+                                  XAxisLabels="@_trendLabels"
+                                  Width="100%" Height="300px" />
+                    }
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                            <MudIcon Icon="@Icons.Material.Filled.ShowChart" Color="Color.Default" Size="Size.Large" />
+                            <MudText Typo="Typo.body2" Color="Color.Default">No trend data yet — complete a few rounds to populate.</MudText>
+                        </MudStack>
+                    }
                     <div class="mt-3">
                         <small class="text-muted">
-                            Historical consensus time performance over @selectedTimeRange.ToLower()
+                            Blocks created per @selectedTimeRange.ToLower() bucket
                         </small>
                     </div>
                 </div>
@@ -179,7 +210,20 @@
                     <h5><i class="bi bi-shield-exclamation"></i> Fault Tolerance Analysis</h5>
                 </div>
                 <div class="card-body">
-                    <canvas id="faultChart" width="400" height="200"></canvas>
+                    @if (_faultSeries.Count > 0 && _faultSeries[0].Data.Length > 0)
+                    {
+                        <MudChart ChartType="ChartType.Bar"
+                                  ChartSeries="@_faultSeries"
+                                  XAxisLabels="@_faultLabels"
+                                  Width="100%" Height="200px" />
+                    }
+                    else
+                    {
+                        <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+                            <MudIcon Icon="@Icons.Material.Filled.ShieldMoon" Color="Color.Default" />
+                            <MudText Typo="Typo.body2" Color="Color.Default">No fault data yet.</MudText>
+                        </MudStack>
+                    }
                     <div class="mt-3">
                         <div class="row text-center">
                             <div class="col-4">
@@ -333,13 +377,64 @@
     // Time range filter
     private string selectedTimeRange = "Last 24 Hours";
 
-    // Key metrics
-    private int totalSimulations = 47;
-    private string averageConsensusTime = "2.3s";
-    private int totalBlocks = 1247;
-    private string networkThroughput = "156";
-    private string faultToleranceRate = "98.5%";
-    private string energyEfficiency = "B+";
+    // Key metrics — hydrated from AnalyticsService on init (no more hardcoded values).
+    private int totalSimulations;
+    private string averageConsensusTime = "—";
+    private int totalBlocks;
+    private string networkThroughput = "—";
+    private string faultToleranceRate = "—";
+    private string energyEfficiency = "—";
+
+    // MudChart inputs.
+    private List<MudBlazor.ChartSeries> _algorithmBarSeries = new();
+    private string[] _algorithmBarLabels = Array.Empty<string>();
+    private List<MudBlazor.ChartSeries> _trendSeries = new();
+    private string[] _trendLabels = Array.Empty<string>();
+    private List<MudBlazor.ChartSeries> _faultSeries = new();
+    private string[] _faultLabels = Array.Empty<string>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAnalyticsData();    // synthetic insights / algo stats / etc.
+        await LoadAnalyticsDataAsync(); // real chart data via AnalyticsService
+    }
+
+    private async Task LoadAnalyticsDataAsync()
+    {
+        try
+        {
+            var summary = await AnalyticsSvc.GenerateAnalyticsSummaryAsync();
+            totalSimulations = summary.TotalSimulations;
+            totalBlocks = (int)summary.TotalBlocks;
+            averageConsensusTime = summary.AverageSimulationDuration > 0
+                ? $"{summary.AverageSimulationDuration:F1}s" : "—";
+
+            var comparison = await AnalyticsSvc.GetProtocolComparisonAsync();
+            (_algorithmBarSeries, _algorithmBarLabels) =
+                MudChartAdapter.ToProtocolBar(comparison, p => p.P95BlockTimeMs, "P95 block time (ms)");
+
+            var timeSeries = await AnalyticsSvc.GetTimeSeriesDataAsync(
+                DateTime.UtcNow.AddDays(-1), DateTime.UtcNow, bucketMinutes: 60);
+            (_trendSeries, _trendLabels) =
+                MudChartAdapter.ToTimeSeries(timeSeries, p => p.BlocksCreated, "Blocks created");
+
+            // Fault chart: success-rate by protocol (1 - failed). Using comparison data.
+            _faultLabels = comparison.Select(p => p.Protocol.ToString()).ToArray();
+            _faultSeries = new List<MudBlazor.ChartSeries>
+            {
+                new MudBlazor.ChartSeries
+                {
+                    Name = "Success rate (%)",
+                    Data = comparison.Select(p => p.SuccessRate).ToArray(),
+                }
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "Analytics page data load failed");
+        }
+        StateHasChanged();
+    }
 
     // Network statistics
     private int totalNodes = 125;
@@ -360,13 +455,6 @@
     private List<AlgorithmStatistics> algorithmStats = new();
     private List<EventLogEntry> recentEvents = new();
     private List<AIInsight> aiInsights = new();
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadAnalyticsData();
-        await Task.Delay(100); // Simulate loading
-        StateHasChanged();
-    }
 
     private async Task LoadAnalyticsData()
     {

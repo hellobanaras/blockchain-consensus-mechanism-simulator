@@ -163,9 +163,20 @@
                         </h5>
                     </div>
                     <div class="chart-card-body">
-                        <div class="chart-container">
-                            <canvas id="winnerDistributionChart" width="400" height="300"></canvas>
-                        </div>
+                        @if (_winnerData.Length > 0)
+                        {
+                            <MudChart ChartType="ChartType.Bar"
+                                      ChartSeries="@(new List<MudBlazor.ChartSeries> { new MudBlazor.ChartSeries { Name = "Blocks proposed", Data = _winnerData } })"
+                                      XAxisLabels="@_winnerLabels"
+                                      Width="100%" Height="300px" />
+                        }
+                        else
+                        {
+                            <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+                                <MudIcon Icon="@Icons.Material.Filled.BarChart" Color="Color.Default" Size="Size.Large" />
+                                <MudText Typo="Typo.body2" Color="Color.Default">No winners yet — run a simulation.</MudText>
+                            </MudStack>
+                        }
                     </div>
                 </div>
             </div>
@@ -178,9 +189,20 @@
                         </h5>
                     </div>
                     <div class="chart-card-body">
-                        <div class="chart-container">
-                            <canvas id="algorithmDistributionChart" width="400" height="300"></canvas>
-                        </div>
+                        @if (_algorithmData.Length > 0)
+                        {
+                            <MudChart ChartType="ChartType.Pie"
+                                      InputData="@_algorithmData"
+                                      InputLabels="@_algorithmLabels"
+                                      Width="300px" Height="300px" />
+                        }
+                        else
+                        {
+                            <MudStack AlignItems="AlignItems.Center" Class="pa-6">
+                                <MudIcon Icon="@Icons.Material.Filled.PieChart" Color="Color.Default" Size="Size.Large" />
+                                <MudText Typo="Typo.body2" Color="Color.Default">No algorithm data yet.</MudText>
+                            </MudStack>
+                        }
                     </div>
                 </div>
             </div>
@@ -196,9 +218,20 @@
                         </h5>
                     </div>
                     <div class="chart-card-body">
-                        <div class="chart-container" style="height: 400px;">
-                            <canvas id="performanceTrendChart" width="800" height="400"></canvas>
-                        </div>
+                        @if (_trendSeries.Count > 0 && _trendSeries[0].Data.Length > 0)
+                        {
+                            <MudChart ChartType="ChartType.Line"
+                                      ChartSeries="@_trendSeries"
+                                      XAxisLabels="@_trendLabels"
+                                      Width="100%" Height="400px" />
+                        }
+                        else
+                        {
+                            <MudStack AlignItems="AlignItems.Center" Class="pa-8">
+                                <MudIcon Icon="@Icons.Material.Filled.ShowChart" Color="Color.Default" Size="Size.Large" />
+                                <MudText Typo="Typo.body2" Color="Color.Default">No trend data yet.</MudText>
+                            </MudStack>
+                        }
                     </div>
                 </div>
             </div>
@@ -336,6 +369,14 @@
     private DateTime? endDate = DateTime.Now;
     private string? selectedAlgorithm;
 
+    // MudChart inputs.
+    private double[] _winnerData = Array.Empty<double>();
+    private string[] _winnerLabels = Array.Empty<string>();
+    private double[] _algorithmData = Array.Empty<double>();
+    private string[] _algorithmLabels = Array.Empty<string>();
+    private List<MudBlazor.ChartSeries> _trendSeries = new();
+    private string[] _trendLabels = Array.Empty<string>();
+
     protected override async Task OnInitializedAsync()
     {
         await LoadAnalytics();
@@ -360,7 +401,30 @@
             summary = await AnalyticsService.GenerateAnalyticsSummaryAsync(request);
             Logger.LogInformation("Loaded analytics for {SimulationCount} simulations", summary.TotalSimulations);
 
-            // Create charts after data is loaded
+            // Hydrate MudChart inputs from the summary the service just built.
+            if (summary.NodeStats?.Count > 0)
+            {
+                var ordered = summary.NodeStats.Values
+                    .OrderByDescending(n => n.BlocksProduced)
+                    .Take(10)
+                    .ToList();
+                _winnerData = ordered.Select(n => (double)n.BlocksProduced).ToArray();
+                _winnerLabels = ordered.Select(n => n.NodeId.Substring(0, Math.Min(8, n.NodeId.Length))).ToArray();
+            }
+            if (summary.AlgorithmPerformance?.Count > 0)
+            {
+                var rows = summary.AlgorithmPerformance.OrderByDescending(kvp => kvp.Value.TotalSimulations).ToList();
+                _algorithmData = rows.Select(kvp => (double)kvp.Value.TotalSimulations).ToArray();
+                _algorithmLabels = rows.Select(kvp => kvp.Key).ToArray();
+            }
+            if (summary.TimeSeriesData?.Count > 0)
+            {
+                (_trendSeries, _trendLabels) =
+                    MudChartAdapter.ToTimeSeries(summary.TimeSeriesData, p => p.BlocksCreated, "Blocks per bucket");
+            }
+
+            // Legacy Chart.js init kept as a no-op fallback. Safe to remove with the
+            // wider Chart.js teardown in Day 5.
             await CreateChartsAsync();
         }
         catch (Exception ex)

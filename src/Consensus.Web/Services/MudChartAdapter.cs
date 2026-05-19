@@ -54,12 +54,12 @@ public static class MudChartAdapter
     /// data points. The selector picks one metric per point.
     /// </summary>
     public static (List<ChartSeries> Series, string[] Labels) ToTimeSeries(
-        IEnumerable<TimeSeriesDataPoint> points,
-        Func<TimeSeriesDataPoint, double> valueSelector,
+        IEnumerable<Consensus.Core.Models.TimeSeriesDataPoint> points,
+        Func<Consensus.Core.Models.TimeSeriesDataPoint, double> valueSelector,
         string seriesName,
         string labelFormat = "HH:mm")
     {
-        var list = points?.OrderBy(p => p.Timestamp).ToList() ?? new List<TimeSeriesDataPoint>();
+        var list = points?.OrderBy(p => p.Timestamp).ToList() ?? new List<Consensus.Core.Models.TimeSeriesDataPoint>();
         var labels = list.Select(p => p.Timestamp.ToLocalTime().ToString(labelFormat)).ToArray();
         var series = new List<ChartSeries>
         {
