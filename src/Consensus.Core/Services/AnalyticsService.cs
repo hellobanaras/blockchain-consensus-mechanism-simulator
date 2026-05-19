@@ -36,6 +36,29 @@ public interface IAnalyticsService
     /// Export analytics data in various formats (CSV, JSON, etc.)
     /// </summary>
     Task<byte[]> ExportAnalyticsAsync(AnalyticsRequest request, string format);
+
+    /// <summary>
+    /// Count of blocks proposed by each node in the given simulation. Powers the
+    /// SimulationDashboard donut and leader-fairness analytics.
+    /// </summary>
+    Task<LeaderDistribution> GetLeaderDistributionAsync(Guid simulationId);
+
+    /// <summary>
+    /// Ordered round-by-round duration series for the given simulation.
+    /// </summary>
+    Task<List<RoundDurationPoint>> GetRoundDurationSeriesAsync(Guid simulationId);
+
+    /// <summary>
+    /// Block creation timeline for the given simulation, with proposer names
+    /// pre-resolved so chart components don't need a second Node lookup.
+    /// </summary>
+    Task<List<BlockTimelinePoint>> GetBlockTimelineAsync(Guid simulationId);
+
+    /// <summary>
+    /// Cross-protocol comparison rows aggregated across every completed run.
+    /// Powers PerformanceBaselines.
+    /// </summary>
+    Task<List<ProtocolComparisonPoint>> GetProtocolComparisonAsync();
 }
 
 /// <summary>
@@ -503,10 +526,72 @@ public class AnalyticsService : IAnalyticsService
 
     private byte[] ExportToJson(AnalyticsSummary summary)
     {
-        var json = System.Text.Json.JsonSerializer.Serialize(summary, new System.Text.Json.JsonSerializerOptions 
-        { 
-            WriteIndented = true 
+        var json = System.Text.Json.JsonSerializer.Serialize(summary, new System.Text.Json.JsonSerializerOptions
+        {
+            WriteIndented = true
         });
         return System.Text.Encoding.UTF8.GetBytes(json);
+    }
+
+    // ─── Chart-shaped data methods (Phase-4 charts migration) ─────────────────
+    // These hydrate the inputs that MudChart and the per-protocol analytics
+    // components want directly, so the chart pipeline doesn't have to re-derive
+    // the same proposer counts / round durations / timelines on every render.
+
+    public async Task<LeaderDistribution> GetLeaderDistributionAsync(Guid simulationId)
+    {
+        var blocks = (await _blockRepository.GetBySimulationRunAsync(simulationId)).ToList();
+        var nodes = (await _nodeRepository.GetBySimulationRunAsync(simulationId)).ToDictionary(n => n.Id, n => n.Name);
+        var counts = blocks
+            .Where(b => b.ProposerId.HasValue)
+            .GroupBy(b => b.ProposerId!.Value)
+            .ToDictionary(
+                g => nodes.TryGetValue(g.Key, out var name) ? name : g.Key.ToString("N").Substring(0, 8),
+                g => g.Count());
+        return new LeaderDistribution(counts);
+    }
+
+    public async Task<List<RoundDurationPoint>> GetRoundDurationSeriesAsync(Guid simulationId)
+    {
+        var rounds = await _consensusRoundRepository.GetBySimulationRunAsync(simulationId);
+        return rounds
+            .Where(r => r.StartedAt != default && r.CompletedAt.HasValue)
+            .OrderBy(r => r.RoundNumber)
+            .Select(r => new RoundDurationPoint(
+                r.RoundNumber,
+                (r.CompletedAt!.Value - r.StartedAt).TotalMilliseconds))
+            .ToList();
+    }
+
+    public async Task<List<BlockTimelinePoint>> GetBlockTimelineAsync(Guid simulationId)
+    {
+        var blocks = (await _blockRepository.GetBySimulationRunAsync(simulationId)).ToList();
+        var nodes = (await _nodeRepository.GetBySimulationRunAsync(simulationId)).ToDictionary(n => n.Id, n => n.Name);
+        return blocks
+            .OrderBy(b => b.Timestamp)
+            .Select(b => new BlockTimelinePoint(
+                b.Timestamp,
+                b.BlockNumber,
+                b.ProposerId,
+                b.ProposerId.HasValue && nodes.TryGetValue(b.ProposerId.Value, out var name)
+                    ? name
+                    : "(unknown)"))
+            .ToList();
+    }
+
+    public async Task<List<ProtocolComparisonPoint>> GetProtocolComparisonAsync()
+    {
+        var perAlgo = await GetAlgorithmPerformanceAsync();
+        return perAlgo.Select(kvp => new ProtocolComparisonPoint(
+                Protocol: kvp.Key,
+                MeanBlockTimeMs: kvp.Value.AverageBlockRate > 0 ? 1000.0 / kvp.Value.AverageBlockRate : 0,
+                P95BlockTimeMs: kvp.Value.P95BlockTimeMs,
+                P99BlockTimeMs: kvp.Value.P99BlockTimeMs,
+                LeaderGini: kvp.Value.LeaderGini,
+                LeaderEntropy: kvp.Value.LeaderEntropy,
+                SuccessRate: kvp.Value.SuccessRate,
+                TotalSimulations: kvp.Value.TotalSimulations))
+            .OrderBy(p => p.Protocol.ToString())
+            .ToList();
     }
 }
