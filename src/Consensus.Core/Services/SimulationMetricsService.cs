@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Consensus.Core.Entities;
 using Consensus.Core.Enums;
 using Consensus.Core.Models;
+using Consensus.Core.Repositories;
 using System.Collections.Concurrent;
 
 namespace Consensus.Core.Services;
@@ -17,13 +18,111 @@ public class SimulationMetricsService : ISimulationMetricsService
     private readonly ConcurrentDictionary<Guid, List<NodeMetrics>> _nodeMetrics;
     private readonly ConcurrentDictionary<Guid, List<ConsensusEvent>> _consensusEvents;
 
+    // Repos are optional — when present (Api host registration), an on-demand
+    // hydration path loads completed-sim metrics directly from Postgres so
+    // SimulationResultsExportService.ExportSimulationResultsAsync stops
+    // throwing "No metrics found" for sims that were never seen live by this
+    // process. When null (legacy call sites), the in-memory dictionary
+    // remains the only source.
+    private readonly ISimulationRunRepository? _simRepo;
+    private readonly IConsensusRoundRepository? _roundRepo;
+    private readonly IBlockRepository? _blockRepo;
+    private readonly INodeRepository? _nodeRepo;
+
     public SimulationMetricsService(ILogger<SimulationMetricsService> logger)
+        : this(logger, null, null, null, null) { }
+
+    public SimulationMetricsService(
+        ILogger<SimulationMetricsService> logger,
+        ISimulationRunRepository? simRepo,
+        IConsensusRoundRepository? roundRepo,
+        IBlockRepository? blockRepo,
+        INodeRepository? nodeRepo)
     {
         _logger = logger;
         _simulationMetrics = new ConcurrentDictionary<Guid, DetailedSimulationMetrics>();
         _roundMetrics = new ConcurrentDictionary<Guid, List<RoundMetrics>>();
         _nodeMetrics = new ConcurrentDictionary<Guid, List<NodeMetrics>>();
         _consensusEvents = new ConcurrentDictionary<Guid, List<ConsensusEvent>>();
+        _simRepo = simRepo;
+        _roundRepo = roundRepo;
+        _blockRepo = blockRepo;
+        _nodeRepo = nodeRepo;
+    }
+
+    /// <summary>
+    /// Hydrate the in-memory caches from persisted rows for one simulation.
+    /// Called from GenerateSimulationSummaryAsync / GetRoundMetricsAsync etc.
+    /// when the cache miss path fires AND repos are wired (Api host).
+    /// </summary>
+    private async Task<bool> TryHydrateFromDbAsync(Guid simulationId)
+    {
+        if (_simRepo == null || _roundRepo == null || _blockRepo == null || _nodeRepo == null)
+        {
+            return false;
+        }
+        try
+        {
+            var sim = await _simRepo.GetByIdAsync(simulationId);
+            if (sim == null) return false;
+
+            var rounds = (await _roundRepo.GetBySimulationRunAsync(simulationId)).ToList();
+            var blocks = (await _blockRepo.GetBySimulationRunAsync(simulationId)).ToList();
+            var nodes = (await _nodeRepo.GetBySimulationRunAsync(simulationId)).ToList();
+
+            var detailed = new DetailedSimulationMetrics
+            {
+                SimulationId = sim.Id,
+                ConsensusAlgorithm = sim.ConsensusAlgorithm,
+                NodeCount = nodes.Count > 0 ? nodes.Count : sim.NodeCount,
+                TargetRounds = sim.MaxRounds ?? rounds.Count,
+                StartTime = sim.StartedAt ?? sim.CreatedAt,
+                EndTime = sim.CompletedAt,
+                Status = sim.Status,
+                TotalBlocks = blocks.Count,
+                TotalTransactions = blocks.Sum(b => b.TransactionCount),
+                SuccessfulRounds = rounds.Count(r => r.Status == ConsensusRoundStatus.Completed),
+                FailedRounds = rounds.Count(r => r.Status == ConsensusRoundStatus.Failed),
+            };
+            _simulationMetrics[simulationId] = detailed;
+
+            // Build a one-per-round metrics list — best-effort. Only fields
+            // SimulationSummary actually consumes are populated; the rest
+            // stay at defaults. Block→round correlation uses BlockNumber
+            // (each round produces at most one block on the chains we
+            // simulate) since Block doesn't carry a ConsensusRoundId.
+            var roundList = rounds
+                .OrderBy(r => r.RoundNumber)
+                .Select(r => new RoundMetrics
+                {
+                    RoundNumber = (int)r.RoundNumber,
+                    Duration = (r.CompletedAt ?? r.StartedAt) - r.StartedAt,
+                    Success = r.Status == ConsensusRoundStatus.Completed,
+                    ProposerNodeId = r.LeaderId ?? Guid.Empty,
+                    BlocksAccepted = blocks.Count(b => b.ProposerId == r.LeaderId && r.LeaderId.HasValue) > 0 ? 1 : 0,
+                    Timestamp = r.StartedAt,
+                })
+                .ToList();
+            _roundMetrics[simulationId] = roundList;
+
+            var nodeList = nodes
+                .Select(n => new NodeMetrics
+                {
+                    NodeId = n.Id,
+                    NodeName = n.Name,
+                    BlocksAccepted = blocks.Count(b => b.ProposerId == n.Id && b.IsValid),
+                })
+                .ToList();
+            _nodeMetrics[simulationId] = nodeList;
+
+            _consensusEvents.TryAdd(simulationId, new List<ConsensusEvent>());
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "DB-hydration of metrics for {SimulationId} failed", simulationId);
+            return false;
+        }
     }
 
     public async Task InitializeSimulationMetricsAsync(SimulationMetricsRequest request)
@@ -190,7 +289,19 @@ public class SimulationMetricsService : ISimulationMetricsService
         {
             if (!_simulationMetrics.TryGetValue(simulationId, out var metrics))
             {
-                throw new ArgumentException($"No metrics found for simulation {simulationId}");
+                // Cache miss — try to hydrate from persisted rows. This is
+                // the Api-host path: the export endpoint runs in a process
+                // that never saw the simulation live, so the in-memory
+                // dictionary is empty.
+                if (await TryHydrateFromDbAsync(simulationId)
+                    && _simulationMetrics.TryGetValue(simulationId, out metrics))
+                {
+                    // fall through with the just-hydrated metrics
+                }
+                else
+                {
+                    throw new ArgumentException($"No metrics found for simulation {simulationId}");
+                }
             }
 
             var roundMetrics = _roundMetrics.GetValueOrDefault(simulationId, new List<RoundMetrics>());
@@ -270,8 +381,12 @@ public class SimulationMetricsService : ISimulationMetricsService
     {
         try
         {
+            if (!_roundMetrics.ContainsKey(simulationId))
+            {
+                await TryHydrateFromDbAsync(simulationId);
+            }
             var metrics = _roundMetrics.GetValueOrDefault(simulationId, new List<RoundMetrics>());
-            
+
             if (lastN.HasValue && lastN.Value > 0)
             {
                 return metrics.TakeLast(lastN.Value).ToList();
@@ -290,6 +405,10 @@ public class SimulationMetricsService : ISimulationMetricsService
     {
         try
         {
+            if (!_nodeMetrics.ContainsKey(simulationId))
+            {
+                await TryHydrateFromDbAsync(simulationId);
+            }
             return _nodeMetrics.GetValueOrDefault(simulationId, new List<NodeMetrics>());
         }
         catch (Exception ex)
@@ -437,8 +556,12 @@ public class SimulationMetricsService : ISimulationMetricsService
                     TotalBlocksAccepted = group.Sum(n => n.BlocksAccepted),
                     TotalVotes = group.Sum(n => n.VotesCast),
                     AverageResponseTime = TimeSpan.FromTicks((long)group.Average(n => n.AverageResponseTime.Ticks)),
-                    UptimePercentage = group.Average(n => n.Uptime.TotalSeconds) / 
-                        group.Max(n => n.Timestamp).Subtract(group.Min(n => n.Timestamp)).TotalSeconds * 100,
+                    // Guard against single-sample groups: Max - Min = 0 makes
+                    // this divide-by-zero, producing Infinity that the JSON
+                    // serializer refuses. When the time window is zero we
+                    // can't compute a meaningful uptime percentage, so report
+                    // 100 (the node is up for the only sample we saw).
+                    UptimePercentage = ComputeUptimePercentage(group),
                     ConsensusParticipation = group.Average(n => n.ConsensusParticipation),
                     FinalStake = latestMetrics.StakeAmount,
                     FinalReputation = latestMetrics.ReputationScore
@@ -447,6 +570,16 @@ public class SimulationMetricsService : ISimulationMetricsService
         }
         
         return performance;
+    }
+
+    private static double ComputeUptimePercentage(IEnumerable<NodeMetrics> group)
+    {
+        var list = group.ToList();
+        if (list.Count == 0) return 0;
+        var window = list.Max(n => n.Timestamp).Subtract(list.Min(n => n.Timestamp)).TotalSeconds;
+        if (window <= 0) return 100; // single sample → assume always-up for that point
+        var pct = list.Average(n => n.Uptime.TotalSeconds) / window * 100;
+        return double.IsFinite(pct) ? Math.Clamp(pct, 0, 100) : 0;
     }
 
     private RoundStatistics CalculateRoundStatistics(List<RoundMetrics> rounds)

@@ -85,15 +85,18 @@
                 </div>
                 <div class="col-md-3">
                     <label for="algorithmFilter" class="form-label">Algorithm</label>
+                    @* Only the five protocols the simulator actually
+                       implements. Tendermint / HoneyBadger / Raft / Algorand /
+                       Stellar / FedCoin exist in the ConsensusAlgorithm enum
+                       for DB compat but have no protocol class, so filtering
+                       by them returned an empty result every time. *@
                     <select class="form-select" id="algorithmFilter" @bind="selectedAlgorithm">
                         <option value="">All Algorithms</option>
                         <option value="ProofOfWork">Proof of Work</option>
                         <option value="ProofOfStake">Proof of Stake</option>
                         <option value="DelegatedProofOfStake">Delegated Proof of Stake</option>
-                        <option value="ProofOfElapsedTime">Proof of Elapsed Time</option>
                         <option value="PracticalByzantineFaultTolerance">PBFT</option>
-                        <option value="Tendermint">Tendermint</option>
-                        <option value="HoneyBadgerBFT">HoneyBadger BFT</option>
+                        <option value="ProofOfElapsedTime">Proof of Elapsed Time</option>
                     </select>
                 </div>
                 <div class="col-md-3 d-flex align-items-end">

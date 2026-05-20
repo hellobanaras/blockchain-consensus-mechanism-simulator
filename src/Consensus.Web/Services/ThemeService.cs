@@ -76,9 +76,24 @@ public class ThemeService
         {
             await _js.InvokeVoidAsync("localStorage.setItem", StorageKey, value ? "true" : "false");
         }
+        catch (Microsoft.JSInterop.JSDisconnectedException)
+        {
+            // Toggling dark mode while another interop call is in flight
+            // (e.g. a large simulation export) can race with a SignalR
+            // reconnect and throw JSDisconnectedException before the
+            // localStorage write reaches the browser. Eat it explicitly so
+            // the unobserved-task exception doesn't bubble out to Blazor's
+            // error banner — the in-memory `_isDark` already changed.
+        }
+        catch (TaskCanceledException)
+        {
+            // Same root cause, surfaces as task-cancelled when the circuit
+            // is mid-reset rather than fully disconnected.
+        }
         catch
         {
-            // Best-effort persistence.
+            // Last-resort: private-mode browsers, localStorage quota
+            // exhaustion, etc. We never want the theme toggle to crash.
         }
     }
 }

@@ -1,8 +1,24 @@
 @page "/performance-baselines"
+@using Consensus.Core.Enums
+@using Consensus.Core.Models
+@using Consensus.Core.Services
 @using Consensus.Web.Components.Charts
-@rendermode InteractiveServer
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceScopeFactory ScopeFactory
 
 <PageTitle>Performance Baselines · Consensus Lab</PageTitle>
+
+@*
+    The page styles (.overview-card, .ranking-row, etc.) live in two stylesheets
+    that need to land in <head> to actually apply. Inline <link> tags inside
+    the component body aren't processed by Blazor — that's what made the page
+    render as a vertical stack of unstyled text. HeadContent injects them
+    into <head> when this route is active.
+*@
+<HeadContent>
+    <link href="/css/performance-baselines.css" rel="stylesheet" />
+    <link href="/css/performance-baselines-page.css" rel="stylesheet" />
+</HeadContent>
 
 <div class="performance-baselines-page">
     <div class="page-header">
@@ -408,50 +424,165 @@
     </div>
 </div>
 
-<link href="~/css/performance-baselines.css" rel="stylesheet" />
-<link href="~/css/performance-baselines-page.css" rel="stylesheet" />
-
 @code {
     private bool isRealTimeEnabled = false;
     private string rankingCriteria = "overall";
     
-    // Overview metrics
-    private double bestThroughput = 7842;
-    private string bestThroughputMechanism = "DPoS";
-    private double bestLatency = 0.085;
-    private string bestLatencyMechanism = "DPoS";
-    private double bestEfficiency = 89.3;
-    private string bestEfficiencyMechanism = "PoA";
-    private double bestSecurity = 94.7;
-    private string bestSecurityMechanism = "PoW";
-    
+    // Overview tile values, populated from real DB rows in LoadFromAnalyticsAsync.
+    // Defaults are zero so an empty DB shows zeros (not the previous fabricated
+    // 7842 TPS / "PoA" mechanism, which was out of thesis scope and lied
+    // when the DB had different numbers).
+    private double bestThroughput;
+    private string bestThroughputMechanism = "—";
+    private double bestLatency;
+    private string bestLatencyMechanism = "—";
+    private double bestEfficiency;
+    private string bestEfficiencyMechanism = "—";
+    private double bestSecurity;
+    private string bestSecurityMechanism = "—";
+
     // Benchmark data
-    private int totalDataPoints = 156840;
-    private string dataTimeRange = "30 days";
-    private string lastUpdate = "2 min ago";
-    
+    private int totalDataPoints;
+    private string dataTimeRange = "—";
+    private string lastUpdate = "—";
+
     // Export data
-    private int totalExports = 127;
-    private string lastExportTime = "1 hour ago";
-    private string estimatedDataSize = "2.4 MB";
-    
+    private int totalExports;
+    private string lastExportTime = "—";
+    private string estimatedDataSize = "—";
+
     private List<MechanismRanking> mechanismRankings = new();
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
-        InitializeMechanismRankings();
+        await LoadFromAnalyticsAsync();
     }
 
-    private void InitializeMechanismRankings()
+    private async Task LoadFromAnalyticsAsync()
     {
-        mechanismRankings = new List<MechanismRanking>
+        try
         {
-            new() { Name = "Delegated Proof of Stake", Type = "Delegated", Score = 8.7, ThroughputRank = "A", LatencyRank = "A", EfficiencyRank = "A", SecurityRank = "B" },
-            new() { Name = "Proof of Authority", Type = "Permissioned", Score = 8.2, ThroughputRank = "A", LatencyRank = "A", EfficiencyRank = "A", SecurityRank = "C" },
-            new() { Name = "Practical Byzantine Fault Tolerance", Type = "Byzantine", Score = 7.9, ThroughputRank = "A", LatencyRank = "B", EfficiencyRank = "B", SecurityRank = "A" },
-            new() { Name = "Proof of Stake", Type = "Economic", Score = 7.4, ThroughputRank = "B", LatencyRank = "B", EfficiencyRank = "A", SecurityRank = "A" },
-            new() { Name = "Proof of Elapsed Time", Type = "Lottery", Score = 6.8, ThroughputRank = "B", LatencyRank = "C", EfficiencyRank = "A", SecurityRank = "B" },
-            new() { Name = "Proof of Work", Type = "Computational", Score = 5.9, ThroughputRank = "D", LatencyRank = "D", EfficiencyRank = "D", SecurityRank = "A" }
+            // PerformanceBaselinesChart (embedded below) shares the page's
+            // injected IAnalyticsService and its Scoped DbContext. Both
+            // OnInitializedAsync handlers fire concurrently in Blazor, which
+            // tripped EF Core's "A second operation was started on this
+            // context instance before a previous operation completed" 409.
+            // Spinning up a dedicated scope here gives the page its own
+            // DbContext for the duration of these two calls.
+            using var scope = ScopeFactory.CreateScope();
+            var analyticsSvc = scope.ServiceProvider.GetRequiredService<IAnalyticsService>();
+            var summary = await analyticsSvc.GenerateAnalyticsSummaryAsync();
+            var perAlgo = await analyticsSvc.GetAlgorithmPerformanceAsync();
+
+            totalDataPoints = (int)summary.TotalBlocks;
+            if (summary.StartDate != default && summary.EndDate != default && summary.EndDate > summary.StartDate)
+            {
+                var days = (summary.EndDate - summary.StartDate).TotalDays;
+                dataTimeRange = days >= 1 ? $"{days:F0} days" : $"{(summary.EndDate - summary.StartDate).TotalHours:F1} hrs";
+            }
+            lastUpdate = DateTime.UtcNow.ToString("HH:mm UTC");
+
+            // Build rankings from per-algorithm DB metrics. Only the five
+            // protocols that actually run (PoW/PoS/DPoS/PBFT/PoET) — PoA et al
+            // are out of thesis scope; the previous content invented numbers
+            // for them and listed PoA as "best efficiency", which was a lie
+            // the demo audience could catch.
+            mechanismRankings = perAlgo
+                .Select(kvp => BuildRanking(kvp.Key, kvp.Value))
+                .OrderByDescending(r => r.Score)
+                .ToList();
+
+            // Headline tiles — choose the protocol that wins each dimension.
+            if (perAlgo.Count > 0)
+            {
+                var byThroughput = perAlgo.OrderByDescending(kvp => kvp.Value.AverageBlockRate).First();
+                bestThroughput = Math.Round(byThroughput.Value.AverageBlockRate, 2);
+                bestThroughputMechanism = ShortName(byThroughput.Key);
+
+                var withLatency = perAlgo.Where(kvp => kvp.Value.P95BlockTimeMs > 0).ToList();
+                if (withLatency.Count > 0)
+                {
+                    var byLatency = withLatency.OrderBy(kvp => kvp.Value.P95BlockTimeMs).First();
+                    bestLatency = Math.Round(byLatency.Value.P95BlockTimeMs / 1000.0, 3);
+                    bestLatencyMechanism = ShortName(byLatency.Key);
+                }
+
+                // Fairness proxy: lower Gini = more even leader distribution
+                var byFairness = perAlgo.OrderBy(kvp => kvp.Value.LeaderGini).First();
+                bestEfficiency = Math.Round(100.0 - byFairness.Value.LeaderGini * 100, 1);
+                bestEfficiencyMechanism = ShortName(byFairness.Key);
+
+                var bySuccess = perAlgo.OrderByDescending(kvp => kvp.Value.SuccessRate).First();
+                bestSecurity = Math.Round(bySuccess.Value.SuccessRate, 1);
+                bestSecurityMechanism = ShortName(bySuccess.Key);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"PerformanceBaselines analytics load failed: {ex.Message}");
+        }
+    }
+
+    private static string ShortName(ConsensusAlgorithm a) => a switch
+    {
+        ConsensusAlgorithm.ProofOfWork => "PoW",
+        ConsensusAlgorithm.ProofOfStake => "PoS",
+        ConsensusAlgorithm.DelegatedProofOfStake => "DPoS",
+        ConsensusAlgorithm.PracticalByzantineFaultTolerance => "PBFT",
+        ConsensusAlgorithm.ProofOfElapsedTime => "PoET",
+        _ => a.ToString()
+    };
+
+    private static string FullName(ConsensusAlgorithm a) => a switch
+    {
+        ConsensusAlgorithm.ProofOfWork => "Proof of Work",
+        ConsensusAlgorithm.ProofOfStake => "Proof of Stake",
+        ConsensusAlgorithm.DelegatedProofOfStake => "Delegated Proof of Stake",
+        ConsensusAlgorithm.PracticalByzantineFaultTolerance => "Practical Byzantine Fault Tolerance",
+        ConsensusAlgorithm.ProofOfElapsedTime => "Proof of Elapsed Time",
+        _ => a.ToString()
+    };
+
+    private static string ProtocolFamily(ConsensusAlgorithm a) => a switch
+    {
+        ConsensusAlgorithm.ProofOfWork => "Computational",
+        ConsensusAlgorithm.ProofOfStake => "Economic",
+        ConsensusAlgorithm.DelegatedProofOfStake => "Delegated",
+        ConsensusAlgorithm.PracticalByzantineFaultTolerance => "Byzantine",
+        ConsensusAlgorithm.ProofOfElapsedTime => "Lottery",
+        _ => "—"
+    };
+
+    // Translate a raw metric to a coarse A/B/C/D bucket using simple cut-offs
+    // tuned for the simulator's value range. Real research grading would use
+    // a normalized score across runs; this is good enough for the demo dashboard.
+    private static string ThroughputRank(double blockRate) =>
+        blockRate >= 0.8 ? "A" : blockRate >= 0.4 ? "B" : blockRate >= 0.2 ? "C" : "D";
+    private static string LatencyRank(double p95Ms) =>
+        p95Ms <= 0 ? "—" : p95Ms < 1500 ? "A" : p95Ms < 3000 ? "B" : p95Ms < 5000 ? "C" : "D";
+    private static string FairnessRank(double gini) =>
+        gini < 0.10 ? "A" : gini < 0.20 ? "B" : gini < 0.35 ? "C" : "D";
+    private static string SecurityRank(double successPct) =>
+        successPct >= 95 ? "A" : successPct >= 85 ? "B" : successPct >= 70 ? "C" : "D";
+
+    private static MechanismRanking BuildRanking(ConsensusAlgorithm algo, AlgorithmPerformanceMetrics m)
+    {
+        // Weighted composite score across the four ranking dimensions.
+        // Each dimension contributes 0–2.5 so the maximum composite is 10.
+        var throughputScore = Math.Min(2.5, m.AverageBlockRate * 2.5);
+        var latencyScore = m.P95BlockTimeMs > 0 ? Math.Max(0, 2.5 - (m.P95BlockTimeMs / 4000.0)) : 0;
+        var fairnessScore = Math.Max(0, 2.5 - m.LeaderGini * 5);
+        var securityScore = m.SuccessRate / 40.0;  // 100% success → 2.5
+
+        return new MechanismRanking
+        {
+            Name = FullName(algo),
+            Type = ProtocolFamily(algo),
+            Score = Math.Round(throughputScore + latencyScore + fairnessScore + securityScore, 1),
+            ThroughputRank = ThroughputRank(m.AverageBlockRate),
+            LatencyRank = LatencyRank(m.P95BlockTimeMs),
+            EfficiencyRank = FairnessRank(m.LeaderGini),
+            SecurityRank = SecurityRank(m.SuccessRate)
         };
     }
 

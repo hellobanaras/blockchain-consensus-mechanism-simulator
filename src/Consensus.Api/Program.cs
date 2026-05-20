@@ -64,6 +64,15 @@ builder.Services.AddControllers()
     .AddJsonOptions(o =>
     {
         o.JsonSerializerOptions.ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles;
+        // SimulationResultsExportService computes throughput as blocks /
+        // totalSeconds. Sims that complete in < 1 ms (or short-circuit on
+        // failure) make the denominator zero, producing
+        // double.PositiveInfinity. The default JSON serializer refuses
+        // those values, surfacing as a 500 mid-export. Allow named float
+        // literals so the export still serializes (the consumer can
+        // sanitise on read).
+        o.JsonSerializerOptions.NumberHandling =
+            System.Text.Json.Serialization.JsonNumberHandling.AllowNamedFloatingPointLiterals;
     });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();

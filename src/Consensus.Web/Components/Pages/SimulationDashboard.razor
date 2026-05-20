@@ -466,6 +466,13 @@
                 Logger.LogDebug(mex, "Initial metrics hydration for {Id} skipped", SimulationId);
             }
 
+            // Round-duration line + leader-distribution donut also start empty
+            // until the 2-second polling timer ticks once. For completed sims
+            // that's a "Waiting for data…" placeholder on every fresh page
+            // load. Run RefreshMetricsAsync once now so the charts populate
+            // on first paint — same source the timer hits.
+            await RefreshMetricsAsync();
+
             StateHasChanged();
         }
         catch (Exception ex)
@@ -729,24 +736,42 @@
         try
         {
             // Fetch the canonical sim payload from the Api (hydrated with nodes,
-            // blocks, consensusRounds) and hand it to the existing downloadJson
-            // helper in dashboard.js. The Api's SimulationResults POST export
-            // exists but is not on a GET path; this avoids a browser CORS round
-            // trip while still using the Api as source of truth.
+            // blocks, consensusRounds), serialize it server-side, and hand
+            // the JSON STRING (not the object) to the new downloadJsonString
+            // helper in dashboard.js.
+            //
+            // Why a pre-serialized string: Blazor's JS interop infers the
+            // shape of object arguments via reflection + System.Text.Json on
+            // every call, which is expensive for a multi-MB sim. Worse, the
+            // payload travels over the Blazor SignalR circuit as a sequence
+            // of unbounded JsonElement chunks — that's what stranded the
+            // circuit mid-export and made the next interop call (the dark-
+            // mode toggle's localStorage.setItem) race with a reconnect
+            // and surface as a Blazor error banner.
+            //
+            // A single string parameter is opaque to the interop layer,
+            // travels as one SignalR message, and Blazor doesn't try to
+            // round-trip it through JsonElement.
             var sim = await ApiClient.GetSimulationAsync(SimulationId);
             if (sim == null)
             {
                 await JSRuntime.InvokeVoidAsync("showToast", "Export failed: simulation not found", "error");
                 return;
             }
+            var json = JsonSerializer.Serialize(sim, new JsonSerializerOptions
+            {
+                WriteIndented = true,
+                ReferenceHandler = System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles
+            });
             var filename = $"simulation-{SimulationId:N}.json";
-            await JSRuntime.InvokeVoidAsync("downloadJson", sim, filename);
+            await JSRuntime.InvokeVoidAsync("downloadJsonString", json, filename);
             await JSRuntime.InvokeVoidAsync("showToast", $"Downloaded {filename}", "success");
         }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to export simulation {Id}", SimulationId);
-            await JSRuntime.InvokeVoidAsync("showToast", $"Export failed: {ex.Message}", "error");
+            try { await JSRuntime.InvokeVoidAsync("showToast", $"Export failed: {ex.Message}", "error"); }
+            catch { /* circuit may be mid-reset; toast not critical */ }
         }
         finally
         {

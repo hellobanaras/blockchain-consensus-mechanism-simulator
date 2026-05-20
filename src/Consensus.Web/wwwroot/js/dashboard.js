@@ -102,9 +102,23 @@ window.copyToClipboard = function (text, successMessage = 'Copied to clipboard!'
  */
 window.downloadJson = function (data, filename = 'simulation-data.json') {
     const jsonStr = JSON.stringify(data, null, 2);
-    const blob = new Blob([jsonStr], { type: 'application/json' });
+    return downloadBlob(jsonStr, filename, 'application/json');
+};
+
+/**
+ * Trigger a download given a JSON STRING that the caller already serialized.
+ * Preferred over downloadJson() for large Blazor interop calls: a single
+ * string parameter avoids Blazor's JsonElement round-trip and travels
+ * over SignalR as one message, eliminating the race with concurrent
+ * interop calls (e.g., the dark-mode toggle's localStorage write).
+ */
+window.downloadJsonString = function (jsonString, filename = 'simulation-data.json') {
+    return downloadBlob(jsonString, filename, 'application/json');
+};
+
+function downloadBlob(content, filename, mime) {
+    const blob = new Blob([content], { type: mime });
     const url = URL.createObjectURL(blob);
-    
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
@@ -112,9 +126,7 @@ window.downloadJson = function (data, filename = 'simulation-data.json') {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    
-    showToast(`Downloaded ${filename}`, 'success', 2000);
-};
+}
 
 /**
  * Download data as CSV file

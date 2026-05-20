@@ -549,6 +549,16 @@ public class SimulationService : ISimulationService
     {
         var nodes = new List<Node>();
 
+        // PoS / DPoS protocols filter out nodes whose StakeAmount falls
+        // below the configured minimum (100 in PosProtocol). Default
+        // Node.StakeAmount is 0, so a PoS sim with otherwise-valid inputs
+        // failed at InitializeAsync with "PoS requires at least 3 nodes
+        // with minimum stake of 100". Seed stake so newly-created PoS/DPoS
+        // sims pass that gate by default; the values are deterministic per
+        // seed so reproducibility holds.
+        var needsStake = request.Algorithm == ConsensusAlgorithm.ProofOfStake
+                         || request.Algorithm == ConsensusAlgorithm.DelegatedProofOfStake;
+
         for (int i = 0; i < request.NodeCount; i++)
         {
             var node = new Node
@@ -561,6 +571,10 @@ public class SimulationService : ISimulationService
                 IsByzantine = i < request.ByzantineNodeCount, // First N nodes are Byzantine
                 ComputationalPower = rng.Next(80, 120), // Vary slightly for realism
                 ReputationScore = 100m,
+                // Range 100–600 keeps every node above the 100-coin minimum
+                // and gives the weighted-lottery enough spread to be visibly
+                // weighted (not uniform).
+                StakeAmount = needsStake ? rng.Next(100, 601) : 0m,
                 CreatedAt = DateTime.UtcNow
             };
 
