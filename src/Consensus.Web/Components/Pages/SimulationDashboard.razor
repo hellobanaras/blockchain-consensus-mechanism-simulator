@@ -448,6 +448,24 @@
 
             overallProgress = (int)Math.Clamp(simulation.Progress * 100, 0, 100);
 
+            // Hydrate BlockHeight + CurrentRound + latency from the Api metrics
+            // endpoint on first paint so the tiles don't start at 0. Without
+            // this, the dashboard waited for the 2-second polling timer (or a
+            // SignalR SimulationUpdate) before showing any numbers, which made
+            // every completed run look broken on initial load.
+            try
+            {
+                var apiMetrics = await ApiClient.GetSimulationMetricsAsync(SimulationId);
+                if (apiMetrics != null)
+                {
+                    ApplyMetricsSnapshot(apiMetrics);
+                }
+            }
+            catch (Exception mex)
+            {
+                Logger.LogDebug(mex, "Initial metrics hydration for {Id} skipped", SimulationId);
+            }
+
             StateHasChanged();
         }
         catch (Exception ex)

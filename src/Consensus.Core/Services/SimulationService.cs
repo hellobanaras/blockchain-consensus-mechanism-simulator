@@ -65,6 +65,7 @@ public class SimulationService : ISimulationService
                 TransactionsPerBlock = request.TransactionsPerBlock,
                 NetworkLatencyMs = request.NetworkLatencyMs,
                 RandomSeed = request.RandomSeed,
+                MaxRounds = request.MaxRounds,
                 Status = SimulationStatus.Initializing,
                 CreatedAt = DateTime.UtcNow,
                 Configuration = request.AlgorithmConfiguration

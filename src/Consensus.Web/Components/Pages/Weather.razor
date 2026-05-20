@@ -1,7 +1,21 @@
 ﻿@page "/weather"
 @using Consensus.Core.Entities
 @using Consensus.Core.Enums
+@using Microsoft.AspNetCore.Components
 @inject IJSRuntime JSRuntime
+@inject NavigationManager Navigation
+
+@*
+    This page existed as a Blazor template leftover ("Weather forecast") and
+    accumulated synthetic network-health charts. It isn't in the sidebar and
+    its data is fabricated — redirect /weather visitors to /finality-health
+    (the real network-health surface) so the orphan route doesn't surface
+    fake numbers to anyone who finds the URL.
+*@
+@code {
+    protected override void OnInitialized() =>
+        Navigation.NavigateTo("/finality-health", replace: true);
+}
 
 <PageTitle>Network Health · Consensus Lab</PageTitle>
 

@@ -203,6 +203,13 @@
         </MudStack>
     </TitleContent>
     <DialogContent>
+        @if (!string.IsNullOrEmpty(createSimulationError))
+        {
+            <MudAlert Severity="Severity.Error" Variant="Variant.Filled" Class="mb-3"
+                      ShowCloseIcon="true" CloseIconClicked="() => createSimulationError = null">
+                @createSimulationError
+            </MudAlert>
+        }
         <MudGrid>
             <MudItem xs="12" md="6">
                 <MudTextField @bind-Value="newSimulationName" Label="Simulation name"
@@ -295,6 +302,7 @@
 
     // Modal state
     private bool showCreateModal = false;
+    private string? createSimulationError = null;
     private string newSimulationName = "";
     private string newSimulationDescription = "";
     private ConsensusAlgorithm newSimulationAlgorithm = ConsensusAlgorithm.ProofOfWork;
@@ -395,9 +403,24 @@
 
     private async Task CreateSimulation()
     {
+        createSimulationError = null;
         if (string.IsNullOrWhiteSpace(newSimulationName))
         {
-            Snackbar.Add("Please enter a simulation name.", Severity.Warning);
+            createSimulationError = "Please enter a simulation name.";
+            return;
+        }
+
+        // Replicate the server-side validation so we can show a per-modal
+        // MudAlert instead of an easy-to-miss snackbar — PoS in particular
+        // tripped over ByzantineNodeCount > NodeCount/3 silently.
+        if (newSimulationNodes < 3)
+        {
+            createSimulationError = "At least 3 nodes are required.";
+            return;
+        }
+        if (newSimulationFaultyNodes > newSimulationNodes / 3)
+        {
+            createSimulationError = $"Byzantine node count ({newSimulationFaultyNodes}) cannot exceed 1/3 of total nodes ({newSimulationNodes / 3} max for {newSimulationNodes} nodes).";
             return;
         }
 
@@ -409,6 +432,7 @@
                 Algorithm = newSimulationAlgorithm,
                 NodeCount = newSimulationNodes,
                 ByzantineNodeCount = newSimulationFaultyNodes,
+                MaxRounds = newSimulationRounds,
                 DurationSeconds = Math.Max(10, newSimulationRounds * 2),
                 NetworkTopology = newSimulationTopology,
                 BlockTimeMs = 2000,
@@ -424,10 +448,18 @@
             HideCreateSimulationModal();
             Navigation.NavigateTo($"/simulation/{sim.Id}");
         }
+        catch (ArgumentException aex)
+        {
+            // CreateSimulationRequest.Validate() throws this for parameter
+            // problems (most commonly "Byzantine nodes cannot exceed 1/3 of
+            // total nodes"). Show in-modal so the user can correct and retry.
+            Logger.LogWarning(aex, "Invalid simulation parameters for {Name}", newSimulationName);
+            createSimulationError = aex.Message;
+        }
         catch (Exception ex)
         {
             Logger.LogError(ex, "Failed to create simulation {Name}", newSimulationName);
-            Snackbar.Add($"Could not start simulation: {ex.Message}", Severity.Error);
+            createSimulationError = $"Could not start simulation: {ex.Message}";
         }
     }
 

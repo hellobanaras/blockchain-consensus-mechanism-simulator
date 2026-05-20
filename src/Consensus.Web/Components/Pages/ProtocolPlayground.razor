@@ -50,8 +50,13 @@
                 <div class="card-body">
                     <div class="mb-3">
                         <label for="protocolSelect" class="form-label">Consensus Algorithm</label>
+                        @* Only expose the five protocols the simulator actually
+                           implements. Raft/Tendermint/HoneyBadger/Algorand/Stellar/
+                           FedCoin are in the ConsensusAlgorithm enum (for future
+                           work and DB compatibility) but have no protocol class —
+                           selecting them used to silently no-op the playground. *@
                         <select id="protocolSelect" class="form-select" @bind="selectedProtocol" @bind:after="OnProtocolChanged">
-                            @foreach (var protocol in Enum.GetValues<ConsensusAlgorithm>())
+                            @foreach (var protocol in SupportedProtocols)
                             {
                                 <option value="@protocol">@GetProtocolDisplayName(protocol)</option>
                             }
@@ -220,6 +225,15 @@
 </div>
 
 @code {
+    private static readonly ConsensusAlgorithm[] SupportedProtocols =
+    {
+        ConsensusAlgorithm.ProofOfWork,
+        ConsensusAlgorithm.ProofOfStake,
+        ConsensusAlgorithm.DelegatedProofOfStake,
+        ConsensusAlgorithm.PracticalByzantineFaultTolerance,
+        ConsensusAlgorithm.ProofOfElapsedTime,
+    };
+
     private ConsensusAlgorithm selectedProtocol = ConsensusAlgorithm.ProofOfElapsedTime;
     private ProtocolConfiguration configuration = new();
     private List<string> validationErrors = new();

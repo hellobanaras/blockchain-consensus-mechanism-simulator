@@ -125,17 +125,29 @@ public class AnalyticsService : IAnalyticsService
             totalRounds += rounds.Count();
         }
 
+        // Guard every aggregation against empty inputs — when the DB only
+        // contains Running simulations (no CompletedAt), the duration filter
+        // returns an empty enumerable and `.Average()` previously threw
+        // "Sequence contains no elements", surfacing as 500 on /api/Analytics
+        // and 409 on /performance-baselines + /finality-health.
+        var completedSims = simulations.Where(s => s.CompletedAt.HasValue && s.StartedAt.HasValue).ToList();
+        var simulationsList = simulations.ToList();
         var summary = new AnalyticsSummary
         {
-            TotalSimulations = simulations.Count(),
+            TotalSimulations = simulationsList.Count,
             TotalRounds = totalRounds,
             TotalBlocks = totalBlocks,
             TotalNodes = totalNodes,
-            AverageBlocksPerSimulation = simulations.Any() ? (double)totalBlocks / simulations.Count() : 0,
-            AverageSimulationDuration = simulations.Any() ? 
-                simulations.Where(s => s.CompletedAt.HasValue && s.StartedAt.HasValue).Average(s => (s.CompletedAt!.Value - s.StartedAt!.Value).TotalSeconds) : 0,
-            StartDate = request.StartDate ?? simulations.Min(s => s?.StartedAt) ?? DateTime.UtcNow.AddDays(-30),
-            EndDate = request.EndDate ?? simulations.Max(s => s?.CompletedAt) ?? DateTime.UtcNow
+            AverageBlocksPerSimulation = simulationsList.Count > 0 ? (double)totalBlocks / simulationsList.Count : 0,
+            AverageSimulationDuration = completedSims.Count > 0
+                ? completedSims.Average(s => (s.CompletedAt!.Value - s.StartedAt!.Value).TotalSeconds)
+                : 0,
+            StartDate = request.StartDate
+                ?? (simulationsList.Count > 0 ? simulationsList.Min(s => s.StartedAt) : null)
+                ?? DateTime.UtcNow.AddDays(-30),
+            EndDate = request.EndDate
+                ?? (simulationsList.Count > 0 ? simulationsList.Max(s => s.CompletedAt) : null)
+                ?? DateTime.UtcNow
         };
 
         // Calculate additional metrics
@@ -255,18 +267,24 @@ public class AnalyticsService : IAnalyticsService
                 }
             }
 
+            // Per-algo aggregation needs the same empty-guard treatment as
+            // the summary path above. When every sim of an algorithm is still
+            // Running (no CompletedAt), the duration filter is empty and
+            // .Average() throws; that bubble surfaced as the 500 / 409 on
+            // the analytics + baselines + finality pages.
+            var completedAlgoSims = sims.Where(s => s.CompletedAt.HasValue && s.StartedAt.HasValue).ToList();
             var metrics = new AlgorithmPerformanceMetrics
             {
                 AlgorithmName = group.Key.ToString(),
                 TotalSimulations = sims.Count,
                 AverageBlocksPerSimulation = await GetAverageBlocksForSimulations(sims),
-                AverageSimulationDuration = sims.Where(s => s.CompletedAt.HasValue && s.StartedAt.HasValue)
-                    .Average(s => (s.CompletedAt!.Value - s.StartedAt!.Value).TotalSeconds),
+                AverageSimulationDuration = completedAlgoSims.Count > 0
+                    ? completedAlgoSims.Average(s => (s.CompletedAt!.Value - s.StartedAt!.Value).TotalSeconds)
+                    : 0,
                 AverageBlockRate = await GetAverageBlockRate(sims),
                 AverageTransactionThroughput = await GetAverageThroughput(sims),
                 SuccessRate = sims.Any() ? (double)sims.Count(s => s.Status == SimulationStatus.Completed) / sims.Count * 100 : 0,
-                TotalComputingTime = sims.Where(s => s.CompletedAt.HasValue && s.StartedAt.HasValue)
-                    .Sum(s => (s.CompletedAt!.Value - s.StartedAt!.Value).TotalSeconds),
+                TotalComputingTime = completedAlgoSims.Sum(s => (s.CompletedAt!.Value - s.StartedAt!.Value).TotalSeconds),
                 AverageNodesPerSimulation = await GetAverageNodesForSimulations(sims),
                 NetworkEfficiency = await GetNetworkEfficiency(sims),
                 StabilityScore = await GetStabilityScore(sims),

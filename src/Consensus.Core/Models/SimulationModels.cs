@@ -20,6 +20,11 @@ public record CreateSimulationRequest
     public int TransactionsPerBlock { get; init; }
     public int NetworkLatencyMs { get; init; }
     public int? RandomSeed { get; init; }
+    // Optional explicit round cap. When null, SimulationService falls back to
+    // its internal default (100 rounds). The Blazor New-Simulation modal sets
+    // this from the "Max rounds" numeric field; without it sims that should
+    // stop at 60 ran past 100 because the request never carried the value.
+    public int? MaxRounds { get; init; }
     public Dictionary<string, object> AlgorithmConfiguration { get; init; } = new();
 
     public IEnumerable<string> Validate()
